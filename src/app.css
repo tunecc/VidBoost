@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+}
+
+/* Global Scrollbar Hiding for cleaner UI */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+@layer base {
+  :root {
+    /* Light Mode Tokens - More Vibrant & Translucent */
+    --bg-gradient:
+      radial-gradient(at 0% 0%, rgba(147, 197, 253, 0.7) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(167, 139, 250, 0.6) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(249, 168, 212, 0.6) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(110, 231, 183, 0.6) 0px, transparent 50%),
+      #f3f4f6;
+
+    --glass-surface: rgba(255, 255, 255, 0.4);
+    /* More transparent */
+    --glass-surface-hover: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    /* Stronger border for "glass edge" */
+    --glass-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.05),
+      0 10px 15px -3px rgba(0, 0, 0, 0.05),
+      inset 0 0 20px rgba(255, 255, 255, 0.5);
+    /* Inner glow */
+
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Dark Mode Tokens - Deep & Glowing */
+      --bg-gradient:
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.5) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.5) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.5) 0px, transparent 50%),
+        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.5) 0px, transparent 50%),
+        #0f172a;
+
+      --glass-surface: rgba(15, 23, 42, 0.4);
+      --glass-surface-hover: rgba(30, 41, 59, 0.6);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.2),
+        0 10px 15px -3px rgba(0, 0, 0, 0.3),
+        inset 0 0 20px rgba(255, 255, 255, 0.05);
+
+      --text-primary: #f9fafb;
+      --text-secondary: #d1d5db;
+    }
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text-primary);
+    background: var(--bg-gradient);
+    background-attachment: fixed;
+    min-height: 100vh;
+    transition: color 0.3s ease;
+  }
+}
+
+@layer components {
+
+  /* Glass Card Utility */
+  .glass-card {
+    background: var(--glass-surface);
+    backdrop-filter: blur(20px) saturate(180%);
+    /* Increased blur & saturation */
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-button {
+    background: var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-button:hover {
+    background: var(--glass-surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .glass-panel {
+    background: var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
+  }
+}
