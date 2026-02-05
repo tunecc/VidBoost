@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Video Tools Pro",
+    "name": "VidBoost",
     "version": "2.0.0",
-    "description": "High performance video tools integration",
+    "description": "Unlock the full potential of web videos with VidBoost.",
     "permissions": [
         "storage",
         "scripting",
@@ -10,7 +10,7 @@
     ],
     "action": {
         "default_popup": "popup.html",
-        "default_title": "Video Tools Pro"
+        "default_title": "VidBoost"
     },
     "background": {
         "service_worker": "assets/background.js",

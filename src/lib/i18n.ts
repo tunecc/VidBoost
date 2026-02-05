@@ -2,7 +2,7 @@ type Lang = 'auto' | 'en' | 'zh';
 
 const strings = {
     en: {
-        title: "VideoTools",
+        title: "VidBoost",
         subtitle: "Professional",
         enhancer_title: "h5player",
         enhancer_desc: "Speed control (C/X/Z) & advanced playback.",
