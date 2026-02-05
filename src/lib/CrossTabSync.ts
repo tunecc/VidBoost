@@ -12,20 +12,20 @@ export type SyncMessage = {
     );
 
 export class CrossTabSync {
-    private channel: BroadcastChannel;
     private id: string;
     private listeners: ((msg: SyncMessage) => void)[] = [];
 
     constructor() {
-        this.channel = new BroadcastChannel('video-tools-channel');
         this.id = this.getOrCreateId();
 
-        this.channel.onmessage = (e) => {
-            const msg = e.data as SyncMessage;
-            if (msg.senderId === this.id) return; // Ignore self
-
-            this.listeners.forEach(cb => cb(msg));
-        };
+        // Use chrome.runtime.onMessage for cross-origin sync
+        chrome.runtime.onMessage.addListener((msg) => {
+            // Validate it's our sync message
+            if (msg.senderId && msg.timestamp) {
+                if (msg.senderId === this.id) return; // Ignore self
+                this.listeners.forEach(cb => cb(msg as SyncMessage));
+            }
+        });
     }
 
     public get myId() {
@@ -34,7 +34,13 @@ export class CrossTabSync {
 
     public send(msg: Omit<SyncMessage, 'senderId'>) {
         const payload = { ...msg, senderId: this.id };
-        this.channel.postMessage(payload);
+        // Send to background for relay
+        chrome.runtime.sendMessage({
+            type: 'BROADCAST_SYNC',
+            payload
+        }).catch(() => {
+            // Ignore if background is asleep (it wakes up usually)
+        });
     }
 
     public onMessage(cb: (msg: SyncMessage) => void) {

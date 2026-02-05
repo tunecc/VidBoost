@@ -3,6 +3,8 @@
   import { fade, fly, slide } from "svelte/transition";
   import { i18n } from "../lib/i18n";
   import H5Settings from "./H5Settings.svelte";
+  import AutoPauseSettings from "./AutoPauseSettings.svelte";
+  import { getSettings, setSettings, DEFAULT_SETTINGS } from "../lib/settings";
 
   // -- State --
   let loaded = false;
@@ -37,44 +39,40 @@
   $: t = (key: any) => i18n(key, language);
 
   onMount(() => {
-    chrome.storage.local.get(
-      [
-        "enabled",
-        "h5_enabled",
-        "ap_enabled",
-        "bnd_enabled",
-        "language",
-        "yt_config",
-        "h5_config",
-        "ui_state",
-      ],
-      (res) => {
-        globalEnabled = res.enabled !== false;
-        h5Enabled = res.h5_enabled !== false;
-        autoPauseEnabled = res.ap_enabled !== false;
-        autoPauseEnabled = res.ap_enabled !== false;
+    getSettings([
+      "enabled",
+      "h5_enabled",
+      "ap_enabled",
+      "bnd_enabled",
+      "yt_fast_pause",
+      "fast_pause_master",
+      "language",
+      "yt_config",
+      "h5_config",
+      "ui_state",
+    ]).then((res) => {
+      globalEnabled = res.enabled;
+      h5Enabled = res.h5_enabled;
+      autoPauseEnabled = res.ap_enabled;
 
-        // Calculate master state for UI
-        // Fast Pause States
-        bndEnabled = res.bnd_enabled !== false;
-        ytFastPause = res.yt_fast_pause !== false;
-        fastPauseMaster = res.fast_pause_master !== false; // Load master switch state directly
+      bndEnabled = res.bnd_enabled;
+      ytFastPause = res.yt_fast_pause;
+      fastPauseMaster = res.fast_pause_master;
 
-        language = res.language || "auto";
+      language = res.language || DEFAULT_SETTINGS.language;
 
-        if (res.ui_state) {
-          sectionOpen = { ...sectionOpen, ...res.ui_state };
-        }
+      if (res.ui_state) {
+        sectionOpen = { ...sectionOpen, ...res.ui_state };
+      }
 
-        if (res.yt_config) {
-          ytBlockNative = res.yt_config.blockNativeSeek ?? true;
-        } else if (res.h5_config) {
-          ytBlockNative = res.h5_config.blockNumKeys ?? true;
-        }
+      if (res.yt_config) {
+        ytBlockNative = res.yt_config.blockNativeSeek ?? true;
+      } else if (res.h5_config) {
+        ytBlockNative = res.h5_config.blockNumKeys ?? true;
+      }
 
-        loaded = true;
-      },
-    );
+      loaded = true;
+    });
 
     if (
       window.matchMedia &&
@@ -86,17 +84,16 @@
 
   $: {
     if (loaded && typeof chrome !== "undefined" && chrome.storage) {
-      chrome.storage.local.set({
+      setSettings({
         enabled: globalEnabled,
         h5_enabled: h5Enabled,
         ap_enabled: autoPauseEnabled,
-
         bnd_enabled: bndEnabled,
         yt_fast_pause: ytFastPause,
-        fast_pause_master: fastPauseMaster, // Persist master switch state
+        fast_pause_master: fastPauseMaster,
         language: language,
         yt_config: { blockNativeSeek: ytBlockNative },
-        ui_state: sectionOpen, // Persist open/close state
+        ui_state: sectionOpen,
       });
     }
   }
@@ -119,17 +116,13 @@
       <!-- Header -->
       <header class="relative z-10 px-5 pt-6 pb-2">
         <div class="flex items-center justify-between mb-1">
-          <div>
+          <div class="flex flex-col justify-center">
             <h1
-              class="text-xl font-bold tracking-tight text-gray-900 dark:text-white drop-shadow-sm dark:drop-shadow-md"
+              class="text-2xl font-light tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-white/70 drop-shadow-sm"
+              style="font-family: 'Outfit', sans-serif;"
             >
               {t("title")}
             </h1>
-            <p
-              class="text-[10px] font-medium text-gray-500 dark:text-white/70 uppercase tracking-widest ml-0.5"
-            >
-              {t("subtitle")}
-            </p>
           </div>
 
           <button
@@ -175,7 +168,7 @@
               <h3
                 class="font-semibold text-sm text-gray-800 dark:text-white/90"
               >
-                General
+                {t("general")}
               </h3>
             </div>
             <svg
@@ -223,7 +216,7 @@
                     <h4
                       class="text-sm font-medium text-gray-800 dark:text-white/90"
                     >
-                      Language
+                      {t("language")}
                     </h4>
                   </div>
                 </div>
@@ -348,23 +341,48 @@
                     </p>
                   </div>
                 </div>
-                <div
-                  class="relative inline-flex h-4 w-7 items-center cursor-pointer"
-                  on:click={() =>
-                    globalEnabled && (autoPauseEnabled = !autoPauseEnabled)}
-                >
+                <div class="flex items-center gap-2">
+                  <button
+                    class="p-1.5 text-gray-400 hover:text-gray-900 dark:text-white/40 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                    title="Settings"
+                    on:click={() => navigate("ap-settings")}
+                  >
+                    <svg
+                      class="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      ><path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                      ></path><path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      ></path></svg
+                    >
+                  </button>
                   <div
-                    class="w-full h-full rounded-full transition-colors duration-200 {autoPauseEnabled
-                      ? 'bg-pink-500'
-                      : 'bg-black/10 dark:bg-white/20'}"
-                    style={autoPauseEnabled
-                      ? "box-shadow: 0 0 10px rgba(236,72,153,0.5);"
-                      : ""}
-                  ></div>
-                  <div
-                    class="absolute left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200 shadow-sm"
-                    class:translate-x-3={autoPauseEnabled}
-                  ></div>
+                    class="relative inline-flex h-4 w-7 items-center cursor-pointer"
+                    on:click={() =>
+                      globalEnabled && (autoPauseEnabled = !autoPauseEnabled)}
+                  >
+                    <div
+                      class="w-full h-full rounded-full transition-colors duration-200 {autoPauseEnabled
+                        ? 'bg-pink-500'
+                        : 'bg-black/10 dark:bg-white/20'}"
+                      style={autoPauseEnabled
+                        ? "box-shadow: 0 0 10px rgba(236,72,153,0.5);"
+                        : ""}
+                    ></div>
+                    <div
+                      class="absolute left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200 shadow-sm"
+                      class:translate-x-3={autoPauseEnabled}
+                    ></div>
+                  </div>
                 </div>
               </div>
               <!-- Fast Pause Item (Unified & Inline) -->
@@ -449,18 +467,35 @@
                 {#if fastPauseOpen}
                   <div class="px-2 pb-2 pl-12 space-y-2" transition:slide|local>
                     <!-- Bilibili Toggle -->
-                    <div class="flex items-center justify-between py-1 pr-1">
-                      <span class="text-xs text-gray-700 dark:text-white/70"
-                        >Bilibili</span
-                      >
-                      <div
-                        class="relative inline-flex h-3.5 w-6 items-center cursor-pointer"
-                        class:opacity-50={!fastPauseMaster}
-                        on:click={() => {
-                          if (!globalEnabled || !fastPauseMaster) return;
-                          bndEnabled = !bndEnabled;
-                        }}
-                      >
+                    <button
+                      class="w-full flex items-center justify-between py-1 pr-1 rounded-md transition-colors {fastPauseMaster
+                        ? 'hover:bg-black/5 dark:hover:bg-white/5'
+                        : ''} {bndEnabled && fastPauseMaster
+                        ? ''
+                        : 'grayscale opacity-70'}"
+                      on:click={() => {
+                        if (!globalEnabled || !fastPauseMaster) return;
+                        bndEnabled = !bndEnabled;
+                      }}
+                    >
+                      <div class="flex items-center gap-2">
+                        <svg
+                          class="w-4 h-4"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            clip-rule="evenodd"
+                            d="M4.977 3.561a1.31 1.31 0 111.818-1.884l2.828 2.728c.08.078.149.163.205.254h4.277a1.32 1.32 0 01.205-.254l2.828-2.728a1.31 1.31 0 011.818 1.884L17.82 4.66h.848A5.333 5.333 0 0124 9.992v7.34a5.333 5.333 0 01-5.333 5.334H5.333A5.333 5.333 0 010 17.333V9.992a5.333 5.333 0 015.333-5.333h.781L4.977 3.56zm.356 3.67a2.667 2.667 0 00-2.666 2.667v7.529a2.667 2.667 0 002.666 2.666h13.334a2.667 2.667 0 002.666-2.666v-7.53a2.667 2.667 0 00-2.666-2.666H5.333zm1.334 5.192a1.333 1.333 0 112.666 0v1.192a1.333 1.333 0 11-2.666 0v-1.192zM16 11.09c-.736 0-1.333.597-1.333 1.333v1.192a1.333 1.333 0 102.666 0v-1.192c0-.736-.597-1.333-1.333-1.333z"
+                            fill="#FB7299"
+                            fill-rule="evenodd"
+                          ></path>
+                        </svg>
+                        <span class="text-xs text-gray-700 dark:text-white/70">
+                          Bilibili
+                        </span>
+                      </div>
+                      <div class="relative inline-flex h-3.5 w-6 items-center">
                         <div
                           class="w-full h-full rounded-full transition-colors duration-200 {bndEnabled
                             ? 'bg-indigo-500'
@@ -471,21 +506,40 @@
                           class:translate-x-2.5={bndEnabled}
                         ></div>
                       </div>
-                    </div>
+                    </button>
 
                     <!-- YouTube Toggle -->
-                    <div class="flex items-center justify-between py-1 pr-1">
-                      <span class="text-xs text-gray-700 dark:text-white/70"
-                        >YouTube</span
-                      >
-                      <div
-                        class="relative inline-flex h-3.5 w-6 items-center cursor-pointer"
-                        class:opacity-50={!fastPauseMaster}
-                        on:click={() => {
-                          if (!globalEnabled || !fastPauseMaster) return;
-                          ytFastPause = !ytFastPause;
-                        }}
-                      >
+                    <button
+                      class="w-full flex items-center justify-between py-1 pr-1 rounded-md transition-colors {fastPauseMaster
+                        ? 'hover:bg-black/5 dark:hover:bg-white/5'
+                        : ''} {ytFastPause && fastPauseMaster
+                        ? ''
+                        : 'grayscale opacity-70'}"
+                      on:click={() => {
+                        if (!globalEnabled || !fastPauseMaster) return;
+                        ytFastPause = !ytFastPause;
+                      }}
+                    >
+                      <div class="flex items-center gap-2">
+                        <svg
+                          class="w-4 h-4"
+                          viewBox="0 0 28.57 20"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M27.9727 3.12324C27.6435 1.89323 26.6768 0.926623 25.4468 0.597366C23.2197 2.24288e-07 14.285 0 14.285 0C14.285 0 5.35042 2.24288e-07 3.12323 0.597366C1.89323 0.926623 0.926623 1.89323 0.597366 3.12324C2.24288e-07 5.35042 0 10 0 10C0 10 2.24288e-07 14.6496 0.597366 16.8768C0.926623 18.1068 1.89323 19.0734 3.12323 19.4026C5.35042 20 14.285 20 14.285 20C14.285 20 23.2197 20 25.4468 19.4026C26.6768 19.0734 27.6435 18.1068 27.9727 16.8768C28.5701 14.6496 28.5701 10 28.5701 10C28.5701 10 28.5677 5.35042 27.9727 3.12324Z"
+                            fill="#FF0000"
+                          ></path>
+                          <path
+                            d="M11.4253 14.2854L18.8477 10.0004L11.4253 5.71533V14.2854Z"
+                            fill="white"
+                          ></path>
+                        </svg>
+                        <span class="text-xs text-gray-700 dark:text-white/70">
+                          YouTube
+                        </span>
+                      </div>
+                      <div class="relative inline-flex h-3.5 w-6 items-center">
                         <div
                           class="w-full h-full rounded-full transition-colors duration-200 {ytFastPause
                             ? 'bg-indigo-500'
@@ -496,7 +550,7 @@
                           class:translate-x-2.5={ytFastPause}
                         ></div>
                       </div>
-                    </div>
+                    </button>
                   </div>
                 {/if}
               </div>
@@ -544,10 +598,15 @@
               transition:slide|local
             >
               <!-- Native Seek Blocker -->
-              <div
-                class="flex items-center justify-between p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              <button
+                class="w-full flex items-center justify-between p-2 rounded-lg transition-colors {globalEnabled
+                  ? 'hover:bg-black/5 dark:hover:bg-white/10'
+                  : ''} {ytBlockNative
+                  ? ''
+                  : 'grayscale opacity-70'}"
+                on:click={() => globalEnabled && (ytBlockNative = !ytBlockNative)}
               >
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 text-left">
                   <div
                     class="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-300 flex items-center justify-center border border-red-500/10 dark:border-red-500/20"
                   >
@@ -575,11 +634,7 @@
                     </p>
                   </div>
                 </div>
-                <div
-                  class="relative inline-flex h-4 w-7 items-center cursor-pointer"
-                  on:click={() =>
-                    globalEnabled && (ytBlockNative = !ytBlockNative)}
-                >
+                <div class="relative inline-flex h-4 w-7 items-center cursor-pointer">
                   <div
                     class="w-full h-full rounded-full transition-colors duration-200 {ytBlockNative
                       ? 'bg-red-500'
@@ -593,7 +648,7 @@
                     class:translate-x-3={ytBlockNative}
                   ></div>
                 </div>
-              </div>
+              </button>
             </div>
 
             <!-- YouTube Fast Pause Removed (Moved to General) -->
@@ -626,6 +681,14 @@
       out:fly={{ x: 20, duration: 200 }}
     >
       <H5Settings on:back={() => (currentView = "main")} {language} />
+    </div>
+  {:else if currentView === "ap-settings"}
+    <div
+      class="h-full"
+      in:fly={{ x: 20, duration: 300 }}
+      out:fly={{ x: 20, duration: 200 }}
+    >
+      <AutoPauseSettings on:back={() => (currentView = "main")} {language} />
     </div>
   {/if}
 </main>

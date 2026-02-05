@@ -53,10 +53,17 @@ export class OSD {
             container = fsElement;
         }
 
-        // Mount if needed
-        if (this.element.parentNode !== container) {
-            container.appendChild(this.element);
-            this.currentContainer = container;
+        if (!container) return; // Safety check
+
+        try {
+            // Mount if needed
+            if (this.element.parentNode !== container) {
+                container.appendChild(this.element);
+                this.currentContainer = container;
+            }
+        } catch (e) {
+            console.warn('[VideoTools] OSD Mount Failed:', e);
+            return;
         }
 
         // Positioning

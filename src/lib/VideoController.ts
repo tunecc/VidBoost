@@ -35,6 +35,27 @@ export class VideoController {
         this.scan();
     }
 
+    private isVisibleVideo(v: HTMLVideoElement): boolean {
+        const rect = v.getBoundingClientRect();
+        return rect.width > 10 && rect.height > 10;
+    }
+
+    private pickBestVideo(videos: HTMLVideoElement[]): HTMLVideoElement | null {
+        const visible = videos.filter(v => this.isVisibleVideo(v));
+        if (visible.length === 0) return null;
+
+        const playing = visible.filter(v => !v.paused && !v.ended);
+        const pool = playing.length > 0 ? playing : visible;
+
+        return pool.reduce((best, v) => {
+            const b = best.getBoundingClientRect();
+            const r = v.getBoundingClientRect();
+            const bArea = b.width * b.height;
+            const vArea = r.width * r.height;
+            return vArea > bArea ? v : best;
+        });
+    }
+
     /**
      * Recursively find video elements, penetrating Shadow DOMs.
      */
@@ -66,24 +87,36 @@ export class VideoController {
     private observer: MutationObserver | null = null;
 
     private scan() {
-        const v = this.findVideoDeep(document.body);
-        if (v) this.setVideo(v);
+        const list = Array.from(document.querySelectorAll('video'));
+        const shadowVideo = this.findVideoDeep(document.body);
+        if (shadowVideo && !list.includes(shadowVideo)) {
+            list.push(shadowVideo);
+        }
+        const best = this.pickBestVideo(list);
+        if (best) this.setVideo(best);
 
         // Start observing for SPA changes or lazy loadings
         if (!this.observer) {
             this.observer = new MutationObserver((mutations) => {
-                let found = false;
                 for (const mutation of mutations) {
                     // Check added nodes
                     for (const node of mutation.addedNodes) {
-                        const v = this.findVideoDeep(node);
-                        if (v) {
-                            this.setVideo(v);
-                            found = true;
-                            break;
+                        const candidates: HTMLVideoElement[] = [];
+
+                        if (node instanceof HTMLVideoElement) {
+                            candidates.push(node);
+                        } else if (node instanceof HTMLElement) {
+                            candidates.push(...node.querySelectorAll('video'));
+                            if (node.shadowRoot) {
+                                candidates.push(...node.shadowRoot.querySelectorAll('video'));
+                            }
+                        }
+
+                        if (candidates.length > 0) {
+                            const best = this.pickBestVideo(candidates);
+                            if (best) this.setVideo(best);
                         }
                     }
-                    if (found) break;
                 }
             });
 
@@ -122,16 +155,12 @@ export class VideoController {
         }
 
         // 2. If valid but not connected, try to find a new one immediately.
-        // Fallback: Find the largest visible video
+        // Fallback: Find the best visible video (prefer playing, then largest)
         const allVideos = Array.from(document.querySelectorAll('video'));
-        const visibleVideo = allVideos.find(v => {
-            const rect = v.getBoundingClientRect();
-            return rect.width > 10 && rect.height > 10;
-        });
-
-        if (visibleVideo) {
-            this.setVideo(visibleVideo);
-            return visibleVideo;
+        const best = this.pickBestVideo(allVideos);
+        if (best) {
+            this.setVideo(best);
+            return best;
         }
 
         // 3. No video found

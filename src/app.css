@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -30,49 +31,52 @@ body {
 
 @layer base {
   :root {
-    /* Light Mode Tokens - More Vibrant & Translucent */
+    /* Light Mode: Premium, Airy, Subtle - "Deep Glass" */
     --bg-gradient:
-      radial-gradient(at 0% 0%, rgba(147, 197, 253, 0.7) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(167, 139, 250, 0.6) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(249, 168, 212, 0.6) 0px, transparent 50%),
-      radial-gradient(at 0% 100%, rgba(110, 231, 183, 0.6) 0px, transparent 50%),
-      #f3f4f6;
+      radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.8) 0px, transparent 50%),
+      /* Soft Blue */
+      radial-gradient(at 100% 0%, rgba(233, 213, 255, 0.8) 0px, transparent 50%),
+      /* Soft Purple */
+      radial-gradient(at 100% 100%, rgba(243, 232, 255, 0.8) 0px, transparent 50%),
+      /* Pale Violet */
+      radial-gradient(at 0% 100%, rgba(224, 242, 254, 0.8) 0px, transparent 50%),
+      /* Pale Sky */
+      #ffffff;
 
-    --glass-surface: rgba(255, 255, 255, 0.4);
-    /* More transparent */
-    --glass-surface-hover: rgba(255, 255, 255, 0.6);
-    --glass-border: rgba(255, 255, 255, 0.5);
-    /* Stronger border for "glass edge" */
+    --glass-surface: rgba(255, 255, 255, 0.65);
+    /* More opaque for readability */
+    --glass-surface-hover: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(255, 255, 255, 0.6);
     --glass-shadow:
-      0 4px 6px -1px rgba(0, 0, 0, 0.05),
-      0 10px 15px -3px rgba(0, 0, 0, 0.05),
-      inset 0 0 20px rgba(255, 255, 255, 0.5);
-    /* Inner glow */
+      0 8px 32px 0 rgba(31, 38, 135, 0.07),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 
-    --text-primary: #111827;
-    --text-secondary: #4b5563;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      /* Dark Mode Tokens - Deep & Glowing */
+      /* Dark Mode: Deep, Void-like, Cyber - "Midnight Glass" */
       --bg-gradient:
-        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.5) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.5) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.5) 0px, transparent 50%),
-        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.5) 0px, transparent 50%),
-        #0f172a;
+        radial-gradient(at 0% 0%, rgba(29, 78, 216, 0.15) 0px, transparent 50%),
+        /* Deep Blue */
+        radial-gradient(at 100% 0%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+        /* Deep Purple */
+        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+        /* Blue */
+        #0a0a0a;
+      /* True Black base */
 
-      --glass-surface: rgba(15, 23, 42, 0.4);
-      --glass-surface-hover: rgba(30, 41, 59, 0.6);
-      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-surface: rgba(20, 20, 25, 0.7);
+      --glass-surface-hover: rgba(30, 30, 35, 0.8);
+      --glass-border: rgba(255, 255, 255, 0.08);
       --glass-shadow:
-        0 4px 6px -1px rgba(0, 0, 0, 0.2),
-        0 10px 15px -3px rgba(0, 0, 0, 0.3),
-        inset 0 0 20px rgba(255, 255, 255, 0.05);
+        0 8px 32px 0 rgba(0, 0, 0, 0.4),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 
-      --text-primary: #f9fafb;
-      --text-secondary: #d1d5db;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
     }
   }
 

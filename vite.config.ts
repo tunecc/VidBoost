@@ -30,6 +30,13 @@ export default defineConfig({
                 entryFileNames: 'assets/[name].js',
                 chunkFileNames: 'assets/[name]-[hash].js',
                 assetFileNames: 'assets/[name]-[hash].[ext]'
+            },
+            // Keep content script as a single file to avoid "import" in content.js
+            manualChunks: (id) => {
+                if (id.includes('src/content') || id.includes('settings-content')) {
+                    return 'content';
+                }
+                return undefined;
             }
         }
     }

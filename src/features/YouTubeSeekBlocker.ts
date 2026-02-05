@@ -1,5 +1,6 @@
 import { InputManager } from '../lib/InputManager';
 import type { Feature } from './Feature';
+import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
 
 export class YouTubeSeekBlocker implements Feature {
     private input = InputManager.getInstance();
@@ -17,18 +18,19 @@ export class YouTubeSeekBlocker implements Feature {
         // Let's stick to referencing the SAME storage key if possible, OR just rename to yt_config for clarity.
         // Given we are refactoring, let's just use 'yt_config' to be clean.
 
-        chrome.storage.local.get(['yt_config', 'h5_config'], (res) => {
-            // Migration check: if old key exists, use it? Nah, let's start clean or check both.
+        getSettings(['yt_config', 'h5_config']).then((res) => {
             if (res.yt_config) {
-                this.blockNativeSeek = res.yt_config.blockNativeSeek ?? true;
-            } else if (res.h5_config && res.h5_config.blockNumKeys !== undefined) {
-                this.blockNativeSeek = res.h5_config.blockNumKeys;
+                this.blockNativeSeek = res.yt_config.blockNativeSeek ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
+            } else if ((res as any).h5_config && (res as any).h5_config.blockNumKeys !== undefined) {
+                this.blockNativeSeek = (res as any).h5_config.blockNumKeys;
+            } else {
+                this.blockNativeSeek = DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
             }
         });
 
-        chrome.storage.onChanged.addListener((changes) => {
+        onSettingsChanged((changes) => {
             if (changes.yt_config) {
-                this.blockNativeSeek = changes.yt_config.newValue?.blockNativeSeek ?? true;
+                this.blockNativeSeek = changes.yt_config.blockNativeSeek ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
             }
         });
     }

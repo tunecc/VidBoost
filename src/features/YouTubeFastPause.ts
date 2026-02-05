@@ -25,6 +25,8 @@ export class YouTubeFastPause implements Feature {
             '.ytp-popup',                   // Any popup
             '.ytp-tooltip',                 // Tooltips
             '.ytp-button',                  // Any button
+            '.ytp-skip-ad-button',          // Skip Ad button
+            '.ytp-ad-component--clickable', // Ad clickable container
             '.ytp-menuitem',                // Menu items
             '.ytp-panel',                   // Panels (quality, speed, etc)
             '.ytp-ce-element',              // End screen elements
@@ -60,7 +62,6 @@ export class YouTubeFastPause implements Feature {
             if (!this.isInVideoArea(target)) return false;
             if (this.isClickOnControls(target)) return false;
 
-            console.log('[YT-FastPause] Blocked double-click fullscreen');
             return true;
         }, { priority: 100 });
 
@@ -76,7 +77,6 @@ export class YouTubeFastPause implements Feature {
             if (!this.isInVideoArea(target)) return false;
             if (this.isClickOnControls(target)) return false;
 
-            console.log('[YT-FastPause] Fast pause triggered');
             this.videoCtrl.togglePlay();
             return true;
         }, { priority: 90 });
@@ -96,7 +96,6 @@ export class YouTubeFastPause implements Feature {
             return true;
         }, { priority: 90 });
 
-        console.log('[YT-FastPause] Mounted');
     }
 
     unmount() {
@@ -104,7 +103,6 @@ export class YouTubeFastPause implements Feature {
         this.input.off('ytfp-prevent');
         this.input.off('ytfp-fast-pause');
         this.input.off('ytfp-block-click');
-        console.log('[YT-FastPause] Unmounted');
     }
 
     updateSettings(settings: any) { }

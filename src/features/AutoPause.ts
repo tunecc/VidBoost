@@ -1,5 +1,6 @@
 import { CrossTabSync } from '../lib/CrossTabSync';
 import type { Feature } from './Feature';
+import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
 
 type LastFocusedState = {
     id: string;
@@ -15,17 +16,26 @@ type LastFocusedState = {
 export class AutoPause implements Feature {
     private sync = new CrossTabSync();
     private enabled = false;
+    private active = false;
 
     // State
     private currentVideo: HTMLVideoElement | null = null;
     private lastFocused: LastFocusedState | null = null;
+    private containerObserver: MutationObserver | null = null;
+    private containerCleanup: (() => void) | null = null;
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
 
     // Config
     private readonly STORAGE_KEY = 'last_focused_window';
-    private readonly SITES = ['bilibili.com', 'youtube.com'];
+    private readonly PLAY_KEY = 'last_play_window';
+    private siteScope: 'all' | 'selected' = 'all';
+    private siteAllow: Record<string, boolean> = {
+        'youtube.com': true,
+        'bilibili.com': true
+    };
+    private customSites: string[] = [];
 
     constructor() {
         // 1. Message Handler (from other tabs)
@@ -36,105 +46,234 @@ export class AutoPause implements Feature {
             }
         });
 
-        // 2. Storage Listener (for lastFocused state sync)
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes[this.STORAGE_KEY]) {
-                this.lastFocused = changes[this.STORAGE_KEY].newValue;
+        // 2. Storage Listener (for lastFocused/lastPlay state sync)
+        onStorageKeysChanged<{ [key: string]: any }>(
+            [this.STORAGE_KEY, this.PLAY_KEY],
+            (changes) => {
+                if (changes[this.STORAGE_KEY]) {
+                    this.lastFocused = changes[this.STORAGE_KEY] as any;
+                }
+                if (changes[this.PLAY_KEY] && this.enabled) {
+                    const payload = changes[this.PLAY_KEY] as any;
+                    if (payload && payload.id !== this.sync.myId) {
+                        this.handleRemotePlay();
+                    }
+                }
             }
-        });
+        );
 
         // Initial fetch
-        chrome.storage.local.get([this.STORAGE_KEY], (res) => {
+        chrome.storage.local.get([this.STORAGE_KEY, this.PLAY_KEY], (res) => {
             if (res[this.STORAGE_KEY]) {
                 this.lastFocused = res[this.STORAGE_KEY];
             }
+            const lastPlay = res[this.PLAY_KEY];
+            if (lastPlay && lastPlay.id !== this.sync.myId) {
+                this.handleRemotePlay();
+            }
+        });
+
+        getSettings(['ap_scope', 'ap_sites', 'ap_custom_sites']).then((res) => {
+            this.siteScope = res.ap_scope || DEFAULT_SETTINGS.ap_scope;
+            this.siteAllow = { ...this.siteAllow, ...(res.ap_sites || {}) };
+            this.customSites = Array.isArray(res.ap_custom_sites) ? res.ap_custom_sites : [];
+            this.applyPolicy();
+        });
+
+        onSettingsChanged((changes) => {
+            let policyChanged = false;
+            if (changes.ap_scope !== undefined) {
+                this.siteScope = changes.ap_scope || DEFAULT_SETTINGS.ap_scope;
+                policyChanged = true;
+            }
+            if (changes.ap_sites !== undefined) {
+                this.siteAllow = { ...this.siteAllow, ...(changes.ap_sites || {}) };
+                policyChanged = true;
+            }
+            if (changes.ap_custom_sites !== undefined) {
+                this.customSites = Array.isArray(changes.ap_custom_sites)
+                    ? changes.ap_custom_sites
+                    : [];
+                policyChanged = true;
+            }
+            if (policyChanged) this.applyPolicy();
         });
     }
 
     mount() {
-        // Site Check (Strict Parity)
-        const hostname = window.location.hostname;
-        if (!this.SITES.some(site => hostname.includes(site))) {
-            return; // Do not run on unsupported sites
-        }
-
         this.enabled = true;
+        this.applyPolicy();
+    }
+
+    unmount() {
+        this.enabled = false;
+        this.stop();
+    }
+
+    updateSettings(settings: any) { }
+
+    private applyPolicy() {
+        if (!this.enabled) return;
+        const allowed = this.isSiteAllowed();
+        if (allowed && !this.active) {
+            this.start();
+        } else if (!allowed && this.active) {
+            this.stop();
+        }
+    }
+
+    private start() {
+        this.active = true;
         this.initFocusListeners();
-        this.initVideoDetection();
+        // Site-specific detection for core platforms to avoid preview videos
+        if (this.initSiteSpecificTracking()) {
+            // handled by container observer
+        } else {
+            // Generic Video Detection (Global Capture)
+            document.addEventListener('play', this.handleCapturePhase, true);
+            document.addEventListener('playing', this.handleCapturePhase, true);
+        }
 
         if (document.hasFocus()) {
             this.claimFocus();
         }
     }
 
-    unmount() {
-        this.enabled = false;
+    private stop() {
+        this.active = false;
         this.removeFocusListeners();
+        document.removeEventListener('play', this.handleCapturePhase, true);
+        document.removeEventListener('playing', this.handleCapturePhase, true);
+        this.teardownContainerTracking();
         this.cleanupVideo();
     }
 
-    updateSettings(settings: any) { }
-
-    // --- Video Detection (Strict Port) ---
-
-    private initVideoDetection() {
-        const selectors: Record<string, string> = {
-            'bilibili.com': '#bilibili-player',
-            'youtube.com': '#movie_player'
-        };
-
-        const hostname = window.location.hostname;
-        const key = Object.keys(selectors).find(k => hostname.includes(k));
-        if (!key) return;
-
-        const containerSelector = selectors[key];
-
-        this.waitForElement(containerSelector, (container) => {
-            // Observer for dynamic video changes (e.g., next episode)
-            const observer = new MutationObserver(() => {
-                const video = container.querySelector('video');
-                if (video) this.setupVideo(video);
-            });
-            observer.observe(container, { childList: true, subtree: true });
-
-            // Initial Check
-            const initialVideo = container.querySelector('video');
-            if (initialVideo) this.setupVideo(initialVideo);
+    private isSiteAllowed(): boolean {
+        if (this.siteScope === 'all') return true;
+        const host = window.location.host;
+        const allowedByBuiltin = Object.keys(this.siteAllow).some((key) => {
+            if (this.siteAllow[key] === false) return false;
+            return host === key || host.endsWith(`.${key}`);
         });
+        if (allowedByBuiltin) return true;
+        return this.customSites.some((domain) => host === domain || host.endsWith(`.${domain}`));
     }
 
-    private waitForElement(selector: string, callback: (el: Element) => void) {
-        const el = document.querySelector(selector);
-        if (el) {
-            callback(el);
+    // --- Generic Video Detection ---
+
+    private handleCapturePhase = (e: Event) => {
+        const target = e.target as HTMLVideoElement;
+        if (target && target.tagName === 'VIDEO') {
+            if (this.isPreviewVideo(target)) return;
+            this.setupVideo(target);
+        }
+    }
+
+    private initSiteSpecificTracking(): boolean {
+        if (!this.isSiteAllowed()) return false;
+        const host = window.location.host;
+
+        let selectors: string[] | null = null;
+        if (host.includes('youtube.com')) {
+            selectors = ['#movie_player'];
+        } else if (host.includes('bilibili.com')) {
+            selectors = ['#bilibili-player', '.bpx-player-container', '.bilibili-player'];
+        }
+
+        if (!selectors) return false;
+
+        this.waitForElement(selectors, (container) => {
+            this.observeContainer(container);
+            const initialVideo = container.querySelector('video');
+            if (initialVideo) this.setupVideo(initialVideo as HTMLVideoElement);
+        });
+
+        return true;
+    }
+
+    private waitForElement(selectors: string[], callback: (el: HTMLElement) => void) {
+        const find = () => selectors.map(s => document.querySelector(s)).find(Boolean) as HTMLElement | null;
+        const existing = find();
+        if (existing) {
+            callback(existing);
             return;
         }
 
-        const observer = new MutationObserver((_, obs) => {
-            const found = document.querySelector(selector);
-            if (found) {
-                obs.disconnect();
-                callback(found);
+        const observer = new MutationObserver(() => {
+            const el = find();
+            if (el) {
+                observer.disconnect();
+                callback(el);
             }
         });
 
-        observer.observe(document.documentElement, { childList: true, subtree: true });
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+
+        this.containerCleanup = () => observer.disconnect();
+    }
+
+    private observeContainer(container: HTMLElement) {
+        this.containerObserver?.disconnect();
+        this.containerObserver = new MutationObserver(() => {
+            const video = container.querySelector('video');
+            if (video) this.setupVideo(video as HTMLVideoElement);
+        });
+
+        this.containerObserver.observe(container, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    private teardownContainerTracking() {
+        if (this.containerObserver) {
+            this.containerObserver.disconnect();
+            this.containerObserver = null;
+        }
+        if (this.containerCleanup) {
+            this.containerCleanup();
+            this.containerCleanup = null;
+        }
+    }
+
+    private isPreviewVideo(video: HTMLVideoElement): boolean {
+        // 1) Common hover preview containers (YouTube/Bilibili-like)
+        const previewSelectors = [
+            'ytd-moving-thumbnail-renderer',
+            'ytd-thumbnail',
+            '.ytd-moving-thumbnail-renderer',
+            '.bili-video-card__image',
+            '.video-card__content',
+            '.bili-video-card'
+        ];
+        if (previewSelectors.some(sel => video.closest(sel) !== null)) return true;
+
+        // 2) Heuristic: muted + no controls + small size => likely preview
+        const rect = video.getBoundingClientRect();
+        const small = rect.width < 240 || rect.height < 135;
+        if (video.muted && video.volume === 0 && !video.controls && small) return true;
+
+        return false;
     }
 
     private setupVideo(video: HTMLVideoElement) {
-        // Duplicate Check (Critical!)
         if (video === this.currentVideo) return;
-
-        // Cleanup old listener
-        this.cleanupVideo();
+        this.cleanupVideo(); // Clean old listeners
 
         this.currentVideo = video;
 
-        // Create bound handler with correct `this` context (the video element)
-        // Using arrow function wrapper to capture `this` (the class) while
-        // still being able to remove the listener later.
+        // We don't need 'playing' listener for detection anymore since we capture it globally
+        // But we need it for the logic logic (onPlay)
         this.boundOnPlay = this.onPlay.bind(this);
         this.currentVideo.addEventListener('playing', this.boundOnPlay);
+
+        // If it's already playing when we discovered it
+        if (!this.currentVideo.paused) {
+            this.onPlay();
+        }
     }
 
     private cleanupVideo() {
@@ -150,11 +289,11 @@ export class AutoPause implements Feature {
     private onPlay() {
         if (!this.enabled || !this.currentVideo) return;
 
-        // 1. If hidden -> Force Pause
-        if (document.visibilityState !== 'visible') {
-            this.currentVideo.pause();
-            return;
-        }
+        // 1. If hidden -> Force Pause (REMOVED: User requested background playback support)
+        // if (document.visibilityState !== 'visible') {
+        //     this.currentVideo.pause();
+        //     return;
+        // }
 
         // 2. If focused -> I am King. Claim it.
         if (document.hasFocus()) {
@@ -176,12 +315,13 @@ export class AutoPause implements Feature {
     private handleRemotePlay() {
         if (!this.enabled) return;
 
-        // Self-Protection: If I have focus, ignore and re-claim
+        // Foreground has priority: never pause if this tab is focused
         if (document.hasFocus()) {
             this.claimFocus();
             return;
         }
 
+        // Self-Protection: If I have focus, ignore and re-claim
         // Self-Protection: If I am last focused AND playing, ignore
         if (this.isLastFocusedWindow() && this.currentVideo && !this.currentVideo.paused) {
             return;
@@ -210,7 +350,6 @@ export class AutoPause implements Feature {
     private isLastFocusedWindow(): boolean {
         if (!this.lastFocused) return false;
         if (this.lastFocused.id !== this.sync.myId) return false;
-        if (Date.now() - this.lastFocused.timestamp > 10000) return false; // 10s expiry
         return true;
     }
 
@@ -218,6 +357,13 @@ export class AutoPause implements Feature {
         this.sync.send({
             type: 'PLAY_STARTED',
             timestamp: Date.now()
+        });
+        // Storage fallback: ensures cross-tab sync even if runtime message is missed
+        chrome.storage.local.set({
+            [this.PLAY_KEY]: {
+                id: this.sync.myId,
+                timestamp: Date.now()
+            }
         });
     }
 

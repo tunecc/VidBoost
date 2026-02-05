@@ -1,6 +1,7 @@
 import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
+import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
 import type { Feature } from './Feature';
 
 type H5Config = {
@@ -39,13 +40,14 @@ export class H5Enhancer implements Feature {
         this.registerShortcuts();
 
         // Initial load
-        chrome.storage.local.get(['h5_config'], (res) => {
+        getSettings(['h5_config']).then((res) => {
             if (res.h5_config) this.updateLocalConfig(res.h5_config);
+            else this.updateLocalConfig(DEFAULT_SETTINGS.h5_config);
         });
 
-        chrome.storage.onChanged.addListener((changes) => {
+        onSettingsChanged((changes) => {
             if (changes.h5_config) {
-                this.updateLocalConfig(changes.h5_config.newValue);
+                this.updateLocalConfig(changes.h5_config);
             }
         });
     }

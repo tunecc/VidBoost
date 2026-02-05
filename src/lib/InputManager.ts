@@ -4,6 +4,8 @@
  * Single event listener pattern.
  */
 
+import { VideoController } from './VideoController';
+
 type InputAction = (e: Event) => boolean | void;
 
 interface ActionListener {
@@ -21,6 +23,7 @@ export class InputManager {
         'click': [],
         'dblclick': []
     };
+    private hasVideo = false;
 
     private constructor() {
         this.init();
@@ -35,6 +38,12 @@ export class InputManager {
 
     private init() {
         if (typeof window === 'undefined') return;
+
+        // Activate input handling only after a video is detected.
+        const vc = VideoController.getInstance();
+        vc.subscribe(() => {
+            this.hasVideo = true;
+        });
 
         // Bind core events
         ['keydown', 'mousedown', 'click', 'dblclick'].forEach(eventType => {
@@ -77,6 +86,13 @@ export class InputManager {
         const listeners = this.listeners[type];
 
         if (!listeners || listeners.length === 0) return;
+
+        // Avoid global interception before any video exists
+        if (!this.hasVideo) {
+            // Cheap fallback: only start handling once a video exists in DOM
+            if (!document.querySelector('video')) return;
+            this.hasVideo = true;
+        }
 
         // Check for Shadow DOM target using composedPath
         const path = e.composedPath?.() || [];
