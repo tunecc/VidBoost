@@ -4,6 +4,25 @@
 
 **VidBoost** 是一款专为提升网页视频观看体验而设计的高性能 Chrome/Edge 扩展程序。它采用现代架构重构，专注于极低内存占用和零延迟响应，提供倍速控制、自动暂停以及针对 Bilibili 等站点的专属优化功能。
 
+## 🖼️ 预览
+
+<p align="center">
+  <a href="https://files.catbox.moe/e14v7g.png">
+    <img src="https://files.catbox.moe/e14v7g.png" width="22%" />
+  </a>
+  <a href="https://files.catbox.moe/ak2mfg.png">
+    <img src="https://files.catbox.moe/ak2mfg.png" width="22%" />
+  </a>
+  <a href="https://files.catbox.moe/c9ol0e.png">
+    <img src="https://files.catbox.moe/c9ol0e.png" width="22%" />
+  </a>
+  <a href="https://files.catbox.moe/nlwgth.png">
+    <img src="https://files.catbox.moe/nlwgth.png" width="22%" />
+  </a>
+</p>
+
+<sub align="center">点击图片查看原始尺寸</sub>
+
 ## 🚀 核心功能
 
 *   **⚡ 极致性能**:
