@@ -1,7 +1,11 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { i18n } from "../lib/i18n";
-    import { getSettings, setSettings, DEFAULT_SETTINGS } from "../lib/settings";
+    import {
+        getSettings,
+        setSettings,
+        DEFAULT_SETTINGS,
+    } from "../lib/settings";
 
     export let language: "auto" | "en" | "zh" = "auto";
     const dispatch = createEventDispatcher();
@@ -65,36 +69,43 @@
                 /></svg
             >
         </button>
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
+        <h2
+            class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight"
+        >
             {t("autopause_settings")}
         </h2>
     </div>
     <div
-        class="h-[1px] w-full bg-gradient-to-r from-transparent via-white/60 dark:via-white/10 to-transparent"
+        class="h-[1px] w-full bg-gradient-to-r from-transparent via-gray-200 dark:via-white/10 to-transparent mb-2"
     ></div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto px-4 pb-4 space-y-5 no-scrollbar relative z-10">
+    <div
+        class="flex-1 overflow-y-auto px-4 pb-4 space-y-5 no-scrollbar relative z-10"
+    >
         <section class="space-y-2">
             <div class="flex items-center gap-2 ml-1">
-                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"></span>
+                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"
+                ></span>
                 <h3
                     class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/50"
                 >
                     {t("autopause_scope")}
                 </h3>
             </div>
-            <div
-                class="rounded-xl overflow-hidden bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 shadow-lg backdrop-blur-md"
-            >
+            <div class="glass-panel rounded-xl overflow-hidden">
                 <label
                     class="p-3 flex items-center justify-between border-b border-black/5 dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                 >
                     <div>
-                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                        <span
+                            class="text-sm font-medium text-gray-800 dark:text-white/90"
+                        >
                             {t("autopause_scope_all")}
                         </span>
-                        <p class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5">
+                        <p
+                            class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5"
+                        >
                             {t("autopause_scope_all_desc")}
                         </p>
                     </div>
@@ -107,12 +118,18 @@
                     />
                 </label>
 
-                <label class="p-3 flex items-center justify-between cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                <label
+                    class="p-3 flex items-center justify-between cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                >
                     <div>
-                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                        <span
+                            class="text-sm font-medium text-gray-800 dark:text-white/90"
+                        >
                             {t("autopause_scope_selected")}
                         </span>
-                        <p class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5">
+                        <p
+                            class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5"
+                        >
                             {t("autopause_scope_selected_desc")}
                         </p>
                     </div>
@@ -129,18 +146,18 @@
 
         <section class="space-y-2">
             <div class="flex items-center gap-2 ml-1">
-                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"></span>
+                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"
+                ></span>
                 <h3
                     class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/50"
                 >
                     {t("autopause_sites")}
                 </h3>
             </div>
-            <div
-                class="rounded-xl overflow-hidden bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 shadow-lg backdrop-blur-md"
-            >
+            <div class="glass-panel rounded-xl overflow-hidden">
                 <button
-                    class="w-full px-3 py-2 flex items-center justify-between border-b border-black/5 dark:border-white/5 transition-colors {scope === 'all'
+                    class="w-full px-3 py-2 flex items-center justify-between border-b border-black/5 dark:border-white/5 transition-colors {scope ===
+                    'all'
                         ? 'opacity-50'
                         : 'hover:bg-black/5 dark:hover:bg-white/5'} {siteYouTube
                         ? ''
@@ -156,7 +173,9 @@
                                 ? 'bg-red-500'
                                 : 'bg-black/10 dark:bg-white/20'}"
                         ></span>
-                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                        <span
+                            class="text-sm font-medium text-gray-800 dark:text-white/90"
+                        >
                             {t("autopause_site_youtube")}
                         </span>
                     </div>
@@ -174,7 +193,8 @@
                 </button>
 
                 <button
-                    class="w-full px-3 py-2 flex items-center justify-between transition-colors {scope === 'all'
+                    class="w-full px-3 py-2 flex items-center justify-between transition-colors {scope ===
+                    'all'
                         ? 'opacity-50'
                         : 'hover:bg-black/5 dark:hover:bg-white/5'} {siteBilibili
                         ? ''
@@ -190,7 +210,9 @@
                                 ? 'bg-sky-500'
                                 : 'bg-black/10 dark:bg-white/20'}"
                         ></span>
-                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                        <span
+                            class="text-sm font-medium text-gray-800 dark:text-white/90"
+                        >
                             {t("autopause_site_bilibili")}
                         </span>
                     </div>
@@ -211,16 +233,15 @@
 
         <section class="space-y-2">
             <div class="flex items-center gap-2 ml-1">
-                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"></span>
+                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"
+                ></span>
                 <h3
                     class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/50"
                 >
                     {t("autopause_custom_sites")}
                 </h3>
             </div>
-            <div
-                class="rounded-xl overflow-hidden bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 shadow-lg backdrop-blur-md p-3 space-y-2"
-            >
+            <div class="glass-panel rounded-xl overflow-hidden p-3 space-y-2">
                 <p class="text-[10px] text-gray-500 dark:text-white/40">
                     {t("autopause_custom_desc")}
                 </p>

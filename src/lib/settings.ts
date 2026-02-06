@@ -4,6 +4,7 @@ export type H5Config = {
     restoreSpeed?: number;
     seekForward?: number;
     seekRewind?: number;
+    blockNumKeys?: boolean;
 };
 
 export type YTConfig = {

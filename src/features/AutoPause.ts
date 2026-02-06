@@ -31,7 +31,7 @@ export class AutoPause implements Feature {
     private readonly STORAGE_KEY = 'last_focused_window';
     private readonly PLAY_KEY = 'last_play_window';
     private siteScope: 'all' | 'selected' = 'all';
-    private siteAllow: Record<string, boolean> = {
+    private siteAllow: Record<string, boolean | undefined> = {
         'youtube.com': true,
         'bilibili.com': true
     };

@@ -47,7 +47,7 @@ const strings = {
 
         // Fast Pause Settings
         fast_pause_title: "Fast Pause Settings",
-        fast_pause_master: "Fast Pause & Anti-touch",
+        fast_pause_master: "Disable Double Click Fullscreen",
         fast_pause_desc: "Prevent double-click fullscreen & fast pause.",
         platforms: "Platforms",
 

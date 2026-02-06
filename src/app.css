@@ -33,26 +33,35 @@ body {
   :root {
     /* Light Mode: Premium, Airy, Subtle - "Deep Glass" */
     --bg-gradient:
-      radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.8) 0px, transparent 50%),
-      /* Soft Blue */
-      radial-gradient(at 100% 0%, rgba(233, 213, 255, 0.8) 0px, transparent 50%),
-      /* Soft Purple */
-      radial-gradient(at 100% 100%, rgba(243, 232, 255, 0.8) 0px, transparent 50%),
-      /* Pale Violet */
-      radial-gradient(at 0% 100%, rgba(224, 242, 254, 0.8) 0px, transparent 50%),
-      /* Pale Sky */
-      #ffffff;
+      radial-gradient(at 0% 0%, rgba(147, 197, 253, 0.5) 0px, transparent 50%),
+      /* Stronger Blue */
+      radial-gradient(at 100% 0%, rgba(192, 132, 252, 0.4) 0px, transparent 50%),
+      /* Stronger Purple */
+      radial-gradient(at 100% 100%, rgba(232, 121, 249, 0.3) 0px, transparent 50%),
+      /* Stronger Pink */
+      radial-gradient(at 0% 100%, rgba(186, 230, 253, 0.5) 0px, transparent 50%),
+      /* Stronger Sky */
+      #f8faff;
+    /* Slightly Off-white base */
 
-    --glass-surface: rgba(255, 255, 255, 0.65);
-    /* More opaque for readability */
-    --glass-surface-hover: rgba(255, 255, 255, 0.8);
-    --glass-border: rgba(255, 255, 255, 0.6);
+    /* Noise Texture (Base64) */
+    --noise-texture: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.4"/%3E%3C/svg%3E');
+    /* Increased noise density in SVG but controlled via CSS opacity */
+
+    --glass-surface: rgba(255, 255, 255, 0.4);
+    /* Much more transparent (was 0.65) */
+    --glass-surface-hover: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.5);
     --glass-shadow:
       0 8px 32px 0 rgba(31, 38, 135, 0.07),
+      0 2px 4px -1px rgba(0, 0, 0, 0.05),
       inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 
+    --gradient-border-light: linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.1));
+
     --text-primary: #1e293b;
-    --text-secondary: #64748b;
+    --text-secondary: #475569;
+    /* Darker secondary text for contrast */
   }
 
   @media (prefers-color-scheme: dark) {
@@ -68,8 +77,8 @@ body {
         #0a0a0a;
       /* True Black base */
 
-      --glass-surface: rgba(20, 20, 25, 0.7);
-      --glass-surface-hover: rgba(30, 30, 35, 0.8);
+      --glass-surface: rgba(20, 20, 25, 0.6);
+      --glass-surface-hover: rgba(30, 30, 35, 0.75);
       --glass-border: rgba(255, 255, 255, 0.08);
       --glass-shadow:
         0 8px 32px 0 rgba(0, 0, 0, 0.4),
@@ -82,7 +91,7 @@ body {
 
   body {
     margin: 0;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--text-primary);
     background: var(--bg-gradient);
     background-attachment: fixed;
@@ -97,10 +106,33 @@ body {
   .glass-card {
     background: var(--glass-surface);
     backdrop-filter: blur(20px) saturate(180%);
-    /* Increased blur & saturation */
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid var(--glass-border);
+    /* Gradient Border Trick */
+    border: 1px solid transparent;
+    /* Fallback */
+    background-clip: padding-box, border-box;
+    background-image:
+      linear-gradient(var(--glass-surface), var(--glass-surface)),
+      var(--gradient-border-light);
     box-shadow: var(--glass-shadow);
+    position: relative;
+    overflow: hidden;
+    /* For noise containment */
+  }
+
+  /* Noise Overlay */
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: var(--noise-texture);
+    opacity: 0.15;
+    /* Reduced opacity for subtlety */
+    pointer-events: none;
+    z-index: -1;
   }
 
   .glass-button {
@@ -113,12 +145,37 @@ body {
   .glass-button:hover {
     background: var(--glass-surface-hover);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    /* Softer shadow */
   }
+
+  .glass-button:active {
+    transform: translateY(0);
+  }
+
 
   .glass-panel {
     background: var(--glass-surface);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(12px);
+    box-shadow: var(--glass-shadow);
+  }
+
+  /* Custom Scrollbar for inner content if needed */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.5);
+    border-radius: 2px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.8);
   }
 }

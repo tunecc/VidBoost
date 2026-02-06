@@ -3,4 +3,4 @@ dist/
 .DS_Store
 .env
 .svelte-kit/
-package-lock.json
+
