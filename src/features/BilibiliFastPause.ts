@@ -1,41 +1,39 @@
 import type { Feature } from './Feature';
 import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
+import { getFastPauseConfig, isSiteHost } from '../lib/siteProfiles';
 
 export class BilibiliFastPause implements Feature {
     private input = InputManager.getInstance();
     private videoCtrl = VideoController.getInstance();
+    private config = getFastPauseConfig('bilibili');
     private enabled = false;
+    private listenersRegistered = false;
 
-    // Direct port from original script
     private isClickOnControls(target: HTMLElement): boolean {
-        const controlSelectors = [
-            '.bpx-player-control-wrap', // Bottom controls
-            '.bpx-player-control-bottom',
-            '.bpx-player-control-top',
-            '.bpx-player-sending-area', // Danmaku input area
-            '.bpx-player-video-btn',    // Various buttons
-            '.bpx-player-dm-input',     // Input box
-            '.bpx-player-tooltip',      // Tooltips
-            '.bpx-player-context-menu', // Right click menu
-            '.bpx-player-ending-panel', // Ending panel
-            '.bpx-player-popup',        // Popups
-            '.bpx-player-cmd-dm-wrap'   // Danmaku wrap
-        ];
-        return controlSelectors.some(selector => target.closest(selector) !== null);
+        return (this.config?.controlSelectors || []).some((selector) => target.closest(selector) !== null);
+    }
+
+    private isInVideoArea(target: HTMLElement): boolean {
+        if (target.tagName === 'VIDEO') return true;
+        return (this.config?.videoAreaSelectors || []).some((selector) => target.closest(selector) !== null);
     }
 
     mount() {
-        if (!window.location.host.includes('bilibili.com')) return;
+        if (!isSiteHost('bilibili')) return;
+        if (!this.config) return;
+        if (this.enabled) return;
         this.enabled = true;
+
+        if (this.listenersRegistered) return;
+        this.listenersRegistered = true;
 
         // --- 1. Intercept Double Click (Prevent Fullscreen) ---
         this.input.on('dblclick', 'bnd-prevent', (e) => {
             if (!this.enabled) return false;
 
             const target = e.target as HTMLElement;
-            // Check if inside video wrap
-            if (!target.closest('.bpx-player-video-wrap') && target.tagName !== 'VIDEO') return false;
+            if (!this.isInVideoArea(target)) return false;
 
             // Stop default behavior (Fullscreen)
             return true;
@@ -52,8 +50,7 @@ export class BilibiliFastPause implements Feature {
 
             const target = event.target as HTMLElement;
 
-            // Scope check: Must be in video area
-            if (!target.closest('.bpx-player-video-wrap') && target.tagName !== 'VIDEO') return false;
+            if (!this.isInVideoArea(target)) return false;
 
             // Safety check: Don't trigger on controls
             if (this.isClickOnControls(target)) return false;
@@ -76,8 +73,7 @@ export class BilibiliFastPause implements Feature {
 
             const target = event.target as HTMLElement;
 
-            // Scope check
-            if (!target.closest('.bpx-player-video-wrap') && target.tagName !== 'VIDEO') return false;
+            if (!this.isInVideoArea(target)) return false;
 
             // Safety check
             if (this.isClickOnControls(target)) return false;
@@ -89,10 +85,7 @@ export class BilibiliFastPause implements Feature {
 
     unmount() {
         this.enabled = false;
-        this.input.off('bnd-prevent');
-        this.input.off('bnd-fast-pause');
-        this.input.off('bnd-block-click');
     }
 
-    updateSettings(settings: any) { }
+    updateSettings(_settings: unknown) { }
 }

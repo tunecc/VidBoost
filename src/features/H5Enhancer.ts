@@ -60,7 +60,7 @@ export class H5Enhancer implements Feature {
         this.enabled = false;
     }
 
-    updateSettings(settings: any) { }
+    updateSettings(_settings: unknown) { }
 
     private updateLocalConfig(newConf: Partial<H5Config>) {
         this.config = { ...this.config, ...newConf };
@@ -118,12 +118,10 @@ export class H5Enhancer implements Feature {
     }
 
     private registerShortcuts() {
-        // --- Number Keys (1-4 only) ---
-        // We removed blocking logic and 5-9/0 support here.
-        // YouTubeOptimizer handles the blocking.
-        // We only handle Speed Control.
-
-        [1, 2, 3, 4].forEach(num => {
+        // --- Number Keys (1-9) ---
+        // Keep YouTube native seek blocking in a lower-priority feature,
+        // while allowing numeric speed control to win when a video is active.
+        [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(num => {
             this.input.on('keydown', `h5-speed-${num}`, (e) => {
                 if (!this.enabled) return false;
 

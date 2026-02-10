@@ -1,6 +1,6 @@
 /**
  * Cross-Tab Synchronization
- * Uses BroadcastChannel for zero-latency communication between tabs.
+ * Uses runtime relay via background service worker.
  */
 
 export type SyncMessage = {
@@ -8,8 +8,18 @@ export type SyncMessage = {
     timestamp: number;
 } & (
         { type: 'PLAY_STARTED' } |
-        { type: 'SETTINGS_CHANGED'; payload: any }
+        { type: 'SETTINGS_CHANGED'; payload: unknown }
     );
+
+function isSyncMessage(msg: unknown): msg is SyncMessage {
+    if (!msg || typeof msg !== 'object') return false;
+    const maybe = msg as Partial<SyncMessage>;
+    if (typeof maybe.senderId !== 'string') return false;
+    if (typeof maybe.timestamp !== 'number') return false;
+    if (maybe.type === 'PLAY_STARTED') return true;
+    if (maybe.type === 'SETTINGS_CHANGED') return 'payload' in maybe;
+    return false;
+}
 
 export class CrossTabSync {
     private id: string;
@@ -20,11 +30,9 @@ export class CrossTabSync {
 
         // Use chrome.runtime.onMessage for cross-origin sync
         chrome.runtime.onMessage.addListener((msg) => {
-            // Validate it's our sync message
-            if (msg.senderId && msg.timestamp) {
-                if (msg.senderId === this.id) return; // Ignore self
-                this.listeners.forEach(cb => cb(msg as SyncMessage));
-            }
+            if (!isSyncMessage(msg)) return;
+            if (msg.senderId === this.id) return; // Ignore self
+            this.listeners.forEach(cb => cb(msg));
         });
     }
 

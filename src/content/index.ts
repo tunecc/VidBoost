@@ -13,106 +13,87 @@ const features = [
     new YouTubeFastPause()
 ];
 
-// Load global enabled state
-getSettings([
-    'enabled',
-    'h5_enabled',
-    'ap_enabled',
-    'bnd_enabled',
-    'yt_fast_pause',
-    'fast_pause_master',
-    'yt_config'
-]).then((res) => {
-    // Global Master Switch
-    if (res.enabled === false) return; // Completely disabled
+const mountedState = new Array(features.length).fill(false);
+
+type ContentDebugState = {
+    mounted: boolean[];
+    settings: {
+        enabled?: boolean;
+        h5_enabled?: boolean;
+        ap_enabled?: boolean;
+        bnd_enabled?: boolean;
+        yt_fast_pause?: boolean;
+        fast_pause_master?: boolean;
+        yt_config?: { blockNativeSeek?: boolean };
+    };
+    ts: string;
+};
+
+function publishDebug(settings: ContentDebugState['settings']) {
+    try {
+        (window as Window & { __VIDBOOST_DEBUG__?: ContentDebugState }).__VIDBOOST_DEBUG__ = {
+            mounted: [...mountedState],
+            settings,
+            ts: new Date().toISOString()
+        };
+    } catch {
+        // ignore diagnostics publish errors
+    }
+}
+
+function setFeatureEnabled(index: number, enabled: boolean) {
+    if (mountedState[index] === enabled) return;
+    mountedState[index] = enabled;
+    if (enabled) features[index].mount();
+    else features[index].unmount();
+}
+
+function applyFromSettings(res: {
+    enabled?: boolean;
+    h5_enabled?: boolean;
+    ap_enabled?: boolean;
+    bnd_enabled?: boolean;
+    yt_fast_pause?: boolean;
+    fast_pause_master?: boolean;
+    yt_config?: { blockNativeSeek?: boolean };
+}) {
+    const globalEnabled = res.enabled !== false;
+    if (!globalEnabled) {
+        features.forEach((_, index) => setFeatureEnabled(index, false));
+        publishDebug(res);
+        return;
+    }
 
     const fastPauseMasterOn = res.fast_pause_master !== false;
     const bndOn = res.bnd_enabled !== false && fastPauseMasterOn;
     const ytFastPauseOn = res.yt_fast_pause !== false && fastPauseMasterOn;
     const ytBlockNativeOn = res.yt_config?.blockNativeSeek !== false;
 
-    if (res.h5_enabled !== false) features[0].mount();
-    if (res.ap_enabled !== false) features[1].mount();
-    if (bndOn) features[2].mount();
-    if (ytBlockNativeOn) features[3].mount(); // YouTube Seek Blocker
-    if (ytFastPauseOn) features[4].mount();
-});
+    setFeatureEnabled(0, res.h5_enabled !== false);
+    setFeatureEnabled(1, res.ap_enabled !== false);
+    setFeatureEnabled(2, bndOn);
+    setFeatureEnabled(3, ytBlockNativeOn);
+    setFeatureEnabled(4, ytFastPauseOn);
+    publishDebug(res);
+}
 
-// Watch for changes
-onSettingsChanged((changes) => {
-    if (changes.enabled !== undefined) {
-        if (changes.enabled === false) {
-            features.forEach(f => f.unmount());
-        } else {
-            // Re-mount enabled ones
-            getSettings([
-                'h5_enabled',
-                'ap_enabled',
-                'bnd_enabled',
-                'yt_fast_pause',
-                'fast_pause_master',
-                'yt_config'
-            ]).then((res) => {
-                const fastPauseMasterOn = res.fast_pause_master !== false;
-                const bndOn = res.bnd_enabled !== false && fastPauseMasterOn;
-                const ytFastPauseOn = res.yt_fast_pause !== false && fastPauseMasterOn;
-                const ytBlockNativeOn = res.yt_config?.blockNativeSeek !== false;
+function loadAndApply() {
+    return getSettings([
+        'enabled',
+        'h5_enabled',
+        'ap_enabled',
+        'bnd_enabled',
+        'yt_fast_pause',
+        'fast_pause_master',
+        'yt_config'
+    ])
+        .then(applyFromSettings)
+        .catch(() => applyFromSettings({}));
+}
 
-                if (res.h5_enabled !== false) features[0].mount();
-                if (res.ap_enabled !== false) features[1].mount();
-                if (bndOn) features[2].mount();
-                if (ytBlockNativeOn) features[3].mount();
-                if (ytFastPauseOn) features[4].mount();
-            });
-        }
-    }
-
-    // Individual toggles (if we add one for YT later, add here)
-    if (changes.h5_enabled !== undefined) {
-        if (changes.h5_enabled === false) features[0].unmount();
-        else features[0].mount();
-    }
-    if (changes.ap_enabled !== undefined) {
-        if (changes.ap_enabled === false) features[1].unmount();
-        else features[1].mount();
-    }
-    if (changes.bnd_enabled !== undefined) {
-        if (changes.bnd_enabled === false) features[2].unmount();
-        else {
-            getSettings(['fast_pause_master']).then((res) => {
-                if (res.fast_pause_master !== false) features[2].mount();
-            });
-        }
-    }
-
-    if (changes.yt_config !== undefined) {
-        const block = changes.yt_config?.blockNativeSeek !== false;
-        if (!block) features[3].unmount();
-        else {
-            getSettings(['enabled']).then((res) => {
-                if (res.enabled !== false) features[3].mount();
-            });
-        }
-    }
-
-    if (changes.fast_pause_master !== undefined) {
-        if (changes.fast_pause_master === false) {
-            features[2].unmount();
-            features[4].unmount();
-        } else {
-            getSettings(['bnd_enabled', 'yt_fast_pause']).then((res) => {
-                if (res.bnd_enabled !== false) features[2].mount();
-                if (res.yt_fast_pause !== false) features[4].mount();
-            });
-        }
-    }
-
-    if (changes.yt_fast_pause !== undefined) {
-        if (changes.yt_fast_pause === false) features[4].unmount();
-        else {
-            getSettings(['fast_pause_master']).then((res) => {
-                if (res.fast_pause_master !== false) features[4].mount();
-            });
-        }
-    }
+// Safe baseline: if storage is unavailable or delayed, keep defaults active.
+applyFromSettings({});
+loadAndApply();
+onSettingsChanged(() => {
+    loadAndApply();
 });

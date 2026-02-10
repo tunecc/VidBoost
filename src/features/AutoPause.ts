@@ -1,10 +1,17 @@
 import { CrossTabSync } from '../lib/CrossTabSync';
 import type { Feature } from './Feature';
 import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import { normalizeDomain, normalizeDomainList } from '../lib/domain';
+import { getAutoPauseContainerSelectorsForHost } from '../lib/siteProfiles';
 
 type LastFocusedState = {
     id: string;
     timestamp: number;
+};
+
+type CrossTabStorageState = {
+    last_focused_window?: LastFocusedState;
+    last_play_window?: LastFocusedState;
 };
 
 /**
@@ -22,7 +29,10 @@ export class AutoPause implements Feature {
     private currentVideo: HTMLVideoElement | null = null;
     private lastFocused: LastFocusedState | null = null;
     private containerObserver: MutationObserver | null = null;
-    private containerCleanup: (() => void) | null = null;
+    private rootObserver: MutationObserver | null = null;
+    private trackedContainer: HTMLElement | null = null;
+    private siteContainerSelectors: string[] | null = null;
+    private rebindRaf: number | null = null;
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
@@ -47,14 +57,14 @@ export class AutoPause implements Feature {
         });
 
         // 2. Storage Listener (for lastFocused/lastPlay state sync)
-        onStorageKeysChanged<{ [key: string]: any }>(
+        onStorageKeysChanged<CrossTabStorageState>(
             [this.STORAGE_KEY, this.PLAY_KEY],
             (changes) => {
                 if (changes[this.STORAGE_KEY]) {
-                    this.lastFocused = changes[this.STORAGE_KEY] as any;
+                    this.lastFocused = changes[this.STORAGE_KEY] || null;
                 }
                 if (changes[this.PLAY_KEY] && this.enabled) {
-                    const payload = changes[this.PLAY_KEY] as any;
+                    const payload = changes[this.PLAY_KEY];
                     if (payload && payload.id !== this.sync.myId) {
                         this.handleRemotePlay();
                     }
@@ -76,7 +86,9 @@ export class AutoPause implements Feature {
         getSettings(['ap_scope', 'ap_sites', 'ap_custom_sites']).then((res) => {
             this.siteScope = res.ap_scope || DEFAULT_SETTINGS.ap_scope;
             this.siteAllow = { ...this.siteAllow, ...(res.ap_sites || {}) };
-            this.customSites = Array.isArray(res.ap_custom_sites) ? res.ap_custom_sites : [];
+            this.customSites = Array.isArray(res.ap_custom_sites)
+                ? normalizeDomainList(res.ap_custom_sites)
+                : [];
             this.applyPolicy();
         });
 
@@ -92,7 +104,7 @@ export class AutoPause implements Feature {
             }
             if (changes.ap_custom_sites !== undefined) {
                 this.customSites = Array.isArray(changes.ap_custom_sites)
-                    ? changes.ap_custom_sites
+                    ? normalizeDomainList(changes.ap_custom_sites)
                     : [];
                 policyChanged = true;
             }
@@ -110,7 +122,7 @@ export class AutoPause implements Feature {
         this.stop();
     }
 
-    updateSettings(settings: any) { }
+    updateSettings(_settings: unknown) { }
 
     private applyPolicy() {
         if (!this.enabled) return;
@@ -150,10 +162,11 @@ export class AutoPause implements Feature {
 
     private isSiteAllowed(): boolean {
         if (this.siteScope === 'all') return true;
-        const host = window.location.host;
+        const host = normalizeDomain(window.location.host) || window.location.host.toLowerCase();
         const allowedByBuiltin = Object.keys(this.siteAllow).some((key) => {
             if (this.siteAllow[key] === false) return false;
-            return host === key || host.endsWith(`.${key}`);
+            const normalizedKey = normalizeDomain(key) || key.toLowerCase();
+            return host === normalizedKey || host.endsWith(`.${normalizedKey}`);
         });
         if (allowedByBuiltin) return true;
         return this.customSites.some((domain) => host === domain || host.endsWith(`.${domain}`));
@@ -171,53 +184,66 @@ export class AutoPause implements Feature {
 
     private initSiteSpecificTracking(): boolean {
         if (!this.isSiteAllowed()) return false;
-        const host = window.location.host;
-
-        let selectors: string[] | null = null;
-        if (host.includes('youtube.com')) {
-            selectors = ['#movie_player'];
-        } else if (host.includes('bilibili.com')) {
-            selectors = ['#bilibili-player', '.bpx-player-container', '.bilibili-player'];
-        }
+        const selectors = getAutoPauseContainerSelectorsForHost(window.location.host);
 
         if (!selectors) return false;
 
-        this.waitForElement(selectors, (container) => {
-            this.observeContainer(container);
-            const initialVideo = container.querySelector('video');
-            if (initialVideo) this.setupVideo(initialVideo as HTMLVideoElement);
+        this.siteContainerSelectors = selectors;
+        this.rebindContainer();
+
+        this.rootObserver?.disconnect();
+        this.rootObserver = new MutationObserver(() => {
+            this.scheduleContainerRebind();
+        });
+
+        this.rootObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true
         });
 
         return true;
     }
 
-    private waitForElement(selectors: string[], callback: (el: HTMLElement) => void) {
+    private findContainer(selectors: string[]): HTMLElement | null {
         const find = () => selectors.map(s => document.querySelector(s)).find(Boolean) as HTMLElement | null;
-        const existing = find();
-        if (existing) {
-            callback(existing);
+        return find();
+    }
+
+    private scheduleContainerRebind() {
+        if (this.rebindRaf !== null) return;
+        this.rebindRaf = window.requestAnimationFrame(() => {
+            this.rebindRaf = null;
+            this.rebindContainer();
+        });
+    }
+
+    private rebindContainer() {
+        if (!this.siteContainerSelectors) return;
+
+        const container = this.findContainer(this.siteContainerSelectors);
+        if (container === this.trackedContainer) return;
+
+        this.trackedContainer = container;
+        this.containerObserver?.disconnect();
+        this.containerObserver = null;
+
+        if (!container) {
+            this.cleanupVideo();
             return;
         }
 
-        const observer = new MutationObserver(() => {
-            const el = find();
-            if (el) {
-                observer.disconnect();
-                callback(el);
-            }
-        });
-
-        observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-
-        this.containerCleanup = () => observer.disconnect();
+        this.observeContainer(container);
+        const initialVideo = container.querySelector('video');
+        if (initialVideo) this.setupVideo(initialVideo as HTMLVideoElement);
     }
 
     private observeContainer(container: HTMLElement) {
         this.containerObserver?.disconnect();
         this.containerObserver = new MutationObserver(() => {
+            if (!container.isConnected) {
+                this.scheduleContainerRebind();
+                return;
+            }
             const video = container.querySelector('video');
             if (video) this.setupVideo(video as HTMLVideoElement);
         });
@@ -233,10 +259,16 @@ export class AutoPause implements Feature {
             this.containerObserver.disconnect();
             this.containerObserver = null;
         }
-        if (this.containerCleanup) {
-            this.containerCleanup();
-            this.containerCleanup = null;
+        if (this.rootObserver) {
+            this.rootObserver.disconnect();
+            this.rootObserver = null;
         }
+        if (this.rebindRaf !== null) {
+            cancelAnimationFrame(this.rebindRaf);
+            this.rebindRaf = null;
+        }
+        this.siteContainerSelectors = null;
+        this.trackedContainer = null;
     }
 
     private isPreviewVideo(video: HTMLVideoElement): boolean {

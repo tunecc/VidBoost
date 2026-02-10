@@ -4,9 +4,13 @@
  * Handles Shadow DOM traversal.
  */
 
+import { getFullscreenSelectorForHost } from './siteProfiles';
+
 export class VideoController {
     private static instance: VideoController;
     private currentVideo: HTMLVideoElement | null = null;
+    private observer: MutationObserver | null = null;
+    private readyObserver: MutationObserver | null = null;
 
     // Callbacks
     private onVideoFound: ((video: HTMLVideoElement) => void)[] = [];
@@ -31,8 +35,7 @@ export class VideoController {
         // Also listen for other events that might indicate a new active video
         window.addEventListener('timeupdate', this.handlePlay.bind(this), { capture: true });
 
-        // Periodic check for existing videos (lazy check)
-        this.scan();
+        this.startScanWhenReady();
     }
 
     private isVisibleVideo(v: HTMLVideoElement): boolean {
@@ -56,25 +59,48 @@ export class VideoController {
         });
     }
 
-    /**
-     * Recursively find video elements, penetrating Shadow DOMs.
-     */
-    private findVideoDeep(root: Node): HTMLVideoElement | null {
-        if (root instanceof HTMLVideoElement) return root;
-
-        // Check children
-        if (root instanceof HTMLElement) {
-            const v = root.querySelector('video');
-            if (v) return v;
+    private startScanWhenReady() {
+        if (document.body) {
+            this.scan();
+            return;
         }
 
-        // Check Shadow Root
-        if (root instanceof HTMLElement && root.shadowRoot) {
-            const v = this.findVideoDeep(root.shadowRoot);
-            if (v) return v;
+        if (this.readyObserver) return;
+        this.readyObserver = new MutationObserver(() => {
+            if (!document.body) return;
+            this.readyObserver?.disconnect();
+            this.readyObserver = null;
+            this.scan();
+        });
+
+        this.readyObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    private collectVideosFromNode(root: Node): HTMLVideoElement[] {
+        const visited = new Set<Node>();
+        const out: HTMLVideoElement[] = [];
+        const stack: Node[] = [root];
+
+        while (stack.length > 0) {
+            const node = stack.pop()!;
+            if (visited.has(node)) continue;
+            visited.add(node);
+
+            if (node instanceof HTMLVideoElement) {
+                out.push(node);
+            }
+
+            if (node instanceof Element && node.shadowRoot) {
+                stack.push(node.shadowRoot);
+            }
+
+            node.childNodes.forEach((child) => stack.push(child));
         }
 
-        return null;
+        return Array.from(new Set(out));
     }
 
     private handlePlay(e: Event) {
@@ -84,14 +110,10 @@ export class VideoController {
         }
     }
 
-    private observer: MutationObserver | null = null;
-
     private scan() {
-        const list = Array.from(document.querySelectorAll('video'));
-        const shadowVideo = this.findVideoDeep(document.body);
-        if (shadowVideo && !list.includes(shadowVideo)) {
-            list.push(shadowVideo);
-        }
+        if (!document.body) return;
+
+        const list = this.collectVideosFromNode(document.body);
         const best = this.pickBestVideo(list);
         if (best) this.setVideo(best);
 
@@ -101,16 +123,7 @@ export class VideoController {
                 for (const mutation of mutations) {
                     // Check added nodes
                     for (const node of mutation.addedNodes) {
-                        const candidates: HTMLVideoElement[] = [];
-
-                        if (node instanceof HTMLVideoElement) {
-                            candidates.push(node);
-                        } else if (node instanceof HTMLElement) {
-                            candidates.push(...node.querySelectorAll('video'));
-                            if (node.shadowRoot) {
-                                candidates.push(...node.shadowRoot.querySelectorAll('video'));
-                            }
-                        }
+                        const candidates = this.collectVideosFromNode(node);
 
                         if (candidates.length > 0) {
                             const best = this.pickBestVideo(candidates);
@@ -156,7 +169,8 @@ export class VideoController {
 
         // 2. If valid but not connected, try to find a new one immediately.
         // Fallback: Find the best visible video (prefer playing, then largest)
-        const allVideos = Array.from(document.querySelectorAll('video'));
+        if (!document.body) return null;
+        const allVideos = this.collectVideosFromNode(document.body);
         const best = this.pickBestVideo(allVideos);
         if (best) {
             this.setVideo(best);
@@ -170,7 +184,7 @@ export class VideoController {
     public togglePlay() {
         const v = this.video;
         if (!v) return;
-        if (v.paused) v.play();
+        if (v.paused) this.swallowPromise(v.play());
         else v.pause();
     }
 
@@ -187,6 +201,14 @@ export class VideoController {
         return true;
     }
 
+    private swallowPromise(result: void | Promise<unknown>) {
+        if (result && typeof (result as Promise<unknown>).catch === 'function') {
+            (result as Promise<unknown>).catch(() => {
+                // Ignore expected gesture-gated or transient promise rejections.
+            });
+        }
+    }
+
     public toggleFullscreen() {
         const v = this.video;
         if (!v) return;
@@ -196,14 +218,27 @@ export class VideoController {
 
         // 2. Standard Logic
         if (document.fullscreenElement) {
-            document.exitFullscreen();
+            this.swallowPromise(document.exitFullscreen());
         } else {
             // Try container first (better UI preservation)
             const container = this.getContainer(v);
             if (container.requestFullscreen) {
-                container.requestFullscreen();
-            } else if ((v as any).webkitEnterFullscreen) {
-                (v as any).webkitEnterFullscreen();
+                try {
+                    this.swallowPromise(container.requestFullscreen());
+                } catch {
+                    // Ignore sync failures from unsupported or blocked fullscreen requests.
+                }
+            } else {
+                const webkitVideo = v as HTMLVideoElement & {
+                    webkitEnterFullscreen?: () => void;
+                };
+                if (webkitVideo.webkitEnterFullscreen) {
+                    try {
+                        webkitVideo.webkitEnterFullscreen();
+                    } catch {
+                        // Ignore legacy fullscreen errors.
+                    }
+                }
             }
         }
     }
@@ -233,14 +268,7 @@ export class VideoController {
     }
 
     private trySiteSpecificFullscreen(): boolean {
-        const host = window.location.host;
-        let selector = '';
-
-        if (host.includes('bilibili.com')) selector = '.bpx-player-ctrl-full, .squirtle-video-fullscreen';
-        else if (host.includes('youtube.com')) selector = '.ytp-fullscreen-button';
-        else if (host.includes('iqiyi.com')) selector = '.iqp-btn-fullscreen';
-        else if (host.includes('youku.com')) selector = '.control-fullscreen-icon';
-        else if (host.includes('qq.com')) selector = 'txpdiv[data-report="window-fullscreen"]';
+        const selector = getFullscreenSelectorForHost(window.location.host);
 
         if (selector) {
             const btn = document.querySelector(selector) as HTMLElement;

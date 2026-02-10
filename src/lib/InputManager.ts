@@ -7,6 +7,7 @@
 import { VideoController } from './VideoController';
 
 type InputAction = (e: Event) => boolean | void;
+type InputEventType = 'keydown' | 'mousedown' | 'click' | 'dblclick';
 
 interface ActionListener {
     id: string;
@@ -17,13 +18,15 @@ interface ActionListener {
 
 export class InputManager {
     private static instance: InputManager;
-    private listeners: Record<string, ActionListener[]> = {
+    private listeners: Record<InputEventType, ActionListener[]> = {
         'keydown': [],
         'mousedown': [],
         'click': [],
         'dblclick': []
     };
     private hasVideo = false;
+    private lastVideoPresenceCheckAt = 0;
+    private readonly VIDEO_PRESENCE_CHECK_INTERVAL = 1000;
 
     private constructor() {
         this.init();
@@ -43,12 +46,18 @@ export class InputManager {
         const vc = VideoController.getInstance();
         vc.subscribe(() => {
             this.hasVideo = true;
+            this.lastVideoPresenceCheckAt = Date.now();
         });
 
         // Bind core events
-        ['keydown', 'mousedown', 'click', 'dblclick'].forEach(eventType => {
+        const eventTypes: InputEventType[] = ['keydown', 'mousedown', 'click', 'dblclick'];
+        eventTypes.forEach(eventType => {
             window.addEventListener(eventType, this.handleEvent.bind(this), { capture: true, passive: false });
         });
+    }
+
+    private isSupportedEventType(type: string): type is InputEventType {
+        return type === 'keydown' || type === 'mousedown' || type === 'click' || type === 'dblclick';
     }
 
 
@@ -57,49 +66,104 @@ export class InputManager {
      * Determines if the target is an interactive element (input, editable, etc.)
      * where strictly video shortcuts should be disabled.
      */
-    public isInteractive(target: EventTarget | null): boolean {
-        if (!target || !(target instanceof HTMLElement)) return false;
+    public isInteractive(target: EventTarget | null, path: EventTarget[] = []): boolean {
+        const interactiveSelectors = [
+            'input',
+            'textarea',
+            'select',
+            '[contenteditable="true"]',
+            '[contenteditable=""]',
+            '[contenteditable="plaintext-only"]',
+            '[role="textbox"]',
+            '[role="searchbox"]'
+        ].join(',');
 
-        const tag = target.tagName.toUpperCase();
-        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
-        if (target.isContentEditable) return true;
+        const candidates: Element[] = [];
+        const visited = new Set<Element>();
 
-        // Smart Checks for custom editors (Notion, VSCode, Discord, etc.)
-        const role = target.getAttribute('role');
-        if (role === 'textbox' || role === 'searchbox') return true;
+        const addCandidate = (node: EventTarget | null) => {
+            if (!node) return;
+            let element: Element | null = null;
+            if (node instanceof Element) element = node;
+            else if (node instanceof Node) element = node.parentElement;
+            if (!element || visited.has(element)) return;
+            visited.add(element);
+            candidates.push(element);
+        };
 
-        // Class-based checks (Optimized for speed)
-        const cls = target.className;
-        if (typeof cls === 'string') {
-            // Lowercase check once
-            const l = cls.toLowerCase();
-            if (l.includes('editor') || l.includes('input') || l.includes('text') || l.includes('draft')) {
-                return true;
-            }
+        addCandidate(target);
+        path.forEach((node) => addCandidate(node));
+
+        return candidates.some((element) => {
+            if (!(element instanceof HTMLElement)) return false;
+            const tag = element.tagName.toUpperCase();
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
+            if (element.isContentEditable) return true;
+            return element.closest(interactiveSelectors) !== null;
+        });
+    }
+
+    private refreshVideoPresence(force = false): boolean {
+        const now = Date.now();
+        if (!force && now - this.lastVideoPresenceCheckAt < this.VIDEO_PRESENCE_CHECK_INTERVAL) {
+            return this.hasVideo;
         }
 
-        return false;
+        this.lastVideoPresenceCheckAt = now;
+        if (document.querySelector('video')) {
+            this.hasVideo = true;
+            return true;
+        }
+
+        this.hasVideo = Boolean(VideoController.getInstance().video);
+        return this.hasVideo;
     }
 
     private handleEvent(e: Event) {
+        if (!this.isSupportedEventType(e.type)) return;
         const type = e.type;
         const listeners = this.listeners[type];
 
         if (!listeners || listeners.length === 0) return;
 
-        // Avoid global interception before any video exists
-        if (!this.hasVideo) {
-            // Cheap fallback: only start handling once a video exists in DOM
-            if (!document.querySelector('video')) return;
-            this.hasVideo = true;
-        }
+        // For pointer events, skip handling until a video is present.
+        // For keydown, do not hard-block here; feature handlers can still
+        // decide based on current host/video availability.
+        if (type !== 'keydown' && !this.refreshVideoPresence()) return;
+        if (type === 'keydown') this.refreshVideoPresence();
 
         // Check for Shadow DOM target using composedPath
         const path = e.composedPath?.() || [];
         const realTarget = (path[0] || e.target) as EventTarget;
 
+        const interactive = type === 'keydown' && this.isInteractive(realTarget, path as EventTarget[]);
+        if (type === 'keydown') {
+            try {
+                const ke = e as KeyboardEvent;
+                (
+                    window as Window & {
+                        __VIDBOOST_KEYDBG__?: {
+                            key: string;
+                            code: string;
+                            interactive: boolean;
+                            listeners: string[];
+                            ts: string;
+                        };
+                    }
+                ).__VIDBOOST_KEYDBG__ = {
+                    key: ke.key,
+                    code: ke.code,
+                    interactive,
+                    listeners: listeners.map((l) => l.id),
+                    ts: new Date().toISOString()
+                };
+            } catch {
+                // ignore diagnostics publish errors
+            }
+        }
+
         // Skip keyboard shortcuts in input fields
-        if (type === 'keydown' && this.isInteractive(realTarget)) {
+        if (interactive) {
             return;
         }
 
@@ -124,12 +188,15 @@ export class InputManager {
     /**
      * Register a new event listener
      */
-    public on(eventType: 'keydown' | 'mousedown' | 'click' | 'dblclick',
+    public on(eventType: InputEventType,
         id: string,
         handler: InputAction,
         options: { priority?: number, condition?: (e: Event) => boolean } = {}) {
 
         if (!this.listeners[eventType]) return;
+
+        // Keep registration idempotent for re-mount paths.
+        this.listeners[eventType] = this.listeners[eventType].filter(l => l.id !== id);
 
         this.listeners[eventType].push({
             id,
@@ -144,8 +211,8 @@ export class InputManager {
     }
 
     public off(id: string) {
-        for (const type in this.listeners) {
-            this.listeners[type] = this.listeners[type].filter(l => l.id !== id);
-        }
+        (Object.keys(this.listeners) as InputEventType[]).forEach((type) => {
+            this.listeners[type] = this.listeners[type].filter((l) => l.id !== id);
+        });
     }
 }

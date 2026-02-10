@@ -66,12 +66,12 @@ export const DEFAULT_SETTINGS: Settings = {
 export function getSettings<K extends SettingsKey>(keys: K[]): Promise<Pick<Settings, K>> {
     return new Promise((resolve) => {
         chrome.storage.local.get(keys, (res) => {
-            const out: Partial<Settings> = {};
+            const out = {} as Pick<Settings, K>;
             keys.forEach((k) => {
-                const value = res[k];
-                (out as any)[k] = value !== undefined ? value : DEFAULT_SETTINGS[k];
+                const value = res[k] as Settings[K] | undefined;
+                out[k] = value !== undefined ? value : DEFAULT_SETTINGS[k];
             });
-            resolve(out as Pick<Settings, K>);
+            resolve(out);
         });
     });
 }
@@ -83,10 +83,10 @@ export function setSettings(values: Partial<Settings>) {
 export function onSettingsChanged(cb: (changes: Partial<Settings>) => void) {
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
         const out: Partial<Settings> = {};
-        Object.keys(changes).forEach((k) => {
-            if (k in DEFAULT_SETTINGS) {
-                (out as any)[k] = changes[k].newValue;
-            }
+        const outMap = out as Record<SettingsKey, Settings[SettingsKey] | undefined>;
+        (Object.keys(changes) as SettingsKey[]).forEach((k) => {
+            if (!(k in DEFAULT_SETTINGS)) return;
+            outMap[k] = changes[k].newValue as Settings[typeof k];
         });
         if (Object.keys(out).length > 0) cb(out);
     };
@@ -102,9 +102,8 @@ export function onStorageKeysChanged<T extends Record<string, unknown>>(
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
         const out: Partial<T> = {};
         Object.keys(changes).forEach((k) => {
-            if (keySet.has(k)) {
-                (out as any)[k] = changes[k].newValue;
-            }
+            if (!keySet.has(k)) return;
+            out[k as keyof T] = changes[k].newValue as T[keyof T];
         });
         if (Object.keys(out).length > 0) cb(out);
     };

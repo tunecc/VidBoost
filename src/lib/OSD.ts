@@ -42,7 +42,10 @@ export class OSD {
         // BUT if we append to body, we need absolute page coords.
         // If we in fullscreen, we MUST append to fullscreen element.
 
-        const fsElement = document.fullscreenElement || (document as any).webkitFullscreenElement;
+        const webkitFullscreenElement = (document as Document & {
+            webkitFullscreenElement?: Element | null;
+        }).webkitFullscreenElement;
+        const fsElement = document.fullscreenElement || webkitFullscreenElement;
 
         let container = document.body;
         let diffTop = 0;

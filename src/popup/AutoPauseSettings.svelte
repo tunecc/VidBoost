@@ -1,22 +1,27 @@
 <script lang="ts">
-    import { createEventDispatcher, onMount } from "svelte";
-    import { i18n } from "../lib/i18n";
+    import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { i18n, type I18nKey, type I18nLang } from "../lib/i18n";
     import {
         getSettings,
         setSettings,
         DEFAULT_SETTINGS,
+        type Settings,
     } from "../lib/settings";
+    import { normalizeDomainList } from "../lib/domain";
 
-    export let language: "auto" | "en" | "zh" = "auto";
+    export let language: I18nLang = "auto";
     const dispatch = createEventDispatcher();
 
-    $: t = (key: any) => i18n(key, language);
+    $: t = (key: I18nKey) => i18n(key, language);
 
     let loaded = false;
     let scope: "all" | "selected" = "all";
     let siteYouTube = true;
     let siteBilibili = true;
     let customSitesText = "";
+    const SAVE_DEBOUNCE_MS = 180;
+    let saveTimer: number | null = null;
+    let pendingSettings: Partial<Settings> | null = null;
 
     onMount(() => {
         getSettings(["ap_scope", "ap_sites", "ap_custom_sites"]).then((res) => {
@@ -24,7 +29,7 @@
             siteYouTube = res.ap_sites?.["youtube.com"] !== false;
             siteBilibili = res.ap_sites?.["bilibili.com"] !== false;
             if (Array.isArray(res.ap_custom_sites)) {
-                customSitesText = res.ap_custom_sites.join("\n");
+                customSitesText = normalizeDomainList(res.ap_custom_sites).join("\n");
             }
             loaded = true;
         });
@@ -32,20 +37,41 @@
 
     $: {
         if (loaded && typeof chrome !== "undefined" && chrome.storage) {
-            const customSites = customSitesText
-                .split(/\s+/)
-                .map((s) => s.trim())
-                .filter(Boolean);
-            setSettings({
+            const customSites = normalizeDomainList(
+                customSitesText
+                    .split(/\s+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+            );
+            pendingSettings = {
                 ap_scope: scope,
                 ap_sites: {
                     "youtube.com": siteYouTube,
                     "bilibili.com": siteBilibili,
                 },
                 ap_custom_sites: customSites,
-            });
+            };
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = window.setTimeout(() => {
+                saveTimer = null;
+                if (pendingSettings) {
+                    setSettings(pendingSettings);
+                    pendingSettings = null;
+                }
+            }, SAVE_DEBOUNCE_MS);
         }
     }
+
+    onDestroy(() => {
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+        }
+        if (pendingSettings && typeof chrome !== "undefined" && chrome.storage) {
+            setSettings(pendingSettings);
+            pendingSettings = null;
+        }
+    });
 </script>
 
 <div class="h-full flex flex-col">

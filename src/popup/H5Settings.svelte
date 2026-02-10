@@ -1,19 +1,20 @@
 <script lang="ts">
-    import { createEventDispatcher, onMount } from "svelte";
-    import { i18n } from "../lib/i18n";
+    import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { i18n, type I18nKey, type I18nLang } from "../lib/i18n";
     import {
         getSettings,
         setSettings,
         DEFAULT_SETTINGS,
+        type Settings,
     } from "../lib/settings";
 
     // Props
-    export let language: "auto" | "en" | "zh" = "auto";
+    export let language: I18nLang = "auto";
 
     const dispatch = createEventDispatcher();
 
     // Helper
-    $: t = (key: any) => i18n(key, language);
+    $: t = (key: I18nKey) => i18n(key, language);
 
     // Settings with defaults
     let speedStep = 0.1;
@@ -21,6 +22,10 @@
     let restoreSpeed = 1.0;
     let seekForward = 5;
     let seekRewind = 3;
+    let loaded = false;
+    const SAVE_DEBOUNCE_MS = 180;
+    let saveTimer: number | null = null;
+    let pendingSettings: Partial<Settings> | null = null;
     // blockNumKeys removed as requested
 
     onMount(() => {
@@ -34,12 +39,13 @@
                 conf.seekForward ?? DEFAULT_SETTINGS.h5_config.seekForward!;
             seekRewind =
                 conf.seekRewind ?? DEFAULT_SETTINGS.h5_config.seekRewind!;
+            loaded = true;
         });
     });
 
     $: {
-        if (typeof chrome !== "undefined" && chrome.storage) {
-            setSettings({
+        if (loaded && typeof chrome !== "undefined" && chrome.storage) {
+            pendingSettings = {
                 h5_config: {
                     speedStep,
                     maxSpeed,
@@ -47,9 +53,28 @@
                     seekForward,
                     seekRewind,
                 },
-            });
+            };
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = window.setTimeout(() => {
+                saveTimer = null;
+                if (pendingSettings) {
+                    setSettings(pendingSettings);
+                    pendingSettings = null;
+                }
+            }, SAVE_DEBOUNCE_MS);
         }
     }
+
+    onDestroy(() => {
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+        }
+        if (pendingSettings && typeof chrome !== "undefined" && chrome.storage) {
+            setSettings(pendingSettings);
+            pendingSettings = null;
+        }
+    });
 
     function goBack() {
         dispatch("back");

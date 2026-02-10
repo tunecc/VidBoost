@@ -1,4 +1,4 @@
-type Lang = 'auto' | 'en' | 'zh';
+export type I18nLang = 'auto' | 'en' | 'zh';
 
 const strings = {
     en: {
@@ -115,14 +115,14 @@ const strings = {
         lang_en: "English",
         lang_zh: "简体中文"
     }
-};
+} as const;
 
-export const i18n = (key: keyof typeof strings.en, lang: Lang = 'auto'): string => {
-    let targetLang = lang;
-    if (targetLang === 'auto') {
-        const sysLang = navigator.language.toLowerCase();
-        targetLang = sysLang.startsWith('zh') ? 'zh' : 'en';
-    }
+export type I18nKey = keyof typeof strings.en;
 
-    return (strings[targetLang] || strings.en)[key] || key;
+export const i18n = (key: I18nKey, lang: I18nLang = 'auto'): string => {
+    const resolvedLang: 'en' | 'zh' = lang === 'auto'
+        ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en')
+        : (lang === 'zh' ? 'zh' : 'en');
+
+    return strings[resolvedLang][key] || key;
 }

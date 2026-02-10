@@ -1,6 +1,7 @@
 import type { Feature } from './Feature';
 import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
+import { getFastPauseConfig, isSiteHost } from '../lib/siteProfiles';
 
 /**
  * YouTubeFastPause
@@ -14,45 +15,27 @@ import { VideoController } from '../lib/VideoController';
 export class YouTubeFastPause implements Feature {
     private input = InputManager.getInstance();
     private videoCtrl = VideoController.getInstance();
+    private config = getFastPauseConfig('youtube');
     private enabled = false;
+    private listenersRegistered = false;
 
-    // YouTube control selectors to exclude from click handling
     private isClickOnControls(target: HTMLElement): boolean {
-        const controlSelectors = [
-            '.ytp-chrome-bottom',           // Bottom control bar
-            '.ytp-chrome-top',              // Top bar (title, etc)
-            '.ytp-settings-menu',           // Settings popup
-            '.ytp-popup',                   // Any popup
-            '.ytp-tooltip',                 // Tooltips
-            '.ytp-button',                  // Any button
-            '.ytp-skip-ad-button',          // Skip Ad button
-            '.ytp-ad-component--clickable', // Ad clickable container
-            '.ytp-menuitem',                // Menu items
-            '.ytp-panel',                   // Panels (quality, speed, etc)
-            '.ytp-ce-element',              // End screen elements
-            '.ytp-iv-player-content',       // Info cards
-            '.ytp-progress-bar-container',  // Progress bar
-            '.ytp-scrubber-container',      // Scrubber
-            '.ytp-volume-panel',            // Volume slider
-            '.ytp-right-controls',          // Right side controls
-            '.ytp-left-controls',           // Left side controls
-            '.annotation',                  // Annotations
-            '.ytp-spinner'                  // Loading spinner
-        ];
-        return controlSelectors.some(selector => target.closest(selector) !== null);
+        return (this.config?.controlSelectors || []).some((selector) => target.closest(selector) !== null);
     }
 
     private isInVideoArea(target: HTMLElement): boolean {
-        // YouTube uses #movie_player as the main container
-        // The actual clickable video area is .html5-video-container
-        return target.closest('#movie_player') !== null ||
-            target.closest('.html5-video-container') !== null ||
-            target.tagName === 'VIDEO';
+        if (target.tagName === 'VIDEO') return true;
+        return (this.config?.videoAreaSelectors || []).some((selector) => target.closest(selector) !== null);
     }
 
     mount() {
-        if (!window.location.host.includes('youtube.com')) return;
+        if (!isSiteHost('youtube')) return;
+        if (!this.config) return;
+        if (this.enabled) return;
         this.enabled = true;
+
+        if (this.listenersRegistered) return;
+        this.listenersRegistered = true;
 
         // --- 1. Intercept Double Click (Prevent Fullscreen) ---
         this.input.on('dblclick', 'ytfp-prevent', (e) => {
@@ -100,10 +83,7 @@ export class YouTubeFastPause implements Feature {
 
     unmount() {
         this.enabled = false;
-        this.input.off('ytfp-prevent');
-        this.input.off('ytfp-fast-pause');
-        this.input.off('ytfp-block-click');
     }
 
-    updateSettings(settings: any) { }
+    updateSettings(_settings: unknown) { }
 }

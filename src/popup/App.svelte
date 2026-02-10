@@ -1,11 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { fade, fly, slide } from "svelte/transition";
   import { quintOut } from "svelte/easing";
-  import { i18n } from "../lib/i18n";
+  import { i18n, type I18nKey, type I18nLang } from "../lib/i18n";
   import H5Settings from "./H5Settings.svelte";
   import AutoPauseSettings from "./AutoPauseSettings.svelte";
-  import { getSettings, setSettings, DEFAULT_SETTINGS } from "../lib/settings";
+  import {
+    getSettings,
+    setSettings,
+    DEFAULT_SETTINGS,
+    type Settings,
+  } from "../lib/settings";
   import SectionCard from "../components/SectionCard.svelte";
   import ToggleItem from "../components/ToggleItem.svelte";
   import AccordionItem from "../components/AccordionItem.svelte";
@@ -27,7 +32,7 @@
   let fastPauseOpen = false; // Inline accordion state
 
   // Settings
-  let language: "auto" | "en" | "zh" = "auto";
+  let language: I18nLang = "auto";
 
   // Navigation
   let currentView = "main";
@@ -40,9 +45,34 @@
   };
 
   let showLangMenu = false;
+  const SAVE_DEBOUNCE_MS = 180;
+  let saveTimer: number | null = null;
+  let pendingSettings: Partial<Settings> | null = null;
 
   // Helper
-  $: t = (key: any) => i18n(key, language);
+  $: t = (key: I18nKey) => i18n(key, language);
+
+  function flushSettingsSave() {
+    if (
+      !pendingSettings ||
+      typeof chrome === "undefined" ||
+      !chrome.storage
+    ) {
+      return;
+    }
+    const payload = pendingSettings;
+    pendingSettings = null;
+    setSettings(payload);
+  }
+
+  function scheduleSettingsSave(values: Partial<Settings>) {
+    pendingSettings = values;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      flushSettingsSave();
+    }, SAVE_DEBOUNCE_MS);
+  }
 
   onMount(() => {
     getSettings([
@@ -90,7 +120,7 @@
 
   $: {
     if (loaded && typeof chrome !== "undefined" && chrome.storage) {
-      setSettings({
+      scheduleSettingsSave({
         enabled: globalEnabled,
         h5_enabled: h5Enabled,
         ap_enabled: autoPauseEnabled,
@@ -103,6 +133,14 @@
       });
     }
   }
+
+  onDestroy(() => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    flushSettingsSave();
+  });
 
   function navigate(view: string) {
     if (!globalEnabled) return;
@@ -451,10 +489,12 @@
               </div>
 
               <!-- Backdrop to close menu -->
-              <div
-                class="fixed inset-0 z-40"
+              <button
+                type="button"
+                class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                aria-label="Close language menu"
                 on:click={() => (showLangMenu = false)}
-              ></div>
+              ></button>
             {/if}
           </div>
         </div>
