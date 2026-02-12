@@ -17,8 +17,8 @@ type CrossTabStorageState = {
 /**
  * AutoPause Feature
  * 
- * Strict port of video-auto-pause.user.js
- * Only allows the focused tab to play video. Other tabs are paused.
+ * Foreground-first playback coordination between tabs.
+ * Supports optional background playback for the last focused tab.
  */
 export class AutoPause implements Feature {
     private sync = new CrossTabSync();
@@ -40,19 +40,27 @@ export class AutoPause implements Feature {
     // Config
     private readonly STORAGE_KEY = 'last_focused_window';
     private readonly PLAY_KEY = 'last_play_window';
+    private readonly LAST_FOCUSED_TTL_MS = 10_000;
+    private readonly PLAY_SIGNAL_TTL_MS = 5_000;
+    private readonly SIGNAL_DEDUPE_TTL_MS = 500;
     private siteScope: 'all' | 'selected' = 'all';
     private siteAllow: Record<string, boolean | undefined> = {
         'youtube.com': true,
         'bilibili.com': true
     };
     private customSites: string[] = [];
+    private allowBackgroundPlayback = DEFAULT_SETTINGS.ap_allow_background;
+    private processedPlaySignals = new Map<string, number>();
 
     constructor() {
         // 1. Message Handler (from other tabs)
         this.sync.onMessage((msg) => {
             if (!this.enabled) return;
             if (msg.type === 'PLAY_STARTED') {
-                this.handleRemotePlay();
+                this.handleIncomingPlaySignal({
+                    id: msg.senderId,
+                    timestamp: msg.timestamp
+                });
             }
         });
 
@@ -60,35 +68,31 @@ export class AutoPause implements Feature {
         onStorageKeysChanged<CrossTabStorageState>(
             [this.STORAGE_KEY, this.PLAY_KEY],
             (changes) => {
-                if (changes[this.STORAGE_KEY]) {
-                    this.lastFocused = changes[this.STORAGE_KEY] || null;
+                if (Object.prototype.hasOwnProperty.call(changes, this.STORAGE_KEY)) {
+                    this.lastFocused = this.parseSyncState(changes[this.STORAGE_KEY]);
                 }
-                if (changes[this.PLAY_KEY] && this.enabled) {
-                    const payload = changes[this.PLAY_KEY];
-                    if (payload && payload.id !== this.sync.myId) {
-                        this.handleRemotePlay();
-                    }
+                if (!Object.prototype.hasOwnProperty.call(changes, this.PLAY_KEY)) return;
+                const payload = this.parseSyncState(changes[this.PLAY_KEY]);
+                if (payload) {
+                    this.handleIncomingPlaySignal(payload);
                 }
             }
         );
 
         // Initial fetch
         chrome.storage.local.get([this.STORAGE_KEY, this.PLAY_KEY], (res) => {
-            if (res[this.STORAGE_KEY]) {
-                this.lastFocused = res[this.STORAGE_KEY];
-            }
-            const lastPlay = res[this.PLAY_KEY];
-            if (lastPlay && lastPlay.id !== this.sync.myId) {
-                this.handleRemotePlay();
-            }
+            this.lastFocused = this.parseSyncState(res[this.STORAGE_KEY]);
+            const lastPlay = this.parseSyncState(res[this.PLAY_KEY]);
+            if (lastPlay) this.handleIncomingPlaySignal(lastPlay);
         });
 
-        getSettings(['ap_scope', 'ap_sites', 'ap_custom_sites']).then((res) => {
+        getSettings(['ap_scope', 'ap_sites', 'ap_custom_sites', 'ap_allow_background']).then((res) => {
             this.siteScope = res.ap_scope || DEFAULT_SETTINGS.ap_scope;
             this.siteAllow = { ...this.siteAllow, ...(res.ap_sites || {}) };
             this.customSites = Array.isArray(res.ap_custom_sites)
                 ? normalizeDomainList(res.ap_custom_sites)
                 : [];
+            this.allowBackgroundPlayback = res.ap_allow_background !== false;
             this.applyPolicy();
         });
 
@@ -107,6 +111,10 @@ export class AutoPause implements Feature {
                     ? normalizeDomainList(changes.ap_custom_sites)
                     : [];
                 policyChanged = true;
+            }
+            if (changes.ap_allow_background !== undefined) {
+                this.allowBackgroundPlayback = changes.ap_allow_background !== false;
+                this.pauseWhenBackgroundOrUnfocused();
             }
             if (policyChanged) this.applyPolicy();
         });
@@ -137,14 +145,11 @@ export class AutoPause implements Feature {
     private start() {
         this.active = true;
         this.initFocusListeners();
-        // Site-specific detection for core platforms to avoid preview videos
-        if (this.initSiteSpecificTracking()) {
-            // handled by container observer
-        } else {
-            // Generic Video Detection (Global Capture)
-            document.addEventListener('play', this.handleCapturePhase, true);
-            document.addEventListener('playing', this.handleCapturePhase, true);
-        }
+        // Generic detection is always enabled as a safety net.
+        // Site-specific tracking still provides a stable "main player" target.
+        document.addEventListener('play', this.handleCapturePhase, true);
+        document.addEventListener('playing', this.handleCapturePhase, true);
+        this.initSiteSpecificTracking();
 
         if (document.hasFocus()) {
             this.claimFocus();
@@ -178,8 +183,15 @@ export class AutoPause implements Feature {
         const target = e.target as HTMLVideoElement;
         if (target && target.tagName === 'VIDEO') {
             if (this.isPreviewVideo(target)) return;
+            if (!this.shouldTrackFromGenericCapture(target)) return;
             this.setupVideo(target);
         }
+    }
+
+    private shouldTrackFromGenericCapture(video: HTMLVideoElement): boolean {
+        if (!this.siteContainerSelectors) return true;
+        if (!this.trackedContainer) return true;
+        return this.trackedContainer.contains(video);
     }
 
     private initSiteSpecificTracking(): boolean {
@@ -279,13 +291,21 @@ export class AutoPause implements Feature {
             '.ytd-moving-thumbnail-renderer',
             '.bili-video-card__image',
             '.video-card__content',
-            '.bili-video-card'
+            '.bili-video-card',
+            // Google search hover-preview cards
+            '.VYkpsb',
+            '.LIna9b',
+            '.KYaZsb',
+            '.rtvRGe',
+            '.hXY9cf'
         ];
         if (previewSelectors.some(sel => video.closest(sel) !== null)) return true;
 
-        // 2) Heuristic: muted + no controls + small size => likely preview
+        // 2) Heuristic: muted + small inline auto/loop video is likely preview
         const rect = video.getBoundingClientRect();
         const small = rect.width < 240 || rect.height < 135;
+        const likelyPreviewPlayback = video.autoplay || video.loop || video.preload === 'none';
+        if (video.muted && !video.controls && small && likelyPreviewPlayback) return true;
         if (video.muted && video.volume === 0 && !video.controls && small) return true;
 
         return false;
@@ -302,8 +322,9 @@ export class AutoPause implements Feature {
         this.boundOnPlay = this.onPlay.bind(this);
         this.currentVideo.addEventListener('playing', this.boundOnPlay);
 
-        // If it's already playing when we discovered it
-        if (!this.currentVideo.paused) {
+        // If this video is already in active playback when discovered
+        // (e.g. feature toggled on while video is running), run policy once.
+        if (this.isActivelyPlaying(this.currentVideo)) {
             this.onPlay();
         }
     }
@@ -321,48 +342,64 @@ export class AutoPause implements Feature {
     private onPlay() {
         if (!this.enabled || !this.currentVideo) return;
 
-        // 1. If hidden -> Force Pause (REMOVED: User requested background playback support)
-        // if (document.visibilityState !== 'visible') {
-        //     this.currentVideo.pause();
-        //     return;
-        // }
-
-        // 2. If focused -> I am King. Claim it.
-        if (document.hasFocus()) {
+        // Strict mode: background/non-focused playback is not allowed.
+        if (!this.allowBackgroundPlayback) {
+            if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+                this.currentVideo.pause();
+                return;
+            }
             this.claimFocus();
             this.notifyOthers();
             return;
         }
 
-        // 3. Not focused, but am I the Last Focused Window?
+        // Background playback mode: current owner can continue in background.
+        if (document.hasFocus()) {
+            this.claimFocus();
+            this.notifyOthers();
+            return;
+        }
         if (this.isLastFocusedWindow()) {
             this.notifyOthers();
             return;
         }
-
-        // 4. Neither focused nor last focused -> Pause.
+        if (this.currentVideo.paused) return;
         this.currentVideo.pause();
     }
 
     private handleRemotePlay() {
         if (!this.enabled) return;
 
-        // Foreground has priority: never pause if this tab is focused
-        if (document.hasFocus()) {
+        // Foreground has priority: focused + visible tab keeps control.
+        if (document.visibilityState === 'visible' && document.hasFocus()) {
             this.claimFocus();
             return;
         }
 
-        // Self-Protection: If I have focus, ignore and re-claim
-        // Self-Protection: If I am last focused AND playing, ignore
-        if (this.isLastFocusedWindow() && this.currentVideo && !this.currentVideo.paused) {
+        if (
+            this.allowBackgroundPlayback &&
+            this.isLastFocusedWindow() &&
+            this.currentVideo &&
+            !this.currentVideo.paused
+        ) {
             return;
         }
 
-        // Otherwise, yield
+        // Otherwise, always yield.
         if (this.currentVideo && !this.currentVideo.paused) {
             this.currentVideo.pause();
         }
+    }
+
+    private handleIncomingPlaySignal(payload: LastFocusedState) {
+        if (!this.enabled) return;
+        if (payload.id === this.sync.myId) return;
+        if (!this.isFreshPlaySignal(payload.timestamp)) return;
+
+        const signalKey = `${payload.id}:${payload.timestamp}`;
+        if (this.isDuplicatePlaySignal(signalKey)) return;
+
+        this.handleRemotePlay();
     }
 
     // --- Helpers ---
@@ -381,6 +418,10 @@ export class AutoPause implements Feature {
 
     private isLastFocusedWindow(): boolean {
         if (!this.lastFocused) return false;
+        if (!this.isFreshFocusedState(this.lastFocused.timestamp)) {
+            this.lastFocused = null;
+            return false;
+        }
         if (this.lastFocused.id !== this.sync.myId) return false;
         return true;
     }
@@ -399,19 +440,95 @@ export class AutoPause implements Feature {
         });
     }
 
+    private isActivelyPlaying(video: HTMLVideoElement): boolean {
+        if (video.paused || video.ended) return false;
+        if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return false;
+        return video.currentTime > 0;
+    }
+
+    private isPlayEventArbitrationMode(): boolean {
+        return this.allowBackgroundPlayback;
+    }
+
+    private parseSyncState(raw: unknown): LastFocusedState | null {
+        if (!raw || typeof raw !== 'object') return null;
+        const state = raw as Partial<LastFocusedState>;
+        if (typeof state.id !== 'string') return null;
+        if (typeof state.timestamp !== 'number' || !Number.isFinite(state.timestamp)) return null;
+        return {
+            id: state.id,
+            timestamp: state.timestamp
+        };
+    }
+
+    private isFreshFocusedState(timestamp: number): boolean {
+        const age = Date.now() - timestamp;
+        return age >= 0 && age <= this.LAST_FOCUSED_TTL_MS;
+    }
+
+    private isFreshPlaySignal(timestamp: number): boolean {
+        const age = Date.now() - timestamp;
+        return age >= -1_000 && age <= this.PLAY_SIGNAL_TTL_MS;
+    }
+
+    private isDuplicatePlaySignal(key: string): boolean {
+        const now = Date.now();
+        this.pruneProcessedPlaySignals(now);
+        if (this.processedPlaySignals.has(key)) return true;
+        this.processedPlaySignals.set(key, now);
+        return false;
+    }
+
+    private pruneProcessedPlaySignals(now: number) {
+        for (const [key, ts] of this.processedPlaySignals) {
+            if (now - ts > this.SIGNAL_DEDUPE_TTL_MS) {
+                this.processedPlaySignals.delete(key);
+            }
+        }
+    }
+
     // --- Listeners ---
 
     private initFocusListeners() {
         window.addEventListener('focus', this.claimFocus);
+        window.addEventListener('blur', this.handleWindowBlur);
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
         document.addEventListener('click', this.handleDocumentClick);
     }
 
     private removeFocusListeners() {
         window.removeEventListener('focus', this.claimFocus);
+        window.removeEventListener('blur', this.handleWindowBlur);
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         document.removeEventListener('click', this.handleDocumentClick);
     }
 
     private handleDocumentClick = () => {
         if (document.hasFocus()) this.claimFocus();
+    }
+
+    private handleWindowBlur = () => {
+        if (this.isPlayEventArbitrationMode()) return;
+        // Clicking extension popup can blur the page while it is still visible.
+        // Avoid pausing on blur-only transitions.
+        if (document.visibilityState === 'hidden') {
+            this.pauseWhenBackgroundOrUnfocused();
+        }
+    }
+
+    private handleVisibilityChange = () => {
+        if (this.isPlayEventArbitrationMode()) return;
+        if (document.visibilityState === 'visible' && document.hasFocus()) {
+            this.claimFocus();
+        }
+        this.pauseWhenBackgroundOrUnfocused();
+    }
+
+    private pauseWhenBackgroundOrUnfocused() {
+        if (this.allowBackgroundPlayback) return;
+        if (!this.enabled || !this.currentVideo || this.currentVideo.paused) return;
+        if (document.visibilityState === 'hidden') {
+            this.currentVideo.pause();
+        }
     }
 }

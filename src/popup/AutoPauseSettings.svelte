@@ -15,6 +15,7 @@
     $: t = (key: I18nKey) => i18n(key, language);
 
     let loaded = false;
+    let allowBackgroundPlayback = DEFAULT_SETTINGS.ap_allow_background;
     let scope: "all" | "selected" = "all";
     let siteYouTube = true;
     let siteBilibili = true;
@@ -24,10 +25,16 @@
     let pendingSettings: Partial<Settings> | null = null;
 
     onMount(() => {
-        getSettings(["ap_scope", "ap_sites", "ap_custom_sites"]).then((res) => {
+        getSettings([
+            "ap_scope",
+            "ap_sites",
+            "ap_custom_sites",
+            "ap_allow_background",
+        ]).then((res) => {
             scope = res.ap_scope || DEFAULT_SETTINGS.ap_scope;
             siteYouTube = res.ap_sites?.["youtube.com"] !== false;
             siteBilibili = res.ap_sites?.["bilibili.com"] !== false;
+            allowBackgroundPlayback = res.ap_allow_background !== false;
             if (Array.isArray(res.ap_custom_sites)) {
                 customSitesText = normalizeDomainList(res.ap_custom_sites).join("\n");
             }
@@ -44,6 +51,7 @@
                     .filter(Boolean),
             );
             pendingSettings = {
+                ap_allow_background: allowBackgroundPlayback,
                 ap_scope: scope,
                 ap_sites: {
                     "youtube.com": siteYouTube,
@@ -109,6 +117,41 @@
     <div
         class="flex-1 overflow-y-auto px-4 pb-4 space-y-5 no-scrollbar relative z-10"
     >
+        <section class="space-y-2">
+            <div class="flex items-center gap-2 ml-1">
+                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"
+                ></span>
+                <h3
+                    class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/50"
+                >
+                    {t("autopause_behavior")}
+                </h3>
+            </div>
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <label
+                    class="p-3 flex items-center justify-between cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                >
+                    <div>
+                        <span
+                            class="text-sm font-medium text-gray-800 dark:text-white/90"
+                        >
+                            {t("autopause_allow_background")}
+                        </span>
+                        <p
+                            class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5"
+                        >
+                            {t("autopause_allow_background_desc")}
+                        </p>
+                    </div>
+                    <input
+                        type="checkbox"
+                        bind:checked={allowBackgroundPlayback}
+                        class="accent-blue-500"
+                    />
+                </label>
+            </div>
+        </section>
+
         <section class="space-y-2">
             <div class="flex items-center gap-2 ml-1">
                 <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"

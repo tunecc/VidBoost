@@ -5,7 +5,6 @@
     "description": "Unlock the full potential of web videos with VidBoost.",
     "permissions": [
         "storage",
-        "scripting",
         "activeTab"
     ],
     "action": {

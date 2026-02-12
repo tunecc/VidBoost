@@ -27,6 +27,7 @@ export type Settings = {
     enabled: boolean;
     h5_enabled: boolean;
     ap_enabled: boolean;
+    ap_allow_background: boolean;
     bnd_enabled: boolean;
     yt_fast_pause: boolean;
     fast_pause_master: boolean;
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
     enabled: true,
     h5_enabled: true,
     ap_enabled: true,
+    ap_allow_background: true,
     bnd_enabled: true,
     yt_fast_pause: true,
     fast_pause_master: true,
