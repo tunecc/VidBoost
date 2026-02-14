@@ -33,6 +33,7 @@ export class AutoPause implements Feature {
     private trackedContainer: HTMLElement | null = null;
     private siteContainerSelectors: string[] | null = null;
     private rebindRaf: number | null = null;
+    private globalCaptureAttached = false;
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
@@ -145,11 +146,9 @@ export class AutoPause implements Feature {
     private start() {
         this.active = true;
         this.initFocusListeners();
-        // Generic detection is always enabled as a safety net.
-        // Site-specific tracking still provides a stable "main player" target.
-        document.addEventListener('play', this.handleCapturePhase, true);
-        document.addEventListener('playing', this.handleCapturePhase, true);
         this.initSiteSpecificTracking();
+        // Generic detection is a safety net before main player container is identified.
+        this.updateGlobalCaptureListeners();
 
         if (document.hasFocus()) {
             this.claimFocus();
@@ -159,8 +158,7 @@ export class AutoPause implements Feature {
     private stop() {
         this.active = false;
         this.removeFocusListeners();
-        document.removeEventListener('play', this.handleCapturePhase, true);
-        document.removeEventListener('playing', this.handleCapturePhase, true);
+        this.detachGlobalCaptureListeners();
         this.teardownContainerTracking();
         this.cleanupVideo();
     }
@@ -180,18 +178,43 @@ export class AutoPause implements Feature {
     // --- Generic Video Detection ---
 
     private handleCapturePhase = (e: Event) => {
+        if (!this.shouldUseGenericCapture()) return;
         const target = e.target as HTMLVideoElement;
         if (target && target.tagName === 'VIDEO') {
             if (this.isPreviewVideo(target)) return;
-            if (!this.shouldTrackFromGenericCapture(target)) return;
             this.setupVideo(target);
         }
     }
 
-    private shouldTrackFromGenericCapture(video: HTMLVideoElement): boolean {
+    private shouldUseGenericCapture(): boolean {
         if (!this.siteContainerSelectors) return true;
-        if (!this.trackedContainer) return true;
-        return this.trackedContainer.contains(video);
+        return !this.trackedContainer;
+    }
+
+    private updateGlobalCaptureListeners() {
+        if (!this.active) {
+            this.detachGlobalCaptureListeners();
+            return;
+        }
+        if (this.shouldUseGenericCapture()) {
+            this.attachGlobalCaptureListeners();
+            return;
+        }
+        this.detachGlobalCaptureListeners();
+    }
+
+    private attachGlobalCaptureListeners() {
+        if (this.globalCaptureAttached) return;
+        document.addEventListener('play', this.handleCapturePhase, true);
+        document.addEventListener('playing', this.handleCapturePhase, true);
+        this.globalCaptureAttached = true;
+    }
+
+    private detachGlobalCaptureListeners() {
+        if (!this.globalCaptureAttached) return;
+        document.removeEventListener('play', this.handleCapturePhase, true);
+        document.removeEventListener('playing', this.handleCapturePhase, true);
+        this.globalCaptureAttached = false;
     }
 
     private initSiteSpecificTracking(): boolean {
@@ -236,6 +259,7 @@ export class AutoPause implements Feature {
         if (container === this.trackedContainer) return;
 
         this.trackedContainer = container;
+        this.updateGlobalCaptureListeners();
         this.containerObserver?.disconnect();
         this.containerObserver = null;
 
@@ -289,6 +313,7 @@ export class AutoPause implements Feature {
             'ytd-moving-thumbnail-renderer',
             'ytd-thumbnail',
             '.ytd-moving-thumbnail-renderer',
+            '.bili-card-inline-player',
             '.bili-video-card__image',
             '.video-card__content',
             '.bili-video-card',
@@ -312,6 +337,8 @@ export class AutoPause implements Feature {
     }
 
     private setupVideo(video: HTMLVideoElement) {
+        // Guard all code paths (capture + container observer) against hover-preview videos.
+        if (this.isPreviewVideo(video)) return;
         if (video === this.currentVideo) return;
         this.cleanupVideo(); // Clean old listeners
 
