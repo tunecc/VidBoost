@@ -25,7 +25,7 @@ const strings = {
         autopause_custom_placeholder: "example.com\nvimeo.com\nnetflix.com",
         bilibili_title: "Bilibili Pro",
         bilibili_desc: "Disable double-click fullscreen",
-        footer: "v1.0",
+        footer: "v1.1",
 
         // H5 Settings
         settings_title: "h5player Settings",
@@ -85,7 +85,7 @@ const strings = {
         autopause_custom_placeholder: "example.com\nvimeo.com\nnetflix.com",
         bilibili_title: "B站优化",
         bilibili_desc: "禁用双击全屏",
-        footer: "v1.0",
+        footer: "v1.1",
 
         // H5 Settings
         settings_title: "h5player 设置",

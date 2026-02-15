@@ -34,6 +34,9 @@ export class AutoPause implements Feature {
     private siteContainerSelectors: string[] | null = null;
     private rebindRaf: number | null = null;
     private globalCaptureAttached = false;
+    private currentVideoScore = Number.NEGATIVE_INFINITY;
+    private lastUserGestureVideo: HTMLVideoElement | null = null;
+    private lastUserGestureAt = 0;
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
@@ -44,6 +47,9 @@ export class AutoPause implements Feature {
     private readonly LAST_FOCUSED_TTL_MS = 10_000;
     private readonly PLAY_SIGNAL_TTL_MS = 5_000;
     private readonly SIGNAL_DEDUPE_TTL_MS = 500;
+    private readonly PRIMARY_VIDEO_SCORE_THRESHOLD = 40;
+    private readonly PRIMARY_VIDEO_SWITCH_MARGIN = 15;
+    private readonly USER_GESTURE_TTL_MS = 1_500;
     private siteScope: 'all' | 'selected' = 'all';
     private siteAllow: Record<string, boolean | undefined> = {
         'youtube.com': true,
@@ -52,6 +58,20 @@ export class AutoPause implements Feature {
     private customSites: string[] = [];
     private allowBackgroundPlayback = DEFAULT_SETTINGS.ap_allow_background;
     private processedPlaySignals = new Map<string, number>();
+    private readonly previewContextSelectors = [
+        'ytd-moving-thumbnail-renderer',
+        'ytd-thumbnail',
+        '.ytd-moving-thumbnail-renderer',
+        '.bili-card-inline-player',
+        '.bili-video-card__image',
+        '.video-card__content',
+        '.bili-video-card',
+        '.VYkpsb',
+        '.LIna9b',
+        '.KYaZsb',
+        '.rtvRGe',
+        '.hXY9cf'
+    ];
 
     constructor() {
         // 1. Message Handler (from other tabs)
@@ -150,7 +170,7 @@ export class AutoPause implements Feature {
         // Generic detection is a safety net before main player container is identified.
         this.updateGlobalCaptureListeners();
 
-        if (document.hasFocus()) {
+        if (document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
             this.claimFocus();
         }
     }
@@ -181,8 +201,7 @@ export class AutoPause implements Feature {
         if (!this.shouldUseGenericCapture()) return;
         const target = e.target as HTMLVideoElement;
         if (target && target.tagName === 'VIDEO') {
-            if (this.isPreviewVideo(target)) return;
-            this.setupVideo(target);
+            this.setupVideo(target, true);
         }
     }
 
@@ -269,8 +288,7 @@ export class AutoPause implements Feature {
         }
 
         this.observeContainer(container);
-        const initialVideo = container.querySelector('video');
-        if (initialVideo) this.setupVideo(initialVideo as HTMLVideoElement);
+        this.tryAdoptBestVideoInContainer(container);
     }
 
     private observeContainer(container: HTMLElement) {
@@ -280,8 +298,7 @@ export class AutoPause implements Feature {
                 this.scheduleContainerRebind();
                 return;
             }
-            const video = container.querySelector('video');
-            if (video) this.setupVideo(video as HTMLVideoElement);
+            this.tryAdoptBestVideoInContainer(container);
         });
 
         this.containerObserver.observe(container, {
@@ -307,53 +324,55 @@ export class AutoPause implements Feature {
         this.trackedContainer = null;
     }
 
-    private isPreviewVideo(video: HTMLVideoElement): boolean {
-        // 1) Common hover preview containers (YouTube/Bilibili-like)
-        const previewSelectors = [
-            'ytd-moving-thumbnail-renderer',
-            'ytd-thumbnail',
-            '.ytd-moving-thumbnail-renderer',
-            '.bili-card-inline-player',
-            '.bili-video-card__image',
-            '.video-card__content',
-            '.bili-video-card',
-            // Google search hover-preview cards
-            '.VYkpsb',
-            '.LIna9b',
-            '.KYaZsb',
-            '.rtvRGe',
-            '.hXY9cf'
-        ];
-        if (previewSelectors.some(sel => video.closest(sel) !== null)) return true;
+    private tryAdoptBestVideoInContainer(container: ParentNode): boolean {
+        const videos = Array.from(container.querySelectorAll('video'));
+        if (videos.length === 0) return false;
 
-        // 2) Heuristic: muted + small inline auto/loop video is likely preview
-        const rect = video.getBoundingClientRect();
-        const small = rect.width < 240 || rect.height < 135;
-        const likelyPreviewPlayback = video.autoplay || video.loop || video.preload === 'none';
-        if (video.muted && !video.controls && small && likelyPreviewPlayback) return true;
-        if (video.muted && video.volume === 0 && !video.controls && small) return true;
+        let bestVideo: HTMLVideoElement | null = null;
+        let bestScore = Number.NEGATIVE_INFINITY;
 
-        return false;
+        for (const video of videos) {
+            const result = this.evaluateVideoCandidate(video);
+            if (!result.isPrimary) continue;
+
+            const score = result.score + (this.isActivelyPlaying(video) ? 8 : 0);
+            if (score > bestScore) {
+                bestScore = score;
+                bestVideo = video;
+            }
+        }
+
+        if (!bestVideo) return false;
+        return this.setupVideo(bestVideo, this.isActivelyPlaying(bestVideo));
     }
 
-    private setupVideo(video: HTMLVideoElement) {
-        // Guard all code paths (capture + container observer) against hover-preview videos.
-        if (this.isPreviewVideo(video)) return;
-        if (video === this.currentVideo) return;
-        this.cleanupVideo(); // Clean old listeners
+    private setupVideo(video: HTMLVideoElement, triggerPlay = true): boolean {
+        if (!video.isConnected) return false;
+        const candidate = this.evaluateVideoCandidate(video);
+        if (!candidate.isPrimary) return false;
 
+        if (video === this.currentVideo) {
+            this.currentVideoScore = candidate.score;
+            if (triggerPlay && this.isActivelyPlaying(video)) this.onPlay();
+            return true;
+        }
+
+        if (this.currentVideo) {
+            const currentResult = this.evaluateVideoCandidate(this.currentVideo);
+            this.currentVideoScore = currentResult.score;
+            const keepCurrent =
+                this.isActivelyPlaying(this.currentVideo) &&
+                currentResult.score >= candidate.score + this.PRIMARY_VIDEO_SWITCH_MARGIN;
+            if (keepCurrent) return false;
+        }
+
+        this.cleanupVideo();
         this.currentVideo = video;
-
-        // We don't need 'playing' listener for detection anymore since we capture it globally
-        // But we need it for the logic logic (onPlay)
+        this.currentVideoScore = candidate.score;
         this.boundOnPlay = this.onPlay.bind(this);
         this.currentVideo.addEventListener('playing', this.boundOnPlay);
-
-        // If this video is already in active playback when discovered
-        // (e.g. feature toggled on while video is running), run policy once.
-        if (this.isActivelyPlaying(this.currentVideo)) {
-            this.onPlay();
-        }
+        if (triggerPlay && this.isActivelyPlaying(this.currentVideo)) this.onPlay();
+        return true;
     }
 
     private cleanupVideo() {
@@ -362,12 +381,142 @@ export class AutoPause implements Feature {
         }
         this.currentVideo = null;
         this.boundOnPlay = null;
+        this.currentVideoScore = Number.NEGATIVE_INFINITY;
+    }
+
+    private evaluateVideoCandidate(video: HTMLVideoElement): { score: number; isPrimary: boolean } {
+        const score = this.scoreVideoCandidate(video);
+        return {
+            score,
+            isPrimary: score >= this.PRIMARY_VIDEO_SCORE_THRESHOLD
+        };
+    }
+
+    private scoreVideoCandidate(video: HTMLVideoElement): number {
+        if (!video.isConnected) return Number.NEGATIVE_INFINITY;
+
+        const rect = video.getBoundingClientRect();
+        const width = Math.max(0, rect.width);
+        const height = Math.max(0, rect.height);
+        const area = width * height;
+        const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+        const areaRatio = area / viewportArea;
+
+        let score = 0;
+
+        if (this.isVideoElementVisible(video)) score += 8;
+        else score -= 50;
+
+        const onScreen =
+            rect.right > 0 &&
+            rect.bottom > 0 &&
+            rect.left < window.innerWidth &&
+            rect.top < window.innerHeight;
+        if (onScreen) score += 6;
+        else score -= 25;
+
+        if (width >= 640 && height >= 360) score += 35;
+        else if (width >= 320 && height >= 180) score += 22;
+        else if (width >= 240 && height >= 135) score += 10;
+        else score -= 35;
+
+        if (areaRatio >= 0.25) score += 30;
+        else if (areaRatio >= 0.1) score += 18;
+        else if (areaRatio >= 0.04) score += 8;
+        else score -= 24;
+
+        if (video.controls) score += 10;
+        if (!video.muted && video.volume > 0) score += 12;
+        if (video.muted && video.volume === 0 && !video.controls) score -= 12;
+
+        if (video.autoplay) score -= 8;
+        if (video.loop) score -= 12;
+        if (!video.controls && video.autoplay && video.muted && video.loop) score -= 28;
+        if (video.preload === 'none') score -= 4;
+
+        if (this.hasPreviewContext(video)) score -= 60;
+        if (this.isLikelyDecorativeVideo(video, areaRatio)) score -= 45;
+
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        if (duration > 0 && duration < 20 && (video.loop || video.muted)) score -= 12;
+        if (duration > 120) score += 8;
+
+        if (this.isActivelyPlaying(video)) score += 8;
+        if (this.isRecentUserGestureVideo(video)) score += 35;
+        if (this.isFullscreenVideo(video) || document.pictureInPictureElement === video) score += 45;
+
+        return score;
+    }
+
+    private hasPreviewContext(video: HTMLVideoElement): boolean {
+        return this.previewContextSelectors.some((selector) => video.closest(selector) !== null);
+    }
+
+    private isLikelyDecorativeVideo(video: HTMLVideoElement, areaRatio: number): boolean {
+        if (this.hasPreviewContext(video)) return true;
+        if (video.closest('header, footer, nav')) return true;
+        if (areaRatio < 0.03 && video.muted && !video.controls) return true;
+        if (areaRatio < 0.02 && (video.autoplay || video.loop)) return true;
+        return false;
+    }
+
+    private isVideoElementVisible(video: HTMLVideoElement): boolean {
+        const style = window.getComputedStyle(video);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const opacity = Number.parseFloat(style.opacity || '1');
+        if (Number.isFinite(opacity) && opacity < 0.05) return false;
+        return true;
+    }
+
+    private isRecentUserGestureVideo(video: HTMLVideoElement): boolean {
+        if (!this.lastUserGestureVideo) return false;
+        if (Date.now() - this.lastUserGestureAt > this.USER_GESTURE_TTL_MS) return false;
+        return this.lastUserGestureVideo === video;
+    }
+
+    private captureUserGestureVideo(event: MouseEvent): void {
+        const target = event.target as Element | null;
+        const directTarget = target?.closest('video');
+        const directVideo = directTarget instanceof HTMLVideoElement ? directTarget : null;
+        if (directVideo) {
+            this.lastUserGestureVideo = directVideo;
+            this.lastUserGestureAt = Date.now();
+            return;
+        }
+
+        const videos = Array.from(document.querySelectorAll('video'));
+        let bestVideo: HTMLVideoElement | null = null;
+        let bestArea = 0;
+        for (const video of videos) {
+            const rect = video.getBoundingClientRect();
+            const withinX = event.clientX >= rect.left && event.clientX <= rect.right;
+            const withinY = event.clientY >= rect.top && event.clientY <= rect.bottom;
+            if (!withinX || !withinY) continue;
+            const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+            if (area > bestArea) {
+                bestArea = area;
+                bestVideo = video;
+            }
+        }
+        if (bestVideo) {
+            this.lastUserGestureVideo = bestVideo;
+            this.lastUserGestureAt = Date.now();
+        }
+    }
+
+    private isFullscreenVideo(video: HTMLVideoElement): boolean {
+        const fullscreen = document.fullscreenElement;
+        if (!fullscreen) return false;
+        return fullscreen === video || fullscreen.contains(video);
     }
 
     // --- Core Logic (Direct Port) ---
 
     private onPlay() {
         if (!this.enabled || !this.currentVideo) return;
+        const currentResult = this.evaluateVideoCandidate(this.currentVideo);
+        this.currentVideoScore = currentResult.score;
+        if (!currentResult.isPrimary) return;
 
         // Strict mode: background/non-focused playback is not allowed.
         if (!this.allowBackgroundPlayback) {
@@ -380,13 +529,14 @@ export class AutoPause implements Feature {
             return;
         }
 
-        // Background playback mode: current owner can continue in background.
+        // Background playback mode:
+        // only focused tab or the current owner may continue.
         if (document.hasFocus()) {
             this.claimFocus();
             this.notifyOthers();
             return;
         }
-        if (this.isLastFocusedWindow()) {
+        if (this.isLastFocusedWindow(true)) {
             this.notifyOthers();
             return;
         }
@@ -399,13 +549,15 @@ export class AutoPause implements Feature {
 
         // Foreground has priority: focused + visible tab keeps control.
         if (document.visibilityState === 'visible' && document.hasFocus()) {
-            this.claimFocus();
+            if (this.shouldClaimFocusFromInteraction()) {
+                this.claimFocus();
+            }
             return;
         }
 
         if (
             this.allowBackgroundPlayback &&
-            this.isLastFocusedWindow() &&
+            this.isLastFocusedWindow(true) &&
             this.currentVideo &&
             !this.currentVideo.paused
         ) {
@@ -443,12 +595,9 @@ export class AutoPause implements Feature {
         chrome.storage.local.set({ [this.STORAGE_KEY]: newState });
     }
 
-    private isLastFocusedWindow(): boolean {
+    private isLastFocusedWindow(ignoreFresh = false): boolean {
         if (!this.lastFocused) return false;
-        if (!this.isFreshFocusedState(this.lastFocused.timestamp)) {
-            this.lastFocused = null;
-            return false;
-        }
+        if (!ignoreFresh && !this.isFreshFocusedState(this.lastFocused.timestamp)) return false;
         if (this.lastFocused.id !== this.sync.myId) return false;
         return true;
     }
@@ -471,6 +620,11 @@ export class AutoPause implements Feature {
         if (video.paused || video.ended) return false;
         if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return false;
         return video.currentTime > 0;
+    }
+
+    private shouldClaimFocusFromInteraction(): boolean {
+        if (!this.allowBackgroundPlayback) return true;
+        return !!(this.currentVideo && this.isActivelyPlaying(this.currentVideo));
     }
 
     private isPlayEventArbitrationMode(): boolean {
@@ -517,21 +671,27 @@ export class AutoPause implements Feature {
     // --- Listeners ---
 
     private initFocusListeners() {
-        window.addEventListener('focus', this.claimFocus);
+        window.addEventListener('focus', this.handleWindowFocus);
         window.addEventListener('blur', this.handleWindowBlur);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
         document.addEventListener('click', this.handleDocumentClick);
     }
 
     private removeFocusListeners() {
-        window.removeEventListener('focus', this.claimFocus);
+        window.removeEventListener('focus', this.handleWindowFocus);
         window.removeEventListener('blur', this.handleWindowBlur);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         document.removeEventListener('click', this.handleDocumentClick);
     }
 
-    private handleDocumentClick = () => {
-        if (document.hasFocus()) this.claimFocus();
+    private handleWindowFocus = () => {
+        if (!this.shouldClaimFocusFromInteraction()) return;
+        this.claimFocus();
+    }
+
+    private handleDocumentClick = (event: MouseEvent) => {
+        this.captureUserGestureVideo(event);
+        if (document.hasFocus() && this.shouldClaimFocusFromInteraction()) this.claimFocus();
     }
 
     private handleWindowBlur = () => {
@@ -545,7 +705,7 @@ export class AutoPause implements Feature {
 
     private handleVisibilityChange = () => {
         if (this.isPlayEventArbitrationMode()) return;
-        if (document.visibilityState === 'visible' && document.hasFocus()) {
+        if (document.visibilityState === 'visible' && document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
             this.claimFocus();
         }
         this.pauseWhenBackgroundOrUnfocused();
