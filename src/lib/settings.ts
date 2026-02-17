@@ -31,6 +31,7 @@ export type Settings = {
     bnd_enabled: boolean;
     yt_fast_pause: boolean;
     fast_pause_master: boolean;
+    bb_block_space: boolean;
     language: 'auto' | 'en' | 'zh';
     yt_config: YTConfig;
     h5_config: H5Config;
@@ -50,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
     bnd_enabled: true,
     yt_fast_pause: true,
     fast_pause_master: true,
+    bb_block_space: true,
     language: 'auto',
     yt_config: { blockNativeSeek: true },
     h5_config: {

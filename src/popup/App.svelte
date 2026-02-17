@@ -25,6 +25,9 @@
   // New Config for YouTube Optimizer
   let ytBlockNative = true;
 
+  // Bilibili Config
+  let bbBlockSpace = true;
+
   // Fast Pause Config
   let bndEnabled = true; // Bilibili
   let ytFastPause = true; // YouTube
@@ -82,6 +85,7 @@
       "bnd_enabled",
       "yt_fast_pause",
       "fast_pause_master",
+      "bb_block_space",
       "language",
       "yt_config",
       "h5_config",
@@ -94,6 +98,7 @@
       bndEnabled = res.bnd_enabled;
       ytFastPause = res.yt_fast_pause;
       fastPauseMaster = res.fast_pause_master;
+      bbBlockSpace = res.bb_block_space;
 
       language = res.language || DEFAULT_SETTINGS.language;
 
@@ -127,6 +132,7 @@
         bnd_enabled: bndEnabled,
         yt_fast_pause: ytFastPause,
         fast_pause_master: fastPauseMaster,
+        bb_block_space: bbBlockSpace,
         language: language,
         yt_config: { blockNativeSeek: ytBlockNative },
         ui_state: sectionOpen,
@@ -380,6 +386,43 @@
             iconColor="red"
             disabled={!globalEnabled}
             onClick={() => globalEnabled && (ytBlockNative = !ytBlockNative)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                /></svg
+              >
+            </div>
+          </ToggleItem>
+        </SectionCard>
+
+        <!-- SECTION: BILIBILI -->
+        <SectionCard
+          title="Bilibili"
+          iconColor="cyan"
+          isOpen={sectionOpen["bilibili"]}
+          enabled={globalEnabled}
+          onToggle={() => toggleSection("bilibili")}
+        >
+          <!-- Block Space Scrolling -->
+          <ToggleItem
+            title={t("bb_block_space")}
+            desc={t("bb_block_space_desc")}
+            checked={bbBlockSpace}
+            iconColor="cyan"
+            disabled={!globalEnabled}
+            onClick={() => globalEnabled && (bbBlockSpace = !bbBlockSpace)}
           >
             <div
               slot="icon"

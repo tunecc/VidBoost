@@ -25,6 +25,8 @@ const strings = {
         autopause_custom_placeholder: "example.com\nvimeo.com\nnetflix.com",
         bilibili_title: "Bilibili Pro",
         bilibili_desc: "Disable double-click fullscreen",
+        bb_block_space: "Block Space Scrolling",
+        bb_block_space_desc: "Prevent Space key from scrolling the page during video playback.",
         footer: "v1.1",
 
         // H5 Settings
@@ -41,6 +43,7 @@ const strings = {
         block_seek_desc: "Disables '1-9' jumping playback info.",
         h5_shortcuts: "Shortcuts",
         h5_shortcuts_desc: "Use these keys when a video is focused.",
+        h5_key_speed_numeric: "Set direct speed (1x-5x)",
         h5_key_speed_up: "Speed up",
         h5_key_speed_down: "Speed down",
         h5_key_speed_reset: "Toggle/Reset speed",
@@ -85,6 +88,8 @@ const strings = {
         autopause_custom_placeholder: "example.com\nvimeo.com\nnetflix.com",
         bilibili_title: "B站优化",
         bilibili_desc: "禁用双击全屏",
+        bb_block_space: "屏蔽空格翻页",
+        bb_block_space_desc: "禁止视频播放时空格键滚动页面",
         footer: "v1.1",
 
         // H5 Settings
@@ -101,6 +106,7 @@ const strings = {
         block_seek_desc: "禁用自带的数字键 1-9 跳进度功能",
         h5_shortcuts: "快捷键说明",
         h5_shortcuts_desc: "在视频获得焦点时可使用以下按键。",
+        h5_key_speed_numeric: "直接切换速度 (1x-5x)",
         h5_key_speed_up: "加速",
         h5_key_speed_down: "减速",
         h5_key_speed_reset: "切换/重置速度",

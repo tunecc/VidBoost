@@ -2,6 +2,7 @@ import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
 import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import { isSiteHost } from '../lib/siteProfiles';
 import type { Feature } from './Feature';
 
 type H5Config = {
@@ -71,6 +72,12 @@ export class H5Enhancer implements Feature {
         this.osd.show(text, v || undefined);
     }
 
+    private shouldHandleNumericSpeed(num: number): boolean {
+        // On YouTube keep native jumps for 6-9/0 when blocker is disabled.
+        if (isSiteHost('youtube') && num > 5) return false;
+        return true;
+    }
+
     private setPlaybackRatePlus(num: number) {
         const v = this.videoCtrl.video;
         if (!v) return false;
@@ -129,6 +136,7 @@ export class H5Enhancer implements Feature {
                 if (ke.ctrlKey || ke.altKey || ke.metaKey || ke.shiftKey) return false;
 
                 if (ke.key === num.toString()) {
+                    if (!this.shouldHandleNumericSpeed(num)) return false;
                     return this.setPlaybackRatePlus(num);
                 }
                 return false;

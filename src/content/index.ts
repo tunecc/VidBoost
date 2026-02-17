@@ -3,6 +3,7 @@ import { AutoPause } from '../features/AutoPause';
 import { BilibiliFastPause } from '../features/BilibiliFastPause';
 import { YouTubeSeekBlocker } from '../features/YouTubeSeekBlocker';
 import { YouTubeFastPause } from '../features/YouTubeFastPause';
+import { BilibiliSpaceBlocker } from '../features/BilibiliSpaceBlocker';
 import { getSettings, onSettingsChanged } from '../lib/settings-content';
 
 const features = [
@@ -10,7 +11,8 @@ const features = [
     new AutoPause(),
     new BilibiliFastPause(),
     new YouTubeSeekBlocker(),
-    new YouTubeFastPause()
+    new YouTubeFastPause(),
+    new BilibiliSpaceBlocker()
 ];
 
 const mountedState = new Array(features.length).fill(false);
@@ -24,6 +26,7 @@ type ContentDebugState = {
         bnd_enabled?: boolean;
         yt_fast_pause?: boolean;
         fast_pause_master?: boolean;
+        bb_block_space?: boolean;
         yt_config?: { blockNativeSeek?: boolean };
     };
     ts: string;
@@ -55,6 +58,7 @@ function applyFromSettings(res: {
     bnd_enabled?: boolean;
     yt_fast_pause?: boolean;
     fast_pause_master?: boolean;
+    bb_block_space?: boolean;
     yt_config?: { blockNativeSeek?: boolean };
 }) {
     const globalEnabled = res.enabled !== false;
@@ -68,12 +72,14 @@ function applyFromSettings(res: {
     const bndOn = res.bnd_enabled !== false && fastPauseMasterOn;
     const ytFastPauseOn = res.yt_fast_pause !== false && fastPauseMasterOn;
     const ytBlockNativeOn = res.yt_config?.blockNativeSeek !== false;
+    const bbBlockSpaceOn = res.bb_block_space !== false;
 
     setFeatureEnabled(0, res.h5_enabled !== false);
     setFeatureEnabled(1, res.ap_enabled !== false);
     setFeatureEnabled(2, bndOn);
     setFeatureEnabled(3, ytBlockNativeOn);
     setFeatureEnabled(4, ytFastPauseOn);
+    setFeatureEnabled(5, bbBlockSpaceOn);
     publishDebug(res);
 }
 
@@ -85,6 +91,7 @@ function loadAndApply() {
         'bnd_enabled',
         'yt_fast_pause',
         'fast_pause_master',
+        'bb_block_space',
         'yt_config'
     ])
         .then(applyFromSettings)

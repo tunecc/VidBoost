@@ -29,6 +29,10 @@
           ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
           : ''} {iconColor === 'purple'
           ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]'
+          : ''} {iconColor === 'cyan'
+          ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
+          : ''} {iconColor === 'pink'
+          ? 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]'
           : ''}"
       ></div>
 
