@@ -19,13 +19,57 @@ export class YouTubeFastPause implements Feature {
     private enabled = false;
     private listenersRegistered = false;
 
-    private isClickOnControls(target: HTMLElement): boolean {
-        return (this.config?.controlSelectors || []).some((selector) => target.closest(selector) !== null);
+    private getEventElements(e: Event): Element[] {
+        const out: Element[] = [];
+        const visited = new Set<Element>();
+
+        const addElement = (node: EventTarget | null) => {
+            if (!node) return;
+            let element: Element | null = null;
+            if (node instanceof Element) element = node;
+            else if (node instanceof Node) element = node.parentElement;
+            if (!element || visited.has(element)) return;
+            visited.add(element);
+            out.push(element);
+        };
+
+        addElement(e.target);
+        const path = e.composedPath?.() || [];
+        path.forEach((node) => addElement(node));
+        return out;
     }
 
-    private isInVideoArea(target: HTMLElement): boolean {
-        if (target.tagName === 'VIDEO') return true;
-        return (this.config?.videoAreaSelectors || []).some((selector) => target.closest(selector) !== null);
+    private isClickOnControls(e: Event): boolean {
+        const elements = this.getEventElements(e);
+        const controlSelectors = this.config?.controlSelectors || [];
+        const matchesSelectors = (selectors: string[]) =>
+            elements.some((element) => selectors.some((selector) => element.closest(selector) !== null));
+
+        if (matchesSelectors(controlSelectors)) return true;
+
+        // Future-proof for dynamic YouTube UI components: treat generic interactive
+        // controls as player controls so fast-pause will not swallow their clicks.
+        return matchesSelectors([
+            'button',
+            'a[href]',
+            '[role="button"]',
+            '[role="menuitem"]',
+            '[role="link"]',
+            'input',
+            'textarea',
+            'select',
+            'label',
+            'summary',
+            'details'
+        ]);
+    }
+
+    private isInVideoArea(e: Event): boolean {
+        const elements = this.getEventElements(e);
+        if (elements.some((element) => element.tagName === 'VIDEO')) return true;
+        return (this.config?.videoAreaSelectors || []).some((selector) =>
+            elements.some((element) => element.closest(selector) !== null)
+        );
     }
 
     mount() {
@@ -41,9 +85,8 @@ export class YouTubeFastPause implements Feature {
         this.input.on('dblclick', 'ytfp-prevent', (e) => {
             if (!this.enabled) return false;
 
-            const target = e.target as HTMLElement;
-            if (!this.isInVideoArea(target)) return false;
-            if (this.isClickOnControls(target)) return false;
+            if (!this.isInVideoArea(e)) return false;
+            if (this.isClickOnControls(e)) return false;
 
             return true;
         }, { priority: 100 });
@@ -55,10 +98,8 @@ export class YouTubeFastPause implements Feature {
 
             if (event.button !== 0) return false;
 
-            const target = event.target as HTMLElement;
-
-            if (!this.isInVideoArea(target)) return false;
-            if (this.isClickOnControls(target)) return false;
+            if (!this.isInVideoArea(event)) return false;
+            if (this.isClickOnControls(event)) return false;
 
             this.videoCtrl.togglePlay();
             return true;
@@ -71,10 +112,8 @@ export class YouTubeFastPause implements Feature {
 
             if (event.button !== 0) return false;
 
-            const target = event.target as HTMLElement;
-
-            if (!this.isInVideoArea(target)) return false;
-            if (this.isClickOnControls(target)) return false;
+            if (!this.isInVideoArea(event)) return false;
+            if (this.isClickOnControls(event)) return false;
 
             return true;
         }, { priority: 90 });
