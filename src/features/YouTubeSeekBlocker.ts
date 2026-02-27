@@ -41,7 +41,7 @@ export class YouTubeSeekBlocker implements Feature {
     updateSettings(_settings: unknown) { }
 
     private registerShortcuts() {
-        const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+        const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         keys.forEach(num => {
             this.input.on('keydown', `yt-block-${num}`, (e) => {

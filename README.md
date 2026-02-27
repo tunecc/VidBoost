@@ -21,6 +21,8 @@
   </a>
 </p>
 
+已上架chrome插件商店，[点我直达](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
+
 ## 为什么有这个项目？
 我在使用下面三个仓库的代码时，篡改猴总是崩溃，导致使用体验割裂，所以有了这个项目
 
@@ -33,7 +35,7 @@ https://github.com/tunecc/video-auto-pause
 
 
 *   **🛠 H5 视频增强**:
-    *   **数字键倍速**: 按下数字键 (0-9) 即可瞬间切换视频倍速。助你光速度过视频中的“垃圾时间”。
+    *   **数字键倍速**: 按下数字键 (1-6) 即可瞬间切换视频倍速。助你光速度过视频中的“垃圾时间”。
     *   **冲突屏蔽**: 智能禁用 YouTube 等站点的原生数字键跳转进度功能，防止调节倍速时误触进度条，体验更纯粹。
 *   **🧠 智能焦点流**:
     *   **自动暂停**: 采用“前台优先”策略，让浏览器焦点的视频拥有最高播放权重。一旦失去焦点（切换标签页或窗口），视频自动暂停，从不干扰你的当前操作。
@@ -56,6 +58,9 @@ https://github.com/tunecc/video-auto-pause
 *   **浏览器 API**: Manifest V3 (面向未来的扩展架构)
 
 ## 📥 安装指南
+
+已上架chrome插件商店，[点我直达](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
+
 ### 📦 快速安装 (推荐)
 
 1.  **下载**: 前往 [Releases 页面](https://github.com/tunecc/VidBoost/releases) 下载最新版本的压缩包。

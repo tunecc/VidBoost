@@ -2,7 +2,6 @@ import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
 import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
-import { isSiteHost } from '../lib/siteProfiles';
 import type { Feature } from './Feature';
 
 type H5Config = {
@@ -72,12 +71,6 @@ export class H5Enhancer implements Feature {
         this.osd.show(text, v || undefined);
     }
 
-    private shouldHandleNumericSpeed(num: number): boolean {
-        // On YouTube keep native jumps for 6-9/0 when blocker is disabled.
-        if (isSiteHost('youtube') && num > 5) return false;
-        return true;
-    }
-
     private setPlaybackRatePlus(num: number) {
         const v = this.videoCtrl.video;
         if (!v) return false;
@@ -125,10 +118,8 @@ export class H5Enhancer implements Feature {
     }
 
     private registerShortcuts() {
-        // --- Number Keys (1-9) ---
-        // Keep YouTube native seek blocking in a lower-priority feature,
-        // while allowing numeric speed control to win when a video is active.
-        [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(num => {
+        // --- Number Keys (1-6) ---
+        [1, 2, 3, 4, 5, 6].forEach(num => {
             this.input.on('keydown', `h5-speed-${num}`, (e) => {
                 if (!this.enabled) return false;
 
@@ -136,7 +127,6 @@ export class H5Enhancer implements Feature {
                 if (ke.ctrlKey || ke.altKey || ke.metaKey || ke.shiftKey) return false;
 
                 if (ke.key === num.toString()) {
-                    if (!this.shouldHandleNumericSpeed(num)) return false;
                     return this.setPlaybackRatePlus(num);
                 }
                 return false;

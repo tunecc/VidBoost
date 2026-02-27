@@ -495,7 +495,7 @@
                     <div class="flex items-center gap-2">
                         <span
                             class="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-[10px]"
-                            >1-5</span
+                            >1-6</span
                         >
                         <span>{t("h5_key_speed_numeric")}</span>
                     </div>

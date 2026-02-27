@@ -22,7 +22,7 @@ VidBoost 是一款高性能视频增强扩展程序，让您的网页视频观�
 
 | 功能         | 如何使用                        |
 | ------------ | ------------------------------- |
-| 数字键倍速   | 在视频页面按数字键 0-9 切换倍速 |
+| 数字键倍速   | 在视频页面按数字键 1-6 切换倍速 |
 | 自动暂停     | 切换标签页时自动暂停当前视频    |
 | 禁用双击全屏 | 自动生效，防止双击触发全屏      |
 
@@ -105,7 +105,7 @@ VidBoost is a high-performance video enhancement extension that takes your web v
 
 | Feature                         | How to Use                                           |
 | ------------------------------- | ---------------------------------------------------- |
-| Number Key Speed Control        | Press 0-9 on video pages to change playback speed    |
+| Number Key Speed Control        | Press 1-6 on video pages to change playback speed    |
 | Auto Pause                      | Videos pause automatically when you switch tabs      |
 | Disable Double-Click Fullscreen | Works automatically to prevent accidental fullscreen |
 
