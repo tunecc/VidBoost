@@ -1,0 +1,71 @@
+# YouTube Member Selector Snapshot
+
+Scenes: 9
+Card selectors: 10
+Channel selectors: 5
+All-mode selectors: 25
+List-mode selectors: 24
+
+## Scene Matrix
+desktop-rich-feed | all:3 | list:3
+desktop-search-list | all:2 | list:2
+desktop-related | all:8 | list:8
+desktop-channel-grid | all:2 | list:2
+mobile-rich-feed | all:1 | list:1
+mobile-subscriptions | all:1 | list:1
+mobile-search | all:1 | list:1
+mobile-channel-home-shelf | all:1 | list:0
+mobile-related | all:6 | list:6
+
+## All Mode Selectors
+1. ytd-rich-item-renderer:has(.badge-style-type-members-only)
+2. ytd-rich-item-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+3. ytd-rich-item-renderer:has(.yt-badge-shape--membership)
+4. ytd-video-renderer:has(.badge-style-type-members-only)
+5. ytd-video-renderer:has(.yt-badge-shape--membership)
+6. ytd-compact-video-renderer:has(.badge-style-type-members-only)
+7. ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+8. ytd-compact-video-renderer:has(.yt-badge-shape--membership)
+9. #secondary #related ytd-compact-video-renderer:has(.badge-style-type-members-only)
+10. #secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+11. #secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--membership)
+12. #related yt-lockup-view-model:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+13. #related yt-lockup-view-model:has(.yt-badge-shape--membership)
+14. ytd-item-section-renderer[page-subtype="channels"] ytd-grid-video-renderer:has(.badge-style-type-members-only)
+15. ytd-item-section-renderer[page-subtype="channels"] ytd-grid-video-renderer:has(.yt-badge-shape--membership)
+16. ytm-rich-item-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+17. .tab-content[tab-identifier="FEsubscriptions"] ytm-item-section-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+18. ytm-search ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+19. ytm-browse ytm-shelf-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+20. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+21. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-compact-video-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+22. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-compact-autoplay-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+23. ytm-item-section-renderer[section-identifier="related-items"] ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+24. ytm-item-section-renderer[section-identifier="related-items"] ytm-compact-video-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+25. ytm-item-section-renderer[section-identifier="related-items"] ytm-compact-autoplay-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+
+## List Mode Selectors
+1. ytd-rich-item-renderer:has(.badge-style-type-members-only)
+2. ytd-rich-item-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+3. ytd-rich-item-renderer:has(.yt-badge-shape--membership)
+4. ytd-video-renderer:has(.badge-style-type-members-only)
+5. ytd-video-renderer:has(.yt-badge-shape--membership)
+6. ytd-compact-video-renderer:has(.badge-style-type-members-only)
+7. ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+8. ytd-compact-video-renderer:has(.yt-badge-shape--membership)
+9. #secondary #related ytd-compact-video-renderer:has(.badge-style-type-members-only)
+10. #secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+11. #secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--membership)
+12. #related yt-lockup-view-model:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)
+13. #related yt-lockup-view-model:has(.yt-badge-shape--membership)
+14. ytd-item-section-renderer[page-subtype="channels"] ytd-grid-video-renderer:has(.badge-style-type-members-only)
+15. ytd-item-section-renderer[page-subtype="channels"] ytd-grid-video-renderer:has(.yt-badge-shape--membership)
+16. ytm-rich-item-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+17. .tab-content[tab-identifier="FEsubscriptions"] ytm-item-section-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+18. ytm-search ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+19. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+20. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-compact-video-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+21. ytm-item-section-renderer[section-identifier="related-items"] > lazy-list > ytm-compact-autoplay-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+22. ytm-item-section-renderer[section-identifier="related-items"] ytm-video-with-context-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+23. ytm-item-section-renderer[section-identifier="related-items"] ytm-compact-video-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])
+24. ytm-item-section-renderer[section-identifier="related-items"] ytm-compact-autoplay-renderer:has(ytm-badge[data-type="BADGE_STYLE_TYPE_MEMBERS_ONLY"])

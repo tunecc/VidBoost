@@ -9,7 +9,9 @@
     getSettings,
     setSettings,
     DEFAULT_SETTINGS,
+    POPUP_SETTINGS_KEYS,
     type Settings,
+    type YTMemberBlockMode,
   } from "../lib/settings";
   import SectionCard from "../components/SectionCard.svelte";
   import ToggleItem from "../components/ToggleItem.svelte";
@@ -18,20 +20,29 @@
   // -- State --
   let loaded = false;
 
-  let globalEnabled = true;
-  let h5Enabled = true;
-  let autoPauseEnabled = true;
+  let globalEnabled = DEFAULT_SETTINGS.enabled;
+  let h5Enabled = DEFAULT_SETTINGS.h5_enabled;
+  let autoPauseEnabled = DEFAULT_SETTINGS.ap_enabled;
 
   // New Config for YouTube Optimizer
-  let ytBlockNative = true;
+  let ytBlockNative = DEFAULT_SETTINGS.yt_config.blockNativeSeek ?? true;
 
   // Bilibili Config
-  let bbBlockSpace = true;
+  let bbBlockSpace = DEFAULT_SETTINGS.bb_block_space;
+
+  // YouTube Member Block Config
+  let ytMemberBlock = DEFAULT_SETTINGS.yt_member_block;
+  let ytMemberBlockMode: YTMemberBlockMode = DEFAULT_SETTINGS.yt_member_block_mode;
+  let ytMemberBlocklist: string[] = [...DEFAULT_SETTINGS.yt_member_blocklist];
+  let ytMemberBlocklistText = "";
+  let ytMemberAllowlist: string[] = [...DEFAULT_SETTINGS.yt_member_allowlist];
+  let ytMemberAllowlistText = "";
+  let ytMemberOpen = false;
 
   // Fast Pause Config
-  let bndEnabled = true; // Bilibili
-  let ytFastPause = true; // YouTube
-  let fastPauseMaster = true; // Master Switch (visual only, derived or controls both)
+  let bndEnabled = DEFAULT_SETTINGS.bnd_enabled; // Bilibili
+  let ytFastPause = DEFAULT_SETTINGS.yt_fast_pause; // YouTube
+  let fastPauseMaster = DEFAULT_SETTINGS.fast_pause_master; // Master Switch (visual only, derived or controls both)
   let fastPauseOpen = false; // Inline accordion state
 
   // Settings
@@ -42,9 +53,9 @@
 
   // Accordion State (Independent)
   let sectionOpen = {
-    general: true,
-    youtube: true,
-    bilibili: true,
+    general: DEFAULT_SETTINGS.ui_state.general ?? true,
+    youtube: DEFAULT_SETTINGS.ui_state.youtube ?? true,
+    bilibili: DEFAULT_SETTINGS.ui_state.bilibili ?? true,
   };
 
   let showLangMenu = false;
@@ -56,11 +67,7 @@
   $: t = (key: I18nKey) => i18n(key, language);
 
   function flushSettingsSave() {
-    if (
-      !pendingSettings ||
-      typeof chrome === "undefined" ||
-      !chrome.storage
-    ) {
+    if (!pendingSettings || typeof chrome === "undefined" || !chrome.storage) {
       return;
     }
     const payload = pendingSettings;
@@ -78,19 +85,7 @@
   }
 
   onMount(() => {
-    getSettings([
-      "enabled",
-      "h5_enabled",
-      "ap_enabled",
-      "bnd_enabled",
-      "yt_fast_pause",
-      "fast_pause_master",
-      "bb_block_space",
-      "language",
-      "yt_config",
-      "h5_config",
-      "ui_state",
-    ]).then((res) => {
+    getSettings([...POPUP_SETTINGS_KEYS]).then((res) => {
       globalEnabled = res.enabled;
       h5Enabled = res.h5_enabled;
       autoPauseEnabled = res.ap_enabled;
@@ -99,6 +94,13 @@
       ytFastPause = res.yt_fast_pause;
       fastPauseMaster = res.fast_pause_master;
       bbBlockSpace = res.bb_block_space;
+
+      ytMemberBlock = res.yt_member_block;
+      ytMemberBlockMode = res.yt_member_block_mode;
+      ytMemberBlocklist = res.yt_member_blocklist;
+      ytMemberBlocklistText = ytMemberBlocklist.join("\n");
+      ytMemberAllowlist = res.yt_member_allowlist;
+      ytMemberAllowlistText = ytMemberAllowlist.join("\n");
 
       language = res.language || DEFAULT_SETTINGS.language;
 
@@ -136,6 +138,10 @@
         language: language,
         yt_config: { blockNativeSeek: ytBlockNative },
         ui_state: sectionOpen,
+        yt_member_block: ytMemberBlock,
+        yt_member_block_mode: ytMemberBlockMode,
+        yt_member_blocklist: ytMemberBlocklist,
+        yt_member_allowlist: ytMemberAllowlist,
       });
     }
   }
@@ -405,6 +411,125 @@
               >
             </div>
           </ToggleItem>
+
+          <!-- Hide Members Videos -->
+          <AccordionItem
+            title={t("yt_member_block")}
+            desc={t("yt_member_block_desc")}
+            iconColor="red"
+            isOpen={ytMemberOpen}
+            masterChecked={ytMemberBlock}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (ytMemberOpen = !ytMemberOpen)}
+            onToggleMaster={() =>
+              globalEnabled && (ytMemberBlock = !ytMemberBlock)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
+                /></svg
+              >
+            </div>
+            <div slot="content" class="space-y-2 px-1">
+              <!-- Mode: All -->
+              <button
+                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
+                'all'
+                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
+                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
+                disabled={!globalEnabled || !ytMemberBlock}
+                on:click={() =>
+                  globalEnabled && ytMemberBlock && (ytMemberBlockMode = "all")}
+              >
+                {t("yt_member_mode_all")}
+              </button>
+              <!-- Mode: Blocklist -->
+              <button
+                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
+                'blocklist'
+                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
+                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
+                disabled={!globalEnabled || !ytMemberBlock}
+                on:click={() =>
+                  globalEnabled &&
+                  ytMemberBlock &&
+                  (ytMemberBlockMode = "blocklist")}
+              >
+                {t("yt_member_mode_blocklist")}
+              </button>
+              <!-- Blocklist Textarea -->
+              {#if ytMemberBlockMode === "blocklist"}
+                <div class="pt-1">
+                  <span
+                    class="text-[11px] text-gray-500 dark:text-white/40 font-medium mb-1 block"
+                  >
+                    {t("yt_member_blocklist_label")}
+                  </span>
+                  <textarea
+                    class="w-full rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3 py-2 text-xs text-gray-700 dark:text-white/80 placeholder:text-gray-400 dark:placeholder:text-white/30 resize-none outline-none focus:ring-1 focus:ring-red-400/50 transition-all"
+                    rows="3"
+                    placeholder={t("yt_member_blocklist_placeholder")}
+                    disabled={!globalEnabled || !ytMemberBlock}
+                    bind:value={ytMemberBlocklistText}
+                    on:input={() => {
+                      ytMemberBlocklist = ytMemberBlocklistText
+                        .split("\n")
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0);
+                    }}
+                  />
+                </div>
+              {/if}
+              <!-- Mode: Allowlist -->
+              <button
+                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
+                'allowlist'
+                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
+                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
+                disabled={!globalEnabled || !ytMemberBlock}
+                on:click={() =>
+                  globalEnabled &&
+                  ytMemberBlock &&
+                  (ytMemberBlockMode = "allowlist")}
+              >
+                {t("yt_member_mode_allowlist")}
+              </button>
+              <!-- Allowlist Textarea -->
+              {#if ytMemberBlockMode === "allowlist"}
+                <div class="pt-1">
+                  <span
+                    class="text-[11px] text-gray-500 dark:text-white/40 font-medium mb-1 block"
+                  >
+                    {t("yt_member_allowlist_label")}
+                  </span>
+                  <textarea
+                    class="w-full rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3 py-2 text-xs text-gray-700 dark:text-white/80 placeholder:text-gray-400 dark:placeholder:text-white/30 resize-none outline-none focus:ring-1 focus:ring-red-400/50 transition-all"
+                    rows="3"
+                    placeholder={t("yt_member_allowlist_placeholder")}
+                    disabled={!globalEnabled || !ytMemberBlock}
+                    bind:value={ytMemberAllowlistText}
+                    on:input={() => {
+                      ytMemberAllowlist = ytMemberAllowlistText
+                        .split("\n")
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0);
+                    }}
+                  />
+                </div>
+              {/if}
+            </div>
+          </AccordionItem>
         </SectionCard>
 
         <!-- SECTION: BILIBILI -->
@@ -456,11 +581,14 @@
         ></div>
 
         <!-- Centered Version -->
-        <p
-          class="text-[10px] text-gray-400 dark:text-white/30 font-medium tracking-wide"
+        <a
+          href="https://github.com/tunecc/VidBoost"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-[10px] text-gray-400 dark:text-white/30 font-medium tracking-wide hover:text-gray-600 dark:hover:text-white/50 transition-colors cursor-pointer"
         >
           {t("footer")}
-        </p>
+        </a>
 
         <!-- Right-aligned Compact Language Selector (Custom Glass Dropdown) -->
         <div class="absolute right-6 flex items-center">

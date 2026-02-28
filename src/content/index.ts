@@ -4,7 +4,15 @@ import { BilibiliFastPause } from '../features/BilibiliFastPause';
 import { YouTubeSeekBlocker } from '../features/YouTubeSeekBlocker';
 import { YouTubeFastPause } from '../features/YouTubeFastPause';
 import { BilibiliSpaceBlocker } from '../features/BilibiliSpaceBlocker';
-import { getSettings, onSettingsChanged } from '../lib/settings-content';
+import { YouTubeMemberBlocker } from '../features/YouTubeMemberBlocker';
+import {
+    getSettings,
+    onSettingsChanged,
+    DEFAULT_SETTINGS,
+    CONTENT_SETTINGS_KEYS,
+    resolveSettings,
+    type Settings
+} from '../lib/settings-content';
 
 const features = [
     new H5Enhancer(),
@@ -12,23 +20,15 @@ const features = [
     new BilibiliFastPause(),
     new YouTubeSeekBlocker(),
     new YouTubeFastPause(),
-    new BilibiliSpaceBlocker()
+    new BilibiliSpaceBlocker(),
+    new YouTubeMemberBlocker()
 ];
 
 const mountedState = new Array(features.length).fill(false);
 
 type ContentDebugState = {
     mounted: boolean[];
-    settings: {
-        enabled?: boolean;
-        h5_enabled?: boolean;
-        ap_enabled?: boolean;
-        bnd_enabled?: boolean;
-        yt_fast_pause?: boolean;
-        fast_pause_master?: boolean;
-        bb_block_space?: boolean;
-        yt_config?: { blockNativeSeek?: boolean };
-    };
+    settings: Partial<Settings>;
     ts: string;
 };
 
@@ -51,55 +51,40 @@ function setFeatureEnabled(index: number, enabled: boolean) {
     else features[index].unmount();
 }
 
-function applyFromSettings(res: {
-    enabled?: boolean;
-    h5_enabled?: boolean;
-    ap_enabled?: boolean;
-    bnd_enabled?: boolean;
-    yt_fast_pause?: boolean;
-    fast_pause_master?: boolean;
-    bb_block_space?: boolean;
-    yt_config?: { blockNativeSeek?: boolean };
-}) {
-    const globalEnabled = res.enabled !== false;
+function applyFromSettings(res: Partial<Settings>) {
+    const settings = resolveSettings(res);
+    const globalEnabled = settings.enabled !== false;
     if (!globalEnabled) {
         features.forEach((_, index) => setFeatureEnabled(index, false));
-        publishDebug(res);
+        publishDebug(settings);
         return;
     }
 
-    const fastPauseMasterOn = res.fast_pause_master !== false;
-    const bndOn = res.bnd_enabled !== false && fastPauseMasterOn;
-    const ytFastPauseOn = res.yt_fast_pause !== false && fastPauseMasterOn;
-    const ytBlockNativeOn = res.yt_config?.blockNativeSeek !== false;
-    const bbBlockSpaceOn = res.bb_block_space !== false;
+    const fastPauseMasterOn = settings.fast_pause_master !== false;
+    const bndOn = settings.bnd_enabled !== false && fastPauseMasterOn;
+    const ytFastPauseOn = settings.yt_fast_pause !== false && fastPauseMasterOn;
+    const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
+    const bbBlockSpaceOn = settings.bb_block_space !== false;
+    const ytMemberBlockOn = settings.yt_member_block === true;
 
-    setFeatureEnabled(0, res.h5_enabled !== false);
-    setFeatureEnabled(1, res.ap_enabled !== false);
+    setFeatureEnabled(0, settings.h5_enabled !== false);
+    setFeatureEnabled(1, settings.ap_enabled !== false);
     setFeatureEnabled(2, bndOn);
     setFeatureEnabled(3, ytBlockNativeOn);
     setFeatureEnabled(4, ytFastPauseOn);
     setFeatureEnabled(5, bbBlockSpaceOn);
-    publishDebug(res);
+    setFeatureEnabled(6, ytMemberBlockOn);
+    publishDebug(settings);
 }
 
 function loadAndApply() {
-    return getSettings([
-        'enabled',
-        'h5_enabled',
-        'ap_enabled',
-        'bnd_enabled',
-        'yt_fast_pause',
-        'fast_pause_master',
-        'bb_block_space',
-        'yt_config'
-    ])
+    return getSettings([...CONTENT_SETTINGS_KEYS])
         .then(applyFromSettings)
-        .catch(() => applyFromSettings({}));
+        .catch(() => applyFromSettings(DEFAULT_SETTINGS));
 }
 
 // Safe baseline: if storage is unavailable or delayed, keep defaults active.
-applyFromSettings({});
+applyFromSettings(DEFAULT_SETTINGS);
 loadAndApply();
 onSettingsChanged(() => {
     loadAndApply();

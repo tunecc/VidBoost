@@ -23,6 +23,8 @@ export type AutoPauseSites = {
     [key: string]: boolean | undefined;
 };
 
+export type YTMemberBlockMode = 'all' | 'blocklist' | 'allowlist';
+
 export type Settings = {
     enabled: boolean;
     h5_enabled: boolean;
@@ -39,9 +41,42 @@ export type Settings = {
     ap_scope: 'all' | 'selected';
     ap_sites: AutoPauseSites;
     ap_custom_sites: string[];
+    yt_member_block: boolean;
+    yt_member_block_mode: YTMemberBlockMode;
+    yt_member_blocklist: string[];
+    yt_member_allowlist: string[];
 };
 
 export type SettingsKey = keyof Settings;
+
+export const CONTENT_SETTINGS_KEYS = [
+    'enabled',
+    'h5_enabled',
+    'ap_enabled',
+    'bnd_enabled',
+    'yt_fast_pause',
+    'fast_pause_master',
+    'bb_block_space',
+    'yt_config',
+    'yt_member_block'
+] as const satisfies SettingsKey[];
+
+export const POPUP_SETTINGS_KEYS = [
+    ...CONTENT_SETTINGS_KEYS,
+    'language',
+    'h5_config',
+    'ui_state',
+    'yt_member_block_mode',
+    'yt_member_blocklist',
+    'yt_member_allowlist'
+] as const satisfies SettingsKey[];
+
+export const YT_MEMBER_BLOCK_SETTINGS_KEYS = [
+    'yt_member_block',
+    'yt_member_block_mode',
+    'yt_member_blocklist',
+    'yt_member_allowlist'
+] as const satisfies SettingsKey[];
 
 export const DEFAULT_SETTINGS: Settings = {
     enabled: true,
@@ -64,8 +99,32 @@ export const DEFAULT_SETTINGS: Settings = {
     ui_state: { general: true, youtube: true, bilibili: true },
     ap_scope: 'all',
     ap_sites: { 'youtube.com': true, 'bilibili.com': true },
-    ap_custom_sites: []
+    ap_custom_sites: [],
+    yt_member_block: false,
+    yt_member_block_mode: 'all',
+    yt_member_blocklist: [],
+    yt_member_allowlist: []
 };
+
+export function resolveSettings(source: Partial<Settings> = {}): Settings {
+    return {
+        ...DEFAULT_SETTINGS,
+        ...source,
+        yt_config: { ...DEFAULT_SETTINGS.yt_config, ...(source.yt_config ?? {}) },
+        h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
+        ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
+        ap_sites: { ...DEFAULT_SETTINGS.ap_sites, ...(source.ap_sites ?? {}) },
+        ap_custom_sites: Array.isArray(source.ap_custom_sites)
+            ? [...source.ap_custom_sites]
+            : [...DEFAULT_SETTINGS.ap_custom_sites],
+        yt_member_blocklist: Array.isArray(source.yt_member_blocklist)
+            ? [...source.yt_member_blocklist]
+            : [...DEFAULT_SETTINGS.yt_member_blocklist],
+        yt_member_allowlist: Array.isArray(source.yt_member_allowlist)
+            ? [...source.yt_member_allowlist]
+            : [...DEFAULT_SETTINGS.yt_member_allowlist]
+    };
+}
 
 export function getSettings<K extends SettingsKey>(keys: K[]): Promise<Pick<Settings, K>> {
     return new Promise((resolve) => {

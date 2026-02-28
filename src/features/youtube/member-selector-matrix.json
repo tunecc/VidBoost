@@ -1,0 +1,94 @@
+{
+    "cardSelectors": [
+        "ytd-rich-item-renderer",
+        "ytd-video-renderer",
+        "ytd-compact-video-renderer",
+        "ytd-grid-video-renderer",
+        "yt-lockup-view-model",
+        "ytm-rich-item-renderer",
+        "ytm-item-section-renderer",
+        "ytm-video-with-context-renderer",
+        "ytm-compact-video-renderer",
+        "ytm-compact-autoplay-renderer"
+    ],
+    "channelSelectors": [
+        "a[href^=\"/@\"]",
+        "a.yt-simple-endpoint[href*=\"/channel/\"]",
+        "a.yt-simple-endpoint[href^=\"/@\"]",
+        "a[href*=\"youtube.com/@\"]",
+        "a[href*=\"youtube.com/channel/\"]"
+    ],
+    "scenes": [
+        {
+            "id": "desktop-rich-feed",
+            "all": [
+                "ytd-rich-item-renderer:has(.badge-style-type-members-only)",
+                "ytd-rich-item-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "ytd-rich-item-renderer:has(.yt-badge-shape--membership)"
+            ]
+        },
+        {
+            "id": "desktop-search-list",
+            "all": [
+                "ytd-video-renderer:has(.badge-style-type-members-only)",
+                "ytd-video-renderer:has(.yt-badge-shape--membership)"
+            ]
+        },
+        {
+            "id": "desktop-related",
+            "all": [
+                "ytd-compact-video-renderer:has(.badge-style-type-members-only)",
+                "ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "ytd-compact-video-renderer:has(.yt-badge-shape--membership)",
+                "#secondary #related ytd-compact-video-renderer:has(.badge-style-type-members-only)",
+                "#secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "#secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--membership)",
+                "#related yt-lockup-view-model:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "#related yt-lockup-view-model:has(.yt-badge-shape--membership)"
+            ]
+        },
+        {
+            "id": "desktop-channel-grid",
+            "all": [
+                "ytd-item-section-renderer[page-subtype=\"channels\"] ytd-grid-video-renderer:has(.badge-style-type-members-only)",
+                "ytd-item-section-renderer[page-subtype=\"channels\"] ytd-grid-video-renderer:has(.yt-badge-shape--membership)"
+            ]
+        },
+        {
+            "id": "mobile-rich-feed",
+            "all": [
+                "ytm-rich-item-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])"
+            ]
+        },
+        {
+            "id": "mobile-subscriptions",
+            "all": [
+                ".tab-content[tab-identifier=\"FEsubscriptions\"] ytm-item-section-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])"
+            ]
+        },
+        {
+            "id": "mobile-search",
+            "all": [
+                "ytm-search ytm-video-with-context-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])"
+            ]
+        },
+        {
+            "id": "mobile-channel-home-shelf",
+            "all": [
+                "ytm-browse ytm-shelf-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])"
+            ],
+            "listModes": []
+        },
+        {
+            "id": "mobile-related",
+            "all": [
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] > lazy-list > ytm-video-with-context-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])",
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] > lazy-list > ytm-compact-video-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])",
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] > lazy-list > ytm-compact-autoplay-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])",
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] ytm-video-with-context-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])",
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] ytm-compact-video-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])",
+                "ytm-item-section-renderer[section-identifier=\"related-items\"] ytm-compact-autoplay-renderer:has(ytm-badge[data-type=\"BADGE_STYLE_TYPE_MEMBERS_ONLY\"])"
+            ]
+        }
+    ]
+}

@@ -1,13 +1,15 @@
 {
     "name": "vidboost",
     "private": true,
-    "version": "1.1",
+    "version": "1.2",
     "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "vite build && vite build --config vite.content.config.ts",
         "preview": "vite preview",
-        "check": "svelte-check --tsconfig ./tsconfig.json"
+        "check": "svelte-check --tsconfig ./tsconfig.json",
+        "check:yt-member-selectors": "node scripts/member-selector-snapshot.mjs",
+        "update:yt-member-selectors": "node scripts/member-selector-snapshot.mjs --update"
     },
     "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^3.0.0",
