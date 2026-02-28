@@ -40,6 +40,7 @@ export class AutoPause implements Feature {
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
+    private boundOnVolumeChange: ((this: HTMLVideoElement) => void) | null = null;
 
     // Config
     private readonly STORAGE_KEY = 'last_focused_window';
@@ -370,7 +371,9 @@ export class AutoPause implements Feature {
         this.currentVideo = video;
         this.currentVideoScore = candidate.score;
         this.boundOnPlay = this.onPlay.bind(this);
+        this.boundOnVolumeChange = this.handleCurrentVideoVolumeChange.bind(this);
         this.currentVideo.addEventListener('playing', this.boundOnPlay);
+        this.currentVideo.addEventListener('volumechange', this.boundOnVolumeChange);
         if (triggerPlay && this.isActivelyPlaying(this.currentVideo)) this.onPlay();
         return true;
     }
@@ -379,8 +382,12 @@ export class AutoPause implements Feature {
         if (this.currentVideo && this.boundOnPlay) {
             this.currentVideo.removeEventListener('playing', this.boundOnPlay);
         }
+        if (this.currentVideo && this.boundOnVolumeChange) {
+            this.currentVideo.removeEventListener('volumechange', this.boundOnVolumeChange);
+        }
         this.currentVideo = null;
         this.boundOnPlay = null;
+        this.boundOnVolumeChange = null;
         this.currentVideoScore = Number.NEGATIVE_INFINITY;
     }
 
@@ -524,6 +531,7 @@ export class AutoPause implements Feature {
                 this.currentVideo.pause();
                 return;
             }
+            if (!this.shouldArbitrateCurrentVideo()) return;
             this.claimFocus();
             this.notifyOthers();
             return;
@@ -531,6 +539,7 @@ export class AutoPause implements Feature {
 
         // Background playback mode:
         // only focused tab or the current owner may continue.
+        if (!this.shouldArbitrateCurrentVideo()) return;
         if (document.hasFocus()) {
             this.claimFocus();
             this.notifyOthers();
@@ -581,6 +590,13 @@ export class AutoPause implements Feature {
         this.handleRemotePlay();
     }
 
+    private handleCurrentVideoVolumeChange() {
+        if (!this.enabled || !this.currentVideo) return;
+        if (!this.isActivelyPlaying(this.currentVideo)) return;
+        if (!this.shouldArbitrateCurrentVideo()) return;
+        this.onPlay();
+    }
+
     // --- Helpers ---
 
     private claimFocus = () => {
@@ -622,9 +638,19 @@ export class AutoPause implements Feature {
         return video.currentTime > 0;
     }
 
+    private isVideoAudible(video: HTMLVideoElement): boolean {
+        return !video.muted && video.volume > 0;
+    }
+
+    private shouldArbitrateCurrentVideo(): boolean {
+        if (!this.currentVideo) return false;
+        if (!this.isActivelyPlaying(this.currentVideo)) return false;
+        return this.isVideoAudible(this.currentVideo);
+    }
+
     private shouldClaimFocusFromInteraction(): boolean {
         if (!this.allowBackgroundPlayback) return true;
-        return !!(this.currentVideo && this.isActivelyPlaying(this.currentVideo));
+        return this.shouldArbitrateCurrentVideo();
     }
 
     private isPlayEventArbitrationMode(): boolean {
