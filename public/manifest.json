@@ -26,6 +26,17 @@
             "run_at": "document_start"
         }
     ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "assets/yt-member-prefilter.page.js"
+            ],
+            "matches": [
+                "*://youtube.com/*",
+                "*://*.youtube.com/*"
+            ]
+        }
+    ],
     "icons": {
         "16": "icons/icon16.png",
         "48": "icons/icon48.png",

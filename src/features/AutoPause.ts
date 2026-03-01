@@ -3,6 +3,7 @@ import type { Feature } from './Feature';
 import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
 import { normalizeDomain, normalizeDomainList } from '../lib/domain';
 import { getAutoPauseContainerSelectorsForHost } from '../lib/siteProfiles';
+import { ObserverManager } from '../lib/ObserverManager';
 
 type LastFocusedState = {
     id: string;
@@ -28,8 +29,7 @@ export class AutoPause implements Feature {
     // State
     private currentVideo: HTMLVideoElement | null = null;
     private lastFocused: LastFocusedState | null = null;
-    private containerObserver: MutationObserver | null = null;
-    private rootObserver: MutationObserver | null = null;
+    private observerManager = new ObserverManager('auto-pause');
     private trackedContainer: HTMLElement | null = null;
     private siteContainerSelectors: string[] | null = null;
     private rebindRaf: number | null = null;
@@ -51,6 +51,9 @@ export class AutoPause implements Feature {
     private readonly PRIMARY_VIDEO_SCORE_THRESHOLD = 40;
     private readonly PRIMARY_VIDEO_SWITCH_MARGIN = 15;
     private readonly USER_GESTURE_TTL_MS = 1_500;
+    private readonly OBSERVER_SCOPE = 'site-tracking';
+    private readonly ROOT_OBSERVER_NAME = 'root';
+    private readonly CONTAINER_OBSERVER_NAME = 'container';
     private siteScope: 'all' | 'selected' = 'all';
     private siteAllow: Record<string, boolean | undefined> = {
         'youtube.com': true,
@@ -246,14 +249,17 @@ export class AutoPause implements Feature {
         this.siteContainerSelectors = selectors;
         this.rebindContainer();
 
-        this.rootObserver?.disconnect();
-        this.rootObserver = new MutationObserver(() => {
-            this.scheduleContainerRebind();
-        });
-
-        this.rootObserver.observe(document.documentElement, {
-            childList: true,
-            subtree: true
+        this.observerManager.observe({
+            scope: this.OBSERVER_SCOPE,
+            name: this.ROOT_OBSERVER_NAME,
+            target: document.documentElement,
+            options: {
+                childList: true,
+                subtree: true
+            },
+            callback: () => {
+                this.scheduleContainerRebind();
+            }
         });
 
         return true;
@@ -280,8 +286,7 @@ export class AutoPause implements Feature {
 
         this.trackedContainer = container;
         this.updateGlobalCaptureListeners();
-        this.containerObserver?.disconnect();
-        this.containerObserver = null;
+        this.observerManager.disconnect(this.OBSERVER_SCOPE, this.CONTAINER_OBSERVER_NAME);
 
         if (!container) {
             this.cleanupVideo();
@@ -293,30 +298,26 @@ export class AutoPause implements Feature {
     }
 
     private observeContainer(container: HTMLElement) {
-        this.containerObserver?.disconnect();
-        this.containerObserver = new MutationObserver(() => {
-            if (!container.isConnected) {
-                this.scheduleContainerRebind();
-                return;
+        this.observerManager.observe({
+            scope: this.OBSERVER_SCOPE,
+            name: this.CONTAINER_OBSERVER_NAME,
+            target: container,
+            options: {
+                childList: true,
+                subtree: true
+            },
+            callback: () => {
+                if (!container.isConnected) {
+                    this.scheduleContainerRebind();
+                    return;
+                }
+                this.tryAdoptBestVideoInContainer(container);
             }
-            this.tryAdoptBestVideoInContainer(container);
-        });
-
-        this.containerObserver.observe(container, {
-            childList: true,
-            subtree: true
         });
     }
 
     private teardownContainerTracking() {
-        if (this.containerObserver) {
-            this.containerObserver.disconnect();
-            this.containerObserver = null;
-        }
-        if (this.rootObserver) {
-            this.rootObserver.disconnect();
-            this.rootObserver = null;
-        }
+        this.observerManager.disconnectScope(this.OBSERVER_SCOPE);
         if (this.rebindRaf !== null) {
             cancelAnimationFrame(this.rebindRaf);
             this.rebindRaf = null;

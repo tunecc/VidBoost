@@ -5,12 +5,16 @@
  */
 
 import { getFullscreenSelectorForHost } from './siteProfiles';
+import { ObserverManager } from './ObserverManager';
 
 export class VideoController {
     private static instance: VideoController;
     private currentVideo: HTMLVideoElement | null = null;
-    private observer: MutationObserver | null = null;
-    private readyObserver: MutationObserver | null = null;
+    private observerManager = new ObserverManager('video-controller');
+    private readonly OBSERVER_SCOPE = 'scan';
+    private readonly READY_OBSERVER_NAME = 'ready';
+    private readonly BODY_OBSERVER_NAME = 'body';
+    private readonly boundHandlePlay = this.handlePlay.bind(this);
 
     // Callbacks
     private onVideoFound: ((video: HTMLVideoElement) => void)[] = [];
@@ -30,10 +34,10 @@ export class VideoController {
         if (typeof window === 'undefined') return;
 
         // Use capture phase playback detection to catch videos that start playing
-        window.addEventListener('play', this.handlePlay.bind(this), { capture: true });
+        window.addEventListener('play', this.boundHandlePlay, { capture: true });
 
         // Also listen for other events that might indicate a new active video
-        window.addEventListener('timeupdate', this.handlePlay.bind(this), { capture: true });
+        window.addEventListener('timeupdate', this.boundHandlePlay, { capture: true });
 
         this.startScanWhenReady();
     }
@@ -65,17 +69,20 @@ export class VideoController {
             return;
         }
 
-        if (this.readyObserver) return;
-        this.readyObserver = new MutationObserver(() => {
-            if (!document.body) return;
-            this.readyObserver?.disconnect();
-            this.readyObserver = null;
-            this.scan();
-        });
-
-        this.readyObserver.observe(document.documentElement, {
-            childList: true,
-            subtree: true
+        if (this.observerManager.has(this.OBSERVER_SCOPE, this.READY_OBSERVER_NAME)) return;
+        this.observerManager.observe({
+            scope: this.OBSERVER_SCOPE,
+            name: this.READY_OBSERVER_NAME,
+            target: document.documentElement,
+            options: {
+                childList: true,
+                subtree: true
+            },
+            callback: () => {
+                if (!document.body) return;
+                this.observerManager.disconnect(this.OBSERVER_SCOPE, this.READY_OBSERVER_NAME);
+                this.scan();
+            }
         });
     }
 
@@ -118,24 +125,28 @@ export class VideoController {
         if (best) this.setVideo(best);
 
         // Start observing for SPA changes or lazy loadings
-        if (!this.observer) {
-            this.observer = new MutationObserver((mutations) => {
-                for (const mutation of mutations) {
-                    // Check added nodes
-                    for (const node of mutation.addedNodes) {
-                        const candidates = this.collectVideosFromNode(node);
+        if (!this.observerManager.has(this.OBSERVER_SCOPE, this.BODY_OBSERVER_NAME)) {
+            this.observerManager.observe({
+                scope: this.OBSERVER_SCOPE,
+                name: this.BODY_OBSERVER_NAME,
+                target: document.body,
+                options: {
+                    childList: true,
+                    subtree: true
+                },
+                callback: (mutations) => {
+                    for (const mutation of mutations) {
+                        // Check added nodes
+                        for (const node of mutation.addedNodes) {
+                            const candidates = this.collectVideosFromNode(node);
 
-                        if (candidates.length > 0) {
-                            const best = this.pickBestVideo(candidates);
-                            if (best) this.setVideo(best);
+                            if (candidates.length > 0) {
+                                const best = this.pickBestVideo(candidates);
+                                if (best) this.setVideo(best);
+                            }
                         }
                     }
                 }
-            });
-
-            this.observer.observe(document.body, {
-                childList: true,
-                subtree: true
             });
         }
     }
