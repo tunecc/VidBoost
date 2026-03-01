@@ -5,6 +5,7 @@ import { YouTubeSeekBlocker } from '../features/YouTubeSeekBlocker';
 import { YouTubeFastPause } from '../features/YouTubeFastPause';
 import { BilibiliSpaceBlocker } from '../features/BilibiliSpaceBlocker';
 import { YouTubeMemberBlocker } from '../features/YouTubeMemberBlocker';
+import { BilibiliCDN } from '../features/BilibiliCDN';
 import {
     getSettings,
     onSettingsChanged,
@@ -14,6 +15,8 @@ import {
     type Settings
 } from '../lib/settings-content';
 
+const bilibiliCdn = new BilibiliCDN();
+
 const features = [
     new H5Enhancer(),
     new AutoPause(),
@@ -21,7 +24,8 @@ const features = [
     new YouTubeSeekBlocker(),
     new YouTubeFastPause(),
     new BilibiliSpaceBlocker(),
-    new YouTubeMemberBlocker()
+    new YouTubeMemberBlocker(),
+    bilibiliCdn
 ];
 
 const mountedState = new Array(features.length).fill(false);
@@ -66,6 +70,7 @@ function applyFromSettings(res: Partial<Settings>) {
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
+    const bbCdnOn = settings.bb_cdn.enabled === true;
 
     setFeatureEnabled(0, settings.h5_enabled !== false);
     setFeatureEnabled(1, settings.ap_enabled !== false);
@@ -74,6 +79,11 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(4, ytFastPauseOn);
     setFeatureEnabled(5, bbBlockSpaceOn);
     setFeatureEnabled(6, ytMemberBlockOn);
+    setFeatureEnabled(7, bbCdnOn);
+
+    // Push CDN config update (always, so page script gets latest node)
+    bilibiliCdn.updateSettings(settings);
+
     publishDebug(settings);
 }
 
@@ -83,9 +93,29 @@ function loadAndApply() {
         .catch(() => applyFromSettings(DEFAULT_SETTINGS));
 }
 
-// Safe baseline: if storage is unavailable or delayed, keep defaults active.
 applyFromSettings(DEFAULT_SETTINGS);
 loadAndApply();
 onSettingsChanged(() => {
     loadAndApply();
+});
+
+// Speed test relay: popup → content script → page script → results → storage
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'VB_CDN_SPEED_TEST' && Array.isArray(message.nodes)) {
+        const results: Record<string, { speed: string; error: boolean }> = {};
+        bilibiliCdn.runSpeedTest(
+            message.nodes.map((n: { id: string; host: string }) => ({ id: n.id, label: '', host: n.host })),
+            (result) => {
+                results[result.nodeId] = { speed: result.speed, error: result.error };
+                chrome.storage.local.set({ bb_cdn_speed_results: { ...results } });
+            },
+            () => {
+                chrome.storage.local.set({ bb_cdn_speed_results: { ...results } });
+            }
+        );
+        sendResponse({ started: true });
+    } else if (message?.type === 'VB_CDN_ABORT_SPEED_TEST') {
+        bilibiliCdn.abortSpeedTest();
+        sendResponse({ aborted: true });
+    }
 });

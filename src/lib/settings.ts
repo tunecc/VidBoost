@@ -17,6 +17,12 @@ export type UIState = {
     bilibili?: boolean;
 };
 
+export type BilibiliCdnConfig = {
+    enabled: boolean;
+    node: string;
+    bangumiMode: boolean;
+};
+
 export type AutoPauseSites = {
     'youtube.com'?: boolean;
     'bilibili.com'?: boolean;
@@ -34,6 +40,7 @@ export type Settings = {
     yt_fast_pause: boolean;
     fast_pause_master: boolean;
     bb_block_space: boolean;
+    bb_cdn: BilibiliCdnConfig;
     language: 'auto' | 'en' | 'zh';
     yt_config: YTConfig;
     h5_config: H5Config;
@@ -57,6 +64,7 @@ export const CONTENT_SETTINGS_KEYS = [
     'yt_fast_pause',
     'fast_pause_master',
     'bb_block_space',
+    'bb_cdn',
     'yt_config',
     'yt_member_block'
 ] as const satisfies SettingsKey[];
@@ -66,6 +74,7 @@ export const POPUP_SETTINGS_KEYS = [
     'language',
     'h5_config',
     'ui_state',
+    'bb_cdn',
     'yt_member_block_mode',
     'yt_member_blocklist',
     'yt_member_allowlist'
@@ -87,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_fast_pause: true,
     fast_pause_master: true,
     bb_block_space: true,
+    bb_cdn: { enabled: false, node: '', bangumiMode: false },
     language: 'auto',
     yt_config: { blockNativeSeek: true },
     h5_config: {
@@ -113,6 +123,7 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         yt_config: { ...DEFAULT_SETTINGS.yt_config, ...(source.yt_config ?? {}) },
         h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
         ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
+        bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
         ap_sites: { ...DEFAULT_SETTINGS.ap_sites, ...(source.ap_sites ?? {}) },
         ap_custom_sites: Array.isArray(source.ap_custom_sites)
             ? [...source.ap_custom_sites]

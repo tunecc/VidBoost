@@ -24,6 +24,16 @@
                 "assets/content.js"
             ],
             "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "*://*.bilibili.com/*"
+            ],
+            "js": [
+                "assets/bb-cdn.page.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
         }
     ],
     "web_accessible_resources": [

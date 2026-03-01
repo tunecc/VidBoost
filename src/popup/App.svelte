@@ -5,6 +5,7 @@
   import { i18n, type I18nKey, type I18nLang } from "../lib/i18n";
   import H5Settings from "./H5Settings.svelte";
   import AutoPauseSettings from "./AutoPauseSettings.svelte";
+  import CdnSettings from "./CdnSettings.svelte";
   import {
     getSettings,
     setSettings,
@@ -16,6 +17,8 @@
   import SectionCard from "../components/SectionCard.svelte";
   import ToggleItem from "../components/ToggleItem.svelte";
   import AccordionItem from "../components/AccordionItem.svelte";
+  import { CDN_NODES } from "../lib/bilibiliCdnData";
+  import type { BilibiliCdnConfig } from "../lib/settings";
 
   // -- State --
   let loaded = false;
@@ -32,12 +35,72 @@
 
   // YouTube Member Block Config
   let ytMemberBlock = DEFAULT_SETTINGS.yt_member_block;
-  let ytMemberBlockMode: YTMemberBlockMode = DEFAULT_SETTINGS.yt_member_block_mode;
+  let ytMemberBlockMode: YTMemberBlockMode =
+    DEFAULT_SETTINGS.yt_member_block_mode;
   let ytMemberBlocklist: string[] = [...DEFAULT_SETTINGS.yt_member_blocklist];
-  let ytMemberBlocklistText = "";
+  let newBlockItem = "";
   let ytMemberAllowlist: string[] = [...DEFAULT_SETTINGS.yt_member_allowlist];
-  let ytMemberAllowlistText = "";
+  let newAllowItem = "";
   let ytMemberOpen = false;
+
+  // Bilibili CDN Config
+  let bbCdnEnabled = DEFAULT_SETTINGS.bb_cdn.enabled;
+  let bbCdnNode = DEFAULT_SETTINGS.bb_cdn.node;
+  let bbCdnBangumi = DEFAULT_SETTINGS.bb_cdn.bangumiMode;
+  let bbCdnOpen = false;
+  let bbCdnSpeedResults: Record<string, { speed: string; error: boolean }> = {};
+  let bbCdnTesting = false;
+
+  function addTags(mode: "block" | "allow", input: string) {
+    if (!input.trim()) return;
+    const items = input
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (mode === "block") {
+      ytMemberBlocklist = [...new Set([...ytMemberBlocklist, ...items])];
+      newBlockItem = "";
+    } else {
+      ytMemberAllowlist = [...new Set([...ytMemberAllowlist, ...items])];
+      newAllowItem = "";
+    }
+  }
+
+  function handleTagKeyDown(e: KeyboardEvent, mode: "block" | "allow") {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const val = mode === "block" ? newBlockItem : newAllowItem;
+      addTags(mode, val);
+    } else if (e.key === "Backspace") {
+      const val = mode === "block" ? newBlockItem : newAllowItem;
+      if (val === "") {
+        e.preventDefault();
+        if (mode === "block" && ytMemberBlocklist.length > 0) {
+          ytMemberBlocklist = ytMemberBlocklist.slice(0, -1);
+        } else if (mode === "allow" && ytMemberAllowlist.length > 0) {
+          ytMemberAllowlist = ytMemberAllowlist.slice(0, -1);
+        }
+      }
+    }
+  }
+
+  function removeTag(mode: "block" | "allow", index: number) {
+    if (mode === "block") {
+      ytMemberBlocklist = ytMemberBlocklist.filter((_, i) => i !== index);
+    } else {
+      ytMemberAllowlist = ytMemberAllowlist.filter((_, i) => i !== index);
+    }
+  }
+
+  function handleTagPaste(e: ClipboardEvent, mode: "block" | "allow") {
+    if (e.clipboardData) {
+      const paste = e.clipboardData.getData("text");
+      if (paste) {
+        e.preventDefault();
+        addTags(mode, paste);
+      }
+    }
+  }
 
   // Fast Pause Config
   let bndEnabled = DEFAULT_SETTINGS.bnd_enabled; // Bilibili
@@ -98,9 +161,13 @@
       ytMemberBlock = res.yt_member_block;
       ytMemberBlockMode = res.yt_member_block_mode;
       ytMemberBlocklist = res.yt_member_blocklist;
-      ytMemberBlocklistText = ytMemberBlocklist.join("\n");
       ytMemberAllowlist = res.yt_member_allowlist;
-      ytMemberAllowlistText = ytMemberAllowlist.join("\n");
+
+      if (res.bb_cdn) {
+        bbCdnEnabled = res.bb_cdn.enabled ?? false;
+        bbCdnNode = res.bb_cdn.node ?? "";
+        bbCdnBangumi = res.bb_cdn.bangumiMode ?? false;
+      }
 
       language = res.language || DEFAULT_SETTINGS.language;
 
@@ -142,6 +209,11 @@
         yt_member_block_mode: ytMemberBlockMode,
         yt_member_blocklist: ytMemberBlocklist,
         yt_member_allowlist: ytMemberAllowlist,
+        bb_cdn: {
+          enabled: bbCdnEnabled,
+          node: bbCdnNode,
+          bangumiMode: bbCdnBangumi,
+        },
       });
     }
   }
@@ -426,106 +498,203 @@
           >
             <div
               slot="icon"
-              class="w-full h-full flex items-center justify-center"
+              class="w-full h-full flex items-center justify-center text-red-500"
             >
               <svg
                 class="w-4 h-4"
                 fill="none"
-                stroke="currentColor"
                 viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
-                /></svg
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke="currentColor"
               >
+                <path
+                  d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+                />
+                <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                <path
+                  d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+                />
+                <path d="m2 2 20 20" />
+              </svg>
             </div>
-            <div slot="content" class="space-y-2 px-1">
-              <!-- Mode: All -->
-              <button
-                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
-                'all'
-                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
-                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
-                disabled={!globalEnabled || !ytMemberBlock}
-                on:click={() =>
-                  globalEnabled && ytMemberBlock && (ytMemberBlockMode = "all")}
+            <div slot="content" class="space-y-3 px-1">
+              <!-- Compact Pill Control for Mode -->
+              <div
+                class="flex p-0.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5 w-fit mx-auto mt-1 mb-2 shadow-inner"
               >
-                {t("yt_member_mode_all")}
-              </button>
-              <!-- Mode: Blocklist -->
-              <button
-                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
-                'blocklist'
-                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
-                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
-                disabled={!globalEnabled || !ytMemberBlock}
-                on:click={() =>
-                  globalEnabled &&
-                  ytMemberBlock &&
-                  (ytMemberBlockMode = "blocklist")}
-              >
-                {t("yt_member_mode_blocklist")}
-              </button>
-              <!-- Blocklist Textarea -->
+                <!-- Mode: All -->
+                <button
+                  class="px-4 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
+                  'all'
+                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                  disabled={!globalEnabled || !ytMemberBlock}
+                  on:click={() =>
+                    globalEnabled &&
+                    ytMemberBlock &&
+                    (ytMemberBlockMode = "all")}
+                >
+                  {t("yt_member_mode_all_short") || "全部屏蔽"}
+                </button>
+                <!-- Mode: Blocklist -->
+                <button
+                  class="px-3 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
+                  'blocklist'
+                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                  disabled={!globalEnabled || !ytMemberBlock}
+                  on:click={() =>
+                    globalEnabled &&
+                    ytMemberBlock &&
+                    (ytMemberBlockMode = "blocklist")}
+                >
+                  {t("yt_member_mode_blocklist_short") || "仅屏蔽"}
+                </button>
+                <!-- Mode: Allowlist -->
+                <button
+                  class="px-3 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
+                  'allowlist'
+                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                  disabled={!globalEnabled || !ytMemberBlock}
+                  on:click={() =>
+                    globalEnabled &&
+                    ytMemberBlock &&
+                    (ytMemberBlockMode = "allowlist")}
+                >
+                  {t("yt_member_mode_allowlist_short") || "仅允许"}
+                </button>
+              </div>
+
+              <!-- Blocklist Tags -->
               {#if ytMemberBlockMode === "blocklist"}
                 <div class="pt-1">
-                  <span
-                    class="text-[11px] text-gray-500 dark:text-white/40 font-medium mb-1 block"
+                  <div class="flex items-center justify-between mb-1.5 px-0.5">
+                    <span
+                      class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide"
+                    >
+                      {t("yt_member_blocklist_label")}
+                    </span>
+                    <span
+                      class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium"
+                    >
+                      {ytMemberBlocklist.length}
+                    </span>
+                  </div>
+                  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                  <div
+                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-red-400/50 focus-within:border-red-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {ytMemberBlocklist.length ===
+                    0
+                      ? 'items-start'
+                      : 'items-center'}"
+                    on:click={() =>
+                      document.getElementById("blocklist-input")?.focus()}
                   >
-                    {t("yt_member_blocklist_label")}
-                  </span>
-                  <textarea
-                    class="w-full rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3 py-2 text-xs text-gray-700 dark:text-white/80 placeholder:text-gray-400 dark:placeholder:text-white/30 resize-none outline-none focus:ring-1 focus:ring-red-400/50 transition-all"
-                    rows="3"
-                    placeholder={t("yt_member_blocklist_placeholder")}
-                    disabled={!globalEnabled || !ytMemberBlock}
-                    bind:value={ytMemberBlocklistText}
-                    on:input={() => {
-                      ytMemberBlocklist = ytMemberBlocklistText
-                        .split("\n")
-                        .map((s) => s.trim())
-                        .filter((s) => s.length > 0);
-                    }}
-                  />
+                    {#each ytMemberBlocklist as item, i}
+                      <div
+                        class="flex items-center gap-1 bg-white dark:bg-white/10 border border-black/5 dark:border-white/5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] group hover:border-red-400/30 transition-colors"
+                      >
+                        <span class="truncate max-w-[120px] font-mono"
+                          >{item}</span
+                        >
+                        <button
+                          class="text-gray-300 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 focus:outline-none"
+                          on:click|stopPropagation={() => removeTag("block", i)}
+                        >
+                          <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            ><path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M6 18L18 6M6 6l12 12"
+                            /></svg
+                          >
+                        </button>
+                      </div>
+                    {/each}
+                    <input
+                      id="blocklist-input"
+                      class="flex-1 min-w-[70px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium"
+                      placeholder={ytMemberBlocklist.length === 0
+                        ? t("yt_member_blocklist_placeholder")
+                        : "Add channel..."}
+                      disabled={!globalEnabled || !ytMemberBlock}
+                      bind:value={newBlockItem}
+                      on:keydown={(e) => handleTagKeyDown(e, "block")}
+                      on:paste={(e) => handleTagPaste(e, "block")}
+                    />
+                  </div>
                 </div>
               {/if}
-              <!-- Mode: Allowlist -->
-              <button
-                class="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors {ytMemberBlockMode ===
-                'allowlist'
-                  ? 'bg-red-500/10 dark:bg-red-400/15 text-red-600 dark:text-red-400 font-semibold'
-                  : 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5'}"
-                disabled={!globalEnabled || !ytMemberBlock}
-                on:click={() =>
-                  globalEnabled &&
-                  ytMemberBlock &&
-                  (ytMemberBlockMode = "allowlist")}
-              >
-                {t("yt_member_mode_allowlist")}
-              </button>
-              <!-- Allowlist Textarea -->
+
+              <!-- Allowlist Tags -->
               {#if ytMemberBlockMode === "allowlist"}
                 <div class="pt-1">
-                  <span
-                    class="text-[11px] text-gray-500 dark:text-white/40 font-medium mb-1 block"
+                  <div class="flex items-center justify-between mb-1.5 px-0.5">
+                    <span
+                      class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide"
+                    >
+                      {t("yt_member_allowlist_label")}
+                    </span>
+                    <span
+                      class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium"
+                    >
+                      {ytMemberAllowlist.length}
+                    </span>
+                  </div>
+                  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                  <div
+                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-red-400/50 focus-within:border-red-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {ytMemberAllowlist.length ===
+                    0
+                      ? 'items-start'
+                      : 'items-center'}"
+                    on:click={() =>
+                      document.getElementById("allowlist-input")?.focus()}
                   >
-                    {t("yt_member_allowlist_label")}
-                  </span>
-                  <textarea
-                    class="w-full rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3 py-2 text-xs text-gray-700 dark:text-white/80 placeholder:text-gray-400 dark:placeholder:text-white/30 resize-none outline-none focus:ring-1 focus:ring-red-400/50 transition-all"
-                    rows="3"
-                    placeholder={t("yt_member_allowlist_placeholder")}
-                    disabled={!globalEnabled || !ytMemberBlock}
-                    bind:value={ytMemberAllowlistText}
-                    on:input={() => {
-                      ytMemberAllowlist = ytMemberAllowlistText
-                        .split("\n")
-                        .map((s) => s.trim())
-                        .filter((s) => s.length > 0);
-                    }}
-                  />
+                    {#each ytMemberAllowlist as item, i}
+                      <div
+                        class="flex items-center gap-1 bg-white dark:bg-white/10 border border-black/5 dark:border-white/5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] group hover:border-red-400/30 transition-colors"
+                      >
+                        <span class="truncate max-w-[120px] font-mono"
+                          >{item}</span
+                        >
+                        <button
+                          class="text-gray-300 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 focus:outline-none"
+                          on:click|stopPropagation={() => removeTag("allow", i)}
+                        >
+                          <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            ><path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M6 18L18 6M6 6l12 12"
+                            /></svg
+                          >
+                        </button>
+                      </div>
+                    {/each}
+                    <input
+                      id="allowlist-input"
+                      class="flex-1 min-w-[70px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium"
+                      placeholder={ytMemberAllowlist.length === 0
+                        ? t("yt_member_allowlist_placeholder")
+                        : "Add channel..."}
+                      disabled={!globalEnabled || !ytMemberBlock}
+                      bind:value={newAllowItem}
+                      on:keydown={(e) => handleTagKeyDown(e, "allow")}
+                      on:paste={(e) => handleTagPaste(e, "allow")}
+                    />
+                  </div>
                 </div>
               {/if}
             </div>
@@ -567,6 +736,114 @@
               >
             </div>
           </ToggleItem>
+
+          <!-- CDN Switcher -->
+          <AccordionItem
+            title={t("bb_cdn_title")}
+            desc={t("bb_cdn_desc")}
+            iconColor="cyan"
+            isOpen={bbCdnOpen}
+            masterChecked={bbCdnEnabled}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (bbCdnOpen = !bbCdnOpen)}
+            onToggleMaster={() =>
+              globalEnabled && (bbCdnEnabled = !bbCdnEnabled)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                /></svg
+              >
+            </div>
+            <div slot="content" class="space-y-3 px-1">
+              <!-- CDN Node Selector (Pill w/ Separator) -->
+              <div
+                class="py-1.5 border-b border-black/[0.03] dark:border-white/[0.03] flex items-center justify-between px-0.5 gap-3"
+              >
+                <span
+                  class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide shrink-0"
+                >
+                  {t("bb_cdn_node")}
+                </span>
+
+                <button
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 hover:bg-cyan-500/5 hover:border-cyan-500/20 dark:hover:bg-cyan-500/10 dark:hover:border-cyan-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed group shadow-[0_1px_2px_rgba(0,0,0,0.02)] min-w-0"
+                  disabled={!globalEnabled || !bbCdnEnabled}
+                  on:click={() => navigate("bb-cdn-settings")}
+                >
+                  <span
+                    class="text-[11px] font-medium text-gray-700 dark:text-white/90 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate"
+                  >
+                    {bbCdnNode
+                      ? CDN_NODES.find((n) => n.host === bbCdnNode)?.label ||
+                        bbCdnNode
+                      : t("bb_cdn_default")}
+                  </span>
+                  <svg
+                    class="w-3.5 h-3.5 text-gray-400 group-hover:text-cyan-500 group-hover:translate-x-0.5 transition-all shrink-0 ml-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.5"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Bangumi Enhanced Mode (Full Row Clickable) -->
+              <button
+                class="w-full flex items-center justify-between py-2 px-0.5 text-left outline-none rounded-lg group active:bg-black/5 dark:active:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!globalEnabled || !bbCdnEnabled}
+                on:click={() =>
+                  globalEnabled &&
+                  bbCdnEnabled &&
+                  (bbCdnBangumi = !bbCdnBangumi)}
+              >
+                <div class="flex-1 min-w-0 pr-2">
+                  <span
+                    class="text-[11px] text-gray-600 dark:text-white/60 font-medium group-active:text-gray-800 dark:group-active:text-white/80 transition-colors"
+                  >
+                    {t("bb_cdn_bangumi")}
+                  </span>
+                  <p
+                    class="text-[9px] text-gray-400 dark:text-white/30 mt-0.5 leading-tight group-active:text-gray-500 dark:group-active:text-white/50 transition-colors"
+                  >
+                    {t("bb_cdn_bangumi_desc")}
+                  </p>
+                </div>
+                <!-- Prevent internal label captures by disabling pointer events on the switch -->
+                <div
+                  class="relative inline-flex items-center ml-2 shrink-0 pointer-events-none"
+                >
+                  <input
+                    type="checkbox"
+                    class="sr-only peer"
+                    checked={bbCdnBangumi}
+                    readOnly
+                  />
+                  <div
+                    class="w-8 h-[18px] bg-black/10 dark:bg-white/10 rounded-full peer peer-checked:bg-cyan-500 transition-all after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-[14px] after:w-[14px] after:transition-all peer-checked:after:translate-x-[14px]"
+                  ></div>
+                </div>
+              </button>
+            </div></AccordionItem
+          >
         </SectionCard>
       </div>
 
@@ -686,6 +963,105 @@
       out:fly={{ x: 20, duration: 300, opacity: 0, easing: quintOut }}
     >
       <AutoPauseSettings on:back={() => (currentView = "main")} {language} />
+    </div>
+  {:else if currentView === "bb-cdn-settings"}
+    <div
+      class="absolute inset-0 flex flex-col z-20"
+      in:fly={{ x: 20, duration: 400, opacity: 0, easing: quintOut }}
+      out:fly={{ x: 20, duration: 300, opacity: 0, easing: quintOut }}
+    >
+      <CdnSettings
+        on:back={() => (currentView = "main")}
+        on:update={(e) => {
+          bbCdnNode = e.detail.bbCdnNode;
+        }}
+        on:speedtest={() => {
+          if (bbCdnTesting) return;
+          bbCdnTesting = true;
+          bbCdnSpeedResults = {};
+          if (globalThis.chrome && globalThis.chrome.tabs) {
+            globalThis.chrome.tabs.query(
+              { active: true, currentWindow: true },
+              (tabs) => {
+                if (tabs[0]?.id) {
+                  globalThis.chrome.tabs.sendMessage(
+                    tabs[0].id,
+                    {
+                      type: "VB_CDN_SPEED_TEST",
+                      nodes: CDN_NODES.map((n) => ({ id: n.id, host: n.host })),
+                    },
+                    (response) => {
+                      if (globalThis.chrome.runtime.lastError) {
+                        console.warn(
+                          "Speed test failed: Content script not found on this tab.",
+                          globalThis.chrome.runtime.lastError.message,
+                        );
+                        bbCdnTesting = false;
+                        return;
+                      }
+                      if (!response?.started) {
+                        bbCdnTesting = false;
+                        return;
+                      }
+
+                      const resultKey = "bb_cdn_speed_results";
+                      const checkResults = () => {
+                        globalThis.chrome.storage.local.get(
+                          [resultKey],
+                          (res) => {
+                            if (res[resultKey]) {
+                              bbCdnSpeedResults = res[resultKey];
+                              if (
+                                Object.keys(bbCdnSpeedResults).length >=
+                                CDN_NODES.length
+                              ) {
+                                bbCdnTesting = false;
+                                globalThis.chrome.storage.local.remove([
+                                  resultKey,
+                                ]);
+                              } else {
+                                setTimeout(checkResults, 800);
+                              }
+                            } else {
+                              setTimeout(checkResults, 800);
+                            }
+                          },
+                        );
+                      };
+                      setTimeout(checkResults, 1500);
+                    },
+                  );
+                } else {
+                  bbCdnTesting = false;
+                }
+              },
+            );
+          }
+        }}
+        on:abortspeedtest={() => {
+          bbCdnTesting = false;
+          if (globalThis.chrome && globalThis.chrome.tabs) {
+            globalThis.chrome.tabs.query(
+              { active: true, currentWindow: true },
+              (tabs) => {
+                if (tabs[0]?.id) {
+                  globalThis.chrome.tabs.sendMessage(
+                    tabs[0].id,
+                    { type: "VB_CDN_ABORT_SPEED_TEST" },
+                    () => {},
+                  );
+                }
+              },
+            );
+          }
+        }}
+        {language}
+        {globalEnabled}
+        {bbCdnEnabled}
+        {bbCdnNode}
+        {bbCdnTesting}
+        {bbCdnSpeedResults}
+      />
     </div>
   {/if}
 </main>

@@ -141,16 +141,18 @@
             ? '#3b82f6'
             : iconColor === 'red'
               ? '#ef4444'
-              : iconColor === 'pink'
-                ? '#ec4899'
-                : iconColor === 'purple'
-                  ? '#a855f7'
-                  : iconColor === 'indigo'
-                    ? '#6366f1'
-                    : '#3b82f6'
+              : iconColor === 'cyan'
+                ? '#06b6d4'
+                : iconColor === 'pink'
+                  ? '#ec4899'
+                  : iconColor === 'purple'
+                    ? '#a855f7'
+                    : iconColor === 'indigo'
+                      ? '#6366f1'
+                      : '#3b82f6'
           : 'rgba(156, 163, 175, 0.2)'};
                  box-shadow: {checked
-          ? `0 0 10px ${iconColor === 'blue' ? 'rgba(59,130,246,0.5)' : iconColor === 'red' ? 'rgba(239,68,68,0.5)' : iconColor === 'pink' ? 'rgba(236,72,153,0.5)' : iconColor === 'purple' ? 'rgba(168,85,247,0.5)' : iconColor === 'indigo' ? 'rgba(99,102,241,0.5)' : 'rgba(59,130,246,0.5)'}`
+          ? `0 0 10px ${iconColor === 'blue' ? 'rgba(59,130,246,0.5)' : iconColor === 'red' ? 'rgba(239,68,68,0.5)' : iconColor === 'cyan' ? 'rgba(6,182,212,0.5)' : iconColor === 'pink' ? 'rgba(236,72,153,0.5)' : iconColor === 'purple' ? 'rgba(168,85,247,0.5)' : iconColor === 'indigo' ? 'rgba(99,102,241,0.5)' : 'rgba(59,130,246,0.5)'}`
           : 'none'}"
       ></div>
       <div
