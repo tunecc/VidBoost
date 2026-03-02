@@ -41,6 +41,7 @@ export class AutoPause implements Feature {
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
     private boundOnVolumeChange: ((this: HTMLVideoElement) => void) | null = null;
+    private boundOnPauseOrEnded: ((this: HTMLVideoElement) => void) | null = null;
 
     // Config
     private readonly STORAGE_KEY = 'last_focused_window';
@@ -185,6 +186,7 @@ export class AutoPause implements Feature {
         this.detachGlobalCaptureListeners();
         this.teardownContainerTracking();
         this.cleanupVideo();
+        this.releaseFocusOwnershipIfOwned();
     }
 
     private isSiteAllowed(): boolean {
@@ -373,8 +375,11 @@ export class AutoPause implements Feature {
         this.currentVideoScore = candidate.score;
         this.boundOnPlay = this.onPlay.bind(this);
         this.boundOnVolumeChange = this.handleCurrentVideoVolumeChange.bind(this);
+        this.boundOnPauseOrEnded = this.handleCurrentVideoStopped.bind(this);
         this.currentVideo.addEventListener('playing', this.boundOnPlay);
         this.currentVideo.addEventListener('volumechange', this.boundOnVolumeChange);
+        this.currentVideo.addEventListener('pause', this.boundOnPauseOrEnded);
+        this.currentVideo.addEventListener('ended', this.boundOnPauseOrEnded);
         if (triggerPlay && this.isActivelyPlaying(this.currentVideo)) this.onPlay();
         return true;
     }
@@ -386,9 +391,14 @@ export class AutoPause implements Feature {
         if (this.currentVideo && this.boundOnVolumeChange) {
             this.currentVideo.removeEventListener('volumechange', this.boundOnVolumeChange);
         }
+        if (this.currentVideo && this.boundOnPauseOrEnded) {
+            this.currentVideo.removeEventListener('pause', this.boundOnPauseOrEnded);
+            this.currentVideo.removeEventListener('ended', this.boundOnPauseOrEnded);
+        }
         this.currentVideo = null;
         this.boundOnPlay = null;
         this.boundOnVolumeChange = null;
+        this.boundOnPauseOrEnded = null;
         this.currentVideoScore = Number.NEGATIVE_INFINITY;
     }
 
@@ -546,7 +556,17 @@ export class AutoPause implements Feature {
             this.notifyOthers();
             return;
         }
+        if (!this.lastFocused) {
+            this.claimFocus();
+            this.notifyOthers();
+            return;
+        }
         if (this.isLastFocusedWindow(true)) {
+            this.notifyOthers();
+            return;
+        }
+        if (!this.hasFreshFocusOwner()) {
+            this.claimFocus();
             this.notifyOthers();
             return;
         }
@@ -598,6 +618,12 @@ export class AutoPause implements Feature {
         this.onPlay();
     }
 
+    private handleCurrentVideoStopped() {
+        if (!this.enabled || !this.currentVideo) return;
+        if (this.isActivelyPlaying(this.currentVideo)) return;
+        this.releaseFocusOwnershipIfOwned();
+    }
+
     // --- Helpers ---
 
     private claimFocus = () => {
@@ -612,11 +638,23 @@ export class AutoPause implements Feature {
         chrome.storage.local.set({ [this.STORAGE_KEY]: newState });
     }
 
+    private releaseFocusOwnershipIfOwned() {
+        if (!this.lastFocused) return;
+        if (this.lastFocused.id !== this.sync.myId) return;
+        this.lastFocused = null;
+        chrome.storage.local.remove(this.STORAGE_KEY);
+    }
+
     private isLastFocusedWindow(ignoreFresh = false): boolean {
         if (!this.lastFocused) return false;
         if (!ignoreFresh && !this.isFreshFocusedState(this.lastFocused.timestamp)) return false;
         if (this.lastFocused.id !== this.sync.myId) return false;
         return true;
+    }
+
+    private hasFreshFocusOwner(): boolean {
+        if (!this.lastFocused) return false;
+        return this.isFreshFocusedState(this.lastFocused.timestamp);
     }
 
     private notifyOthers() {
@@ -700,6 +738,7 @@ export class AutoPause implements Feature {
     private initFocusListeners() {
         window.addEventListener('focus', this.handleWindowFocus);
         window.addEventListener('blur', this.handleWindowBlur);
+        window.addEventListener('pagehide', this.handlePageHide);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
         document.addEventListener('click', this.handleDocumentClick);
     }
@@ -707,6 +746,7 @@ export class AutoPause implements Feature {
     private removeFocusListeners() {
         window.removeEventListener('focus', this.handleWindowFocus);
         window.removeEventListener('blur', this.handleWindowBlur);
+        window.removeEventListener('pagehide', this.handlePageHide);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         document.removeEventListener('click', this.handleDocumentClick);
     }
@@ -730,8 +770,23 @@ export class AutoPause implements Feature {
         }
     }
 
+    private handlePageHide = () => {
+        this.releaseFocusOwnershipIfOwned();
+    }
+
     private handleVisibilityChange = () => {
-        if (this.isPlayEventArbitrationMode()) return;
+        if (this.isPlayEventArbitrationMode()) {
+            if (document.visibilityState === 'hidden') {
+                if (!this.currentVideo || !this.isActivelyPlaying(this.currentVideo)) {
+                    this.releaseFocusOwnershipIfOwned();
+                }
+                return;
+            }
+            if (document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
+                this.claimFocus();
+            }
+            return;
+        }
         if (document.visibilityState === 'visible' && document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
             this.claimFocus();
         }
