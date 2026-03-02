@@ -1,51 +1,93 @@
-# VidBoost - 高性能视频增强工具 Pro
+# VidBoost - 浏览器专属的高阶视频增强与效率插件
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Svelte](https://img.shields.io/badge/svelte-%23f1413d.svg?style=flat&logo=svelte&logoColor=white) ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=flat&logo=typescript&logoColor=white) ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=flat&logo=vite&logoColor=white)
 
-**VidBoost** 是一款专为提升网页视频观看体验而设计的高性能 Chrome/Edge 扩展程序。它采用现代架构重构，专注于极低内存占用和零延迟响应，提供倍速控制、自动暂停以及针对 Bilibili 等站点的专属优化功能。
+## 🌟 为什么选择 VidBoost？
 
-## 🖼️ 预览
+本来为了视频倍速、屏蔽特定元素等需求，在浏览器中安装了多个散杂的篡改猴脚本。但它们总是因为互相冲突、性能负担或各种 Bug 导致体验割裂。**VidBoost** 的诞生就是为了把这些高频、刚需的视频控制功能融合到一个极其精简、低内存占用、高稳定性的原生插件中。
+
+---
 
 <p align="center">
-  <a href="https://files.catbox.moe/e14v7g.png">
-    <img src="https://files.catbox.moe/e14v7g.png" width="22%" />
-  </a>
-  <a href="https://files.catbox.moe/ak2mfg.png">
-    <img src="https://files.catbox.moe/ak2mfg.png" width="22%" />
-  </a>
-  <a href="https://files.catbox.moe/c9ol0e.png">
-    <img src="https://files.catbox.moe/c9ol0e.png" width="22%" />
-  </a>
-  <a href="https://files.catbox.moe/nlwgth.png">
-    <img src="https://files.catbox.moe/nlwgth.png" width="22%" />
-  </a>
+  <img src="./assets/light_mode.png" width="48%" alt="浅色模式主界面" />
+  &nbsp;
+  <img src="./assets/dark_mode.png" width="48%" alt="深色模式主界面" />
 </p>
 
-已上架chrome插件商店，[点我直达](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
+## 🧩 核心功能模块与使用场景
 
-## 为什么有这个项目？
-我在使用下面三个仓库的代码时，篡改猴总是崩溃，导致使用体验割裂，所以有了这个项目
+这里我们将 VidBoost 提供的四大核心能力拆解介绍。
 
-https://github.com/tunecc/h5player
-https://github.com/tunecc/bilibili-no-dblclick
-https://github.com/tunecc/video-auto-pause
+### 1. ⚙️ 通用增强 (General)
 
+**h5player - 丝滑的全局视频倍速控制**
 
-## 🚀 核心功能
+无论是学习网课还是追剧，浏览器原生的播放器往往缺少好用的快捷键。
 
+- **使用场景**：当你在任何网站观看 HTML5 视频时，只需要按下键盘上的数字键 `1` 到 `6`，即可瞬间切换到对应的倍速（1x 到 6x）。助你光速度过视频中的“垃圾时间”。
+- **优化细节**：支持屏蔽 YouTube 原生的数字键跳跃功能，彻底解决想要切换到 3 倍速却意外跳到进度条 30% 处的痛点。
 
-*   **🛠 H5 视频增强**:
-    *   **数字键倍速**: 按下数字键 (1-6) 即可瞬间切换视频倍速。助你光速度过视频中的“垃圾时间”。
-    *   **冲突屏蔽**: 智能禁用 YouTube 等站点的原生数字键跳转进度功能，防止调节倍速时误触进度条，体验更纯粹。
-*   **🧠 智能焦点流**:
-    *   **自动暂停**: 采用“前台优先”策略，让浏览器焦点的视频拥有最高播放权重。一旦失去焦点（切换标签页或窗口），视频自动暂停，从不干扰你的当前操作。
-*   **🛡 交互体验优化**:
-    *   **禁用双击全屏**: 拦截播放器双击全屏行为，防止高频点击时的误触，让暂停/播放操作更加从容。
+<p align="center">
+  <img src="./assets/h5_setting.png" width="50%" alt="h5player 倍速控制截图" />
+</p>
+
+**Auto Pause - 智能后台视频暂停**
+
+当你在多个标签页查阅资料时，后台标签页里的视频声音往往会干扰你。
+
+- **使用场景**：启用此功能后，只要你切换到别的标签页或是浏览器窗口失去了焦点，当前正在播放的视频就会**自动暂停**；当你切回来时，它又能无缝继续播放。
+- **高度定制**：你可以选择“全局生效”，或是“仅在指定网站生效”（例如仅在 YouTube 和 Bilibili 开启，或是自定义填入其他网址）。当然，如果你需要让它后台挂机听歌，可以直接在插件面板里一键开启“允许后台继续播放”。
+
+<p align="center">
+  <img src="./assets/auto_pause.png" width="48%" alt="Auto Pause 设置截图" />
+</p>
+
+### 2. YouTube 专属增强
+
+<p align="center">
+  <img src="./assets/youtube.png" width="70%" alt="YouTube 设置截图" />
+</p>
+
+在 YouTube 的首页推荐或是订阅流里，总会混杂着需要付费成为频道会员才能观看的视频。
+
+- **使用场景 (智能过滤会员视频)**：如果你经常被推荐无法看的会员视频打扰，甚至点进去才发现无法观看，这个功能为你提供了三种净化模式：
+  - **全部屏蔽**：一刀切，让信息流里不再出现任何会员专属视频。
+  - **白名单模式 (仅允许)**：默认拦截所有会员视频，但放行你已经开通了会员的特定频道。
+  - **黑名单模式 (仅屏蔽)**：只屏蔽你特别指定的不想看到其会员视频的频道，其他频道的保留。
+- **操作体验**：我们设计了极简美观的频道标签输入框，你不仅可以快速添加，还能点击任意已有频道名称进行原地无缝编辑，并且完全原生支持响应式布局排版。
+
+<p align="center">
+  <img src="./assets/youtube_filter.png" width="70%" alt="YouTube 会员屏蔽设置截图" />
+</p>
+
+### 3. Bilibili 专属增强
+<p align="center">
+  <img src="./assets/bilibili.png" width="70%" alt="Bilibili 设置" />
+</p>
+针对国内最常用的弹幕视频网站做的额外适配与深度优化。
+
+- **使用场景一 (防误触)**：在 B 站看视频频繁点击暂停/播放时，容易触发原生的“双击全屏”，导致画面乱跳。开启**禁用双击全屏**后，你的连击将变得从容。并且支持禁止观看时按空格键导致整个网页大面积滚动。
+- **使用场景二 (CDN 网络切换)**：海外用户或部分网络环境下，B 站默认的 CDN 可能会卡顿。这里提供了直观且原生的 **CDN 切换器面板**，帮你一键对所有可用节点进行真实测速，以便你能够直观地手动切换到最高速的视频播放节点（同时支持番剧增强模式）。
+
+<p align="center">
+  <img src="./assets/bilibili_cdn.png" width="70%" alt="Bilibili CDN与增强功能截图" />
+</p>
+
+<details>
+  <summary>📸 点击展开查看：完整的 B 站增强设置面板长截图</summary>
+  <p align="center">
+    <img src="./assets/bilibili_cdnset.png" width="70%" alt="Bilibili CDN与增强功能设置长截图" />
+  </p>
+</details>
+
 ---
-*   **⚡ 极致性能**:
-    *   **极低内存占用**: 通过统一的 `InputManager` 管理全局事件，大幅减少事件监听器数量。
-    *   **智能休眠**: 结合 `VideoDetector` 与 Shadow DOM 穿透技术，核心逻辑仅在检测到视频时激活，平时完全静默。
-    *   **零延迟同步**: 基于 `BroadcastChannel` 实现跨标签页瞬间通信（如自动暂停其他标签页），无需读写硬盘，响应速度极快。
+
+## 🚀 极致性能说明
+
+VidBoost 在性能上毫不妥协：
+- **零延迟通信**：不依赖硬盘读写，通过最新的 `BroadcastChannel` 等机制进行瞬间跨标签页通信（例如一旦失去焦点立刻跨域触发暂停）。
+- **静默休眠技术**：基于 `VideoDetector` 与 Shadow DOM 判断机制，只在页面真正出现真正视频标签时才会激活相关逻辑，平时处于近乎零内存占用的静默休眠状态。
+- **极低内存占用**：通过统一的 `InputManager` 管理事件钩子，大幅减少浏览器层面的事件监听器堆叠。
 
 ## 🛠 技术栈
 
@@ -55,28 +97,20 @@ https://github.com/tunecc/video-auto-pause
 *   **UI 框架**: [Svelte](https://svelte.dev/) (无虚拟 DOM，编译为极小的原生 JS)
 *   **构建工具**: [Vite](https://vitejs.dev/) (秒级热更新，极致构建优化)
 *   **样式库**: [Tailwind CSS](https://tailwindcss.com/) (原子化 CSS，高效灵活)
-*   **浏览器 API**: Manifest V3 (面向未来的扩展架构)
+*   **浏览器 API**: Manifest V3 (面向未来的插件底层架构)
 
 ## 📥 安装指南
 
-已上架chrome插件商店，[点我直达](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
-
-### 📦 快速安装 (推荐)
-
-1.  **下载**: 前往 [Releases 页面](https://github.com/tunecc/VidBoost/releases) 下载最新版本的压缩包。
-2.  **解压**: 将压缩包解压到本地任意目录。
-3.  **安装**:
-    *   打开 Chrome/Edge 浏览器，输入 `chrome://extensions`。
-    *   开启右上角的 **开发者模式 (Developer mode)**。
-    *   点击 **加载已解压的扩展程序 (Load unpacked)**。
-    *   选择解压后的文件夹即可使用。
+### 官方商店下载 (推荐)
+已上架 Chrome 插件商店，享受云端自动更新：
+[👉 点我直达 Chrome Web Store 下载 VidBoost](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
 
 ### 💻 源码安装 (开发者模式)
 
 1.  **克隆仓库**:
     ```bash
-    git clone https://github.com/yourusername/VideoTools-Pro.git
-    cd VideoTools-Pro
+    git clone https://github.com/tunecc/VidBoost.git
+    cd VidBoost
     ```
 
 2.  **安装依赖**:
