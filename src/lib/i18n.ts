@@ -45,9 +45,9 @@ const strings = {
         yt_member_mode_allowlist: "Allowlist (Only allow specific channels)",
         yt_member_mode_allowlist_short: "Allowlist",
         yt_member_blocklist_label: "Blocked Channels",
-        yt_member_blocklist_placeholder: "@channelHandle\n@anotherChannel",
+        yt_member_blocklist_placeholder: "Add @channel...",
         yt_member_allowlist_label: "Allowed Channels",
-        yt_member_allowlist_placeholder: "@channelHandle\n@anotherChannel",
+        yt_member_allowlist_placeholder: "Add @channel...",
         footer: "v1.2",
 
         // H5 Settings
@@ -129,9 +129,9 @@ const strings = {
         yt_member_mode_allowlist: "白名单模式 (仅开放列表内的频道)",
         yt_member_mode_allowlist_short: "仅允许",
         yt_member_blocklist_label: "屏蔽频道列表",
-        yt_member_blocklist_placeholder: "@频道名\n@另一个频道",
+        yt_member_blocklist_placeholder: "添加 @频道名...",
         yt_member_allowlist_label: "允许频道列表",
-        yt_member_allowlist_placeholder: "@频道名\n@另一个频道",
+        yt_member_allowlist_placeholder: "添加 @频道名...",
         footer: "v1.2",
 
         // H5 Settings

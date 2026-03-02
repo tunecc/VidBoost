@@ -43,6 +43,11 @@
   let newAllowItem = "";
   let ytMemberOpen = false;
 
+  // Tag editing state
+  let editingTag: { mode: "block" | "allow"; index: number } | null = null;
+  let editingValue = "";
+  let tagInputRef: HTMLInputElement | null = null;
+
   // Bilibili CDN Config
   let bbCdnEnabled = DEFAULT_SETTINGS.bb_cdn.enabled;
   let bbCdnNode = DEFAULT_SETTINGS.bb_cdn.node;
@@ -100,6 +105,48 @@
         addTags(mode, paste);
       }
     }
+  }
+
+  function startEditingTag(
+    mode: "block" | "allow",
+    index: number,
+    currentValue: string,
+  ) {
+    editingTag = { mode, index };
+    editingValue = currentValue;
+    setTimeout(() => {
+      if (tagInputRef) {
+        tagInputRef.focus();
+        tagInputRef.select();
+      }
+    }, 10);
+  }
+
+  function finishEditingTag() {
+    if (!editingTag) return;
+    const trimmed = editingValue.trim();
+    const { mode, index } = editingTag;
+
+    if (!trimmed) {
+      // If empty, remove the tag
+      removeTag(mode, index);
+    } else {
+      // Update the tag
+      if (mode === "block") {
+        ytMemberBlocklist[index] = trimmed;
+        ytMemberBlocklist = [...ytMemberBlocklist];
+      } else {
+        ytMemberAllowlist[index] = trimmed;
+        ytMemberAllowlist = [...ytMemberAllowlist];
+      }
+    }
+    editingTag = null;
+    editingValue = "";
+  }
+
+  function cancelEditingTag() {
+    editingTag = null;
+    editingValue = "";
   }
 
   // Fast Pause Config
@@ -520,52 +567,79 @@
               </svg>
             </div>
             <div slot="content" class="space-y-3 px-1">
-              <!-- Compact Pill Control for Mode -->
+              <!-- Artwork-Level Elegance: Mode Slider -->
               <div
-                class="flex p-0.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5 w-fit mx-auto mt-1 mb-2 shadow-inner"
+                class="relative p-1 bg-black/5 dark:bg-black/20 rounded-[12px] border border-black/[0.04] dark:border-white/5 w-fit mx-auto mt-2 mb-3 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.2)] isolate"
               >
-                <!-- Mode: All -->
-                <button
-                  class="px-4 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
-                  'all'
-                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
-                  disabled={!globalEnabled || !ytMemberBlock}
-                  on:click={() =>
-                    globalEnabled &&
-                    ytMemberBlock &&
-                    (ytMemberBlockMode = "all")}
-                >
-                  {t("yt_member_mode_all_short") || "全部屏蔽"}
-                </button>
-                <!-- Mode: Blocklist -->
-                <button
-                  class="px-3 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
-                  'blocklist'
-                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
-                  disabled={!globalEnabled || !ytMemberBlock}
-                  on:click={() =>
-                    globalEnabled &&
-                    ytMemberBlock &&
-                    (ytMemberBlockMode = "blocklist")}
-                >
-                  {t("yt_member_mode_blocklist_short") || "仅屏蔽"}
-                </button>
-                <!-- Mode: Allowlist -->
-                <button
-                  class="px-3 py-1 text-[11px] font-medium rounded-full flex items-center gap-1.5 transition-all {ytMemberBlockMode ===
-                  'allowlist'
-                    ? 'bg-white dark:bg-white/10 text-red-500 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
-                  disabled={!globalEnabled || !ytMemberBlock}
-                  on:click={() =>
-                    globalEnabled &&
-                    ytMemberBlock &&
-                    (ytMemberBlockMode = "allowlist")}
-                >
-                  {t("yt_member_mode_allowlist_short") || "仅允许"}
-                </button>
+                <div class="relative flex items-center">
+                  <!-- Animated Thumb -->
+                  <div
+                    class="absolute left-0 top-0 bottom-0 w-1/3 rounded-[10px] bg-white dark:bg-[#32363F] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] border border-black/[0.04] dark:border-white/[0.05] z-0 pointer-events-none"
+                    style="transform: translateX(calc({ytMemberBlockMode ===
+                    'all'
+                      ? 0
+                      : ytMemberBlockMode === 'blocklist'
+                        ? 1
+                        : 2} * 100%)); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);"
+                  ></div>
+
+                  <!-- Mode: All -->
+                  <button
+                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
+                    'all'
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    disabled={!globalEnabled || !ytMemberBlock}
+                    on:click={() =>
+                      globalEnabled &&
+                      ytMemberBlock &&
+                      (ytMemberBlockMode = "all")}
+                  >
+                    <span
+                      class="active:scale-95 transition-transform duration-200 ease-out"
+                    >
+                      {t("yt_member_mode_all_short") || "全部屏蔽"}
+                    </span>
+                  </button>
+
+                  <!-- Mode: Blocklist -->
+                  <button
+                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
+                    'blocklist'
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    disabled={!globalEnabled || !ytMemberBlock}
+                    on:click={() =>
+                      globalEnabled &&
+                      ytMemberBlock &&
+                      (ytMemberBlockMode = "blocklist")}
+                  >
+                    <span
+                      class="active:scale-95 transition-transform duration-200 ease-out"
+                    >
+                      {t("yt_member_mode_blocklist_short") || "仅屏蔽"}
+                    </span>
+                  </button>
+
+                  <!-- Mode: Allowlist -->
+                  <button
+                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
+                    'allowlist'
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    disabled={!globalEnabled || !ytMemberBlock}
+                    on:click={() =>
+                      globalEnabled &&
+                      ytMemberBlock &&
+                      (ytMemberBlockMode = "allowlist")}
+                  >
+                    <span
+                      class="active:scale-95 transition-transform duration-200 ease-out"
+                    >
+                      {t("yt_member_mode_allowlist_short") || "仅允许"}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <!-- Blocklist Tags -->
@@ -589,46 +663,78 @@
                     0
                       ? 'items-start'
                       : 'items-center'}"
-                    on:click={() =>
-                      document.getElementById("blocklist-input")?.focus()}
+                    on:click={(e) => {
+                      if (e.target === e.currentTarget) {
+                        document.getElementById("blocklist-input")?.focus();
+                      }
+                    }}
                   >
                     {#each ytMemberBlocklist as item, i}
-                      <div
-                        class="flex items-center gap-1 bg-white dark:bg-white/10 border border-black/5 dark:border-white/5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] group hover:border-red-400/30 transition-colors"
-                      >
-                        <span class="truncate max-w-[120px] font-mono"
-                          >{item}</span
-                        >
+                      {#if editingTag?.mode === "block" && editingTag?.index === i}
+                        <div class="flex items-center max-w-full">
+                          <input
+                            bind:this={tagInputRef}
+                            class="bg-white dark:bg-black/40 border border-blue-400/50 dark:border-blue-400/50 outline-none text-xs font-mono text-gray-800 dark:text-white/90 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-400/20 shadow-inner"
+                            style="width: {Math.max(
+                              4,
+                              editingValue.length + 3,
+                            )}ch;"
+                            bind:value={editingValue}
+                            on:blur={finishEditingTag}
+                            on:keydown={(e) => {
+                              if (e.key === "Enter") finishEditingTag();
+                              if (e.key === "Escape") cancelEditingTag();
+                            }}
+                          />
+                        </div>
+                      {:else}
                         <button
-                          class="text-gray-300 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 focus:outline-none"
-                          on:click|stopPropagation={() => removeTag("block", i)}
+                          class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] group hover:bg-white hover:border-red-400/30 dark:hover:bg-black/40 dark:hover:border-red-400/30 transition-all focus:outline-none focus:ring-2 focus:ring-blue-400/30 cursor-pointer text-left max-w-full flex-shrink-0"
+                          on:click|stopPropagation={() =>
+                            startEditingTag("block", i, item)}
+                          title={item}
                         >
-                          <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            ><path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            /></svg
+                          <span
+                            class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors"
+                            >{item}</span
                           >
+                          <div
+                            class="text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 p-0.5 rounded-full"
+                            on:click|stopPropagation={() =>
+                              removeTag("block", i)}
+                            role="button"
+                            tabindex="0"
+                            aria-label="Remove tag"
+                            on:keydown={(e) =>
+                              e.key === "Enter" && removeTag("block", i)}
+                          >
+                            <svg
+                              class="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              stroke-width="2.5"
+                              ><path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18L18 6M6 6l12 12"
+                              /></svg
+                            >
+                          </div>
                         </button>
-                      </div>
+                      {/if}
                     {/each}
-                    <input
-                      id="blocklist-input"
-                      class="flex-1 min-w-[70px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium"
-                      placeholder={ytMemberBlocklist.length === 0
-                        ? t("yt_member_blocklist_placeholder")
-                        : "Add channel..."}
-                      disabled={!globalEnabled || !ytMemberBlock}
-                      bind:value={newBlockItem}
-                      on:keydown={(e) => handleTagKeyDown(e, "block")}
-                      on:paste={(e) => handleTagPaste(e, "block")}
-                    />
+                    {#if editingTag?.mode !== "block"}
+                      <input
+                        id="blocklist-input"
+                        class="flex-1 min-w-[30px] w-full bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                        placeholder={t("yt_member_blocklist_placeholder")}
+                        disabled={!globalEnabled || !ytMemberBlock}
+                        bind:value={newBlockItem}
+                        on:keydown={(e) => handleTagKeyDown(e, "block")}
+                        on:paste={(e) => handleTagPaste(e, "block")}
+                      />
+                    {/if}
                   </div>
                 </div>
               {/if}
@@ -654,46 +760,78 @@
                     0
                       ? 'items-start'
                       : 'items-center'}"
-                    on:click={() =>
-                      document.getElementById("allowlist-input")?.focus()}
+                    on:click={(e) => {
+                      if (e.target === e.currentTarget) {
+                        document.getElementById("allowlist-input")?.focus();
+                      }
+                    }}
                   >
                     {#each ytMemberAllowlist as item, i}
-                      <div
-                        class="flex items-center gap-1 bg-white dark:bg-white/10 border border-black/5 dark:border-white/5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] group hover:border-red-400/30 transition-colors"
-                      >
-                        <span class="truncate max-w-[120px] font-mono"
-                          >{item}</span
-                        >
+                      {#if editingTag?.mode === "allow" && editingTag?.index === i}
+                        <div class="flex items-center max-w-full">
+                          <input
+                            bind:this={tagInputRef}
+                            class="bg-white dark:bg-black/40 border border-blue-400/50 dark:border-blue-400/50 outline-none text-xs font-mono text-gray-800 dark:text-white/90 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-400/20 shadow-inner"
+                            style="width: {Math.max(
+                              4,
+                              editingValue.length + 3,
+                            )}ch;"
+                            bind:value={editingValue}
+                            on:blur={finishEditingTag}
+                            on:keydown={(e) => {
+                              if (e.key === "Enter") finishEditingTag();
+                              if (e.key === "Escape") cancelEditingTag();
+                            }}
+                          />
+                        </div>
+                      {:else}
                         <button
-                          class="text-gray-300 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 focus:outline-none"
-                          on:click|stopPropagation={() => removeTag("allow", i)}
+                          class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] group hover:bg-white hover:border-red-400/30 dark:hover:bg-black/40 dark:hover:border-red-400/30 transition-all focus:outline-none focus:ring-2 focus:ring-blue-400/30 cursor-pointer text-left max-w-full flex-shrink-0"
+                          on:click|stopPropagation={() =>
+                            startEditingTag("allow", i, item)}
+                          title={item}
                         >
-                          <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            ><path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            /></svg
+                          <span
+                            class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors"
+                            >{item}</span
                           >
+                          <div
+                            class="text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 p-0.5 rounded-full"
+                            on:click|stopPropagation={() =>
+                              removeTag("allow", i)}
+                            role="button"
+                            tabindex="0"
+                            aria-label="Remove tag"
+                            on:keydown={(e) =>
+                              e.key === "Enter" && removeTag("allow", i)}
+                          >
+                            <svg
+                              class="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              stroke-width="2.5"
+                              ><path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18L18 6M6 6l12 12"
+                              /></svg
+                            >
+                          </div>
                         </button>
-                      </div>
+                      {/if}
                     {/each}
-                    <input
-                      id="allowlist-input"
-                      class="flex-1 min-w-[70px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium"
-                      placeholder={ytMemberAllowlist.length === 0
-                        ? t("yt_member_allowlist_placeholder")
-                        : "Add channel..."}
-                      disabled={!globalEnabled || !ytMemberBlock}
-                      bind:value={newAllowItem}
-                      on:keydown={(e) => handleTagKeyDown(e, "allow")}
-                      on:paste={(e) => handleTagPaste(e, "allow")}
-                    />
+                    {#if editingTag?.mode !== "allow"}
+                      <input
+                        id="allowlist-input"
+                        class="flex-1 min-w-[30px] w-full bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                        placeholder={t("yt_member_allowlist_placeholder")}
+                        disabled={!globalEnabled || !ytMemberBlock}
+                        bind:value={newAllowItem}
+                        on:keydown={(e) => handleTagKeyDown(e, "allow")}
+                        on:paste={(e) => handleTagPaste(e, "allow")}
+                      />
+                    {/if}
                   </div>
                 </div>
               {/if}
