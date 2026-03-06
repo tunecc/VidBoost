@@ -13,6 +13,7 @@ type LastFocusedState = {
 type CrossTabStorageState = {
     last_focused_window?: LastFocusedState;
     last_play_window?: LastFocusedState;
+    last_user_focused_tab?: LastFocusedState;
 };
 
 /**
@@ -29,6 +30,7 @@ export class AutoPause implements Feature {
     // State
     private currentVideo: HTMLVideoElement | null = null;
     private lastFocused: LastFocusedState | null = null;
+    private lastUserFocused: LastFocusedState | null = null;
     private observerManager = new ObserverManager('auto-pause');
     private trackedContainer: HTMLElement | null = null;
     private siteContainerSelectors: string[] | null = null;
@@ -39,6 +41,7 @@ export class AutoPause implements Feature {
     private lastUserGestureAt = 0;
     private lastBackgroundAt = 0;
     private lastFocusClaimAt = 0;
+    private lastUserFocusRecordAt = 0;
     private popupFocusOverrideAt = 0;
 
     // Bound handler (for proper removal)
@@ -49,6 +52,7 @@ export class AutoPause implements Feature {
     // Config
     private readonly STORAGE_KEY = 'last_focused_window';
     private readonly PLAY_KEY = 'last_play_window';
+    private readonly USER_FOCUS_KEY = 'last_user_focused_tab';
     private readonly LAST_FOCUSED_TTL_MS = 10_000;
     private readonly PLAY_SIGNAL_TTL_MS = 5_000;
     private readonly SIGNAL_DEDUPE_TTL_MS = 500;
@@ -56,6 +60,7 @@ export class AutoPause implements Feature {
     private readonly PRIMARY_VIDEO_SWITCH_MARGIN = 15;
     private readonly USER_GESTURE_TTL_MS = 1_500;
     private readonly FOCUS_CLAIM_DEBOUNCE_MS = 500;
+    private readonly USER_FOCUS_DEBOUNCE_MS = 300;
     private readonly BACKGROUND_BOOTSTRAP_WINDOW_MS = 30_000;
     private readonly POPUP_FOCUS_OVERRIDE_TTL_MS = 3_000;
     private readonly OBSERVER_SCOPE = 'site-tracking';
@@ -96,9 +101,9 @@ export class AutoPause implements Feature {
             }
         });
 
-        // 2. Storage Listener (for lastFocused/lastPlay state sync)
+        // 2. Storage Listener (for lastFocused/lastPlay/lastUserFocused state sync)
         onStorageKeysChanged<CrossTabStorageState>(
-            [this.STORAGE_KEY, this.PLAY_KEY],
+            [this.STORAGE_KEY, this.PLAY_KEY, this.USER_FOCUS_KEY],
             (changes) => {
                 if (Object.prototype.hasOwnProperty.call(changes, this.STORAGE_KEY)) {
                     this.lastFocused = this.parseSyncState(changes[this.STORAGE_KEY]);
@@ -107,10 +112,11 @@ export class AutoPause implements Feature {
                         this.lastFocused &&
                         this.lastFocused.id !== this.sync.myId
                     ) {
-                        // Focus ownership change is also an arbitration signal.
-                        // This helps resolve races when a hidden tab temporarily claims ownership.
                         this.handleRemotePlay();
                     }
+                }
+                if (Object.prototype.hasOwnProperty.call(changes, this.USER_FOCUS_KEY)) {
+                    this.lastUserFocused = this.parseSyncState(changes[this.USER_FOCUS_KEY]);
                 }
                 if (!Object.prototype.hasOwnProperty.call(changes, this.PLAY_KEY)) return;
                 const payload = this.parseSyncState(changes[this.PLAY_KEY]);
@@ -120,9 +126,10 @@ export class AutoPause implements Feature {
             }
         );
 
-        // Initial fetch
-        chrome.storage.local.get([this.STORAGE_KEY, this.PLAY_KEY], (res) => {
+        // Initial fetch (session storage — cleared on browser restart)
+        chrome.storage.session.get([this.STORAGE_KEY, this.PLAY_KEY, this.USER_FOCUS_KEY], (res) => {
             this.lastFocused = this.parseSyncState(res[this.STORAGE_KEY]);
+            this.lastUserFocused = this.parseSyncState(res[this.USER_FOCUS_KEY]);
             const lastPlay = this.parseSyncState(res[this.PLAY_KEY]);
             if (lastPlay) this.handleIncomingPlaySignal(lastPlay);
         });
@@ -202,11 +209,13 @@ export class AutoPause implements Feature {
         }
         this.initFocusListeners();
         this.initSiteSpecificTracking();
-        // Generic detection is a safety net before main player container is identified.
         this.updateGlobalCaptureListeners();
 
-        if (document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
-            this.claimFocus();
+        if (document.hasFocus()) {
+            this.recordUserFocus();
+            if (this.shouldClaimFocusFromInteraction()) {
+                this.claimFocus();
+            }
         }
     }
 
@@ -229,6 +238,32 @@ export class AutoPause implements Feature {
         });
         if (allowedByBuiltin) return true;
         return this.customSites.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    }
+
+    // --- User Focus Intent Tracking ---
+
+    private recordUserFocus(): void {
+        const now = Date.now();
+        if (now - this.lastUserFocusRecordAt < this.USER_FOCUS_DEBOUNCE_MS) return;
+        this.lastUserFocusRecordAt = now;
+        const newState: LastFocusedState = {
+            id: this.sync.myId,
+            timestamp: now
+        };
+        this.lastUserFocused = newState;
+        chrome.storage.session.set({ [this.USER_FOCUS_KEY]: newState });
+        chrome.runtime.sendMessage({ type: 'VB_USER_FOCUSED' }).catch(() => {});
+    }
+
+    private isLastUserFocusedTab(): boolean {
+        if (!this.lastUserFocused) return false;
+        return this.lastUserFocused.id === this.sync.myId;
+    }
+
+    // --- PiP Detection ---
+
+    private isCurrentVideoPiP(): boolean {
+        return !!this.currentVideo && document.pictureInPictureElement === this.currentVideo;
     }
 
     // --- Generic Video Detection ---
@@ -588,7 +623,7 @@ export class AutoPause implements Feature {
         if (!this.allowBackgroundPlayback) {
             const hidden = document.visibilityState !== 'visible';
             const unfocused = !document.hasFocus();
-            if (hidden || (unfocused && !this.isPopupFocusOverrideActive())) {
+            if ((hidden || (unfocused && !this.isPopupFocusOverrideActive())) && !this.isCurrentVideoPiP()) {
                 this.currentVideo.pause();
                 return;
             }
@@ -599,9 +634,7 @@ export class AutoPause implements Feature {
         }
 
         // Background playback mode:
-        // only focused tab or the current owner may continue.
-        // Bootstrap is allowed for a short grace window after tab goes background,
-        // so refresh/loading delays can still continue playback as expected.
+        // Priority order: hasFocus > lastFocusedWindow > lastUserFocusedTab > bootstrap
         if (!this.shouldArbitrateCurrentVideo()) return;
         if (document.hasFocus()) {
             this.claimFocus();
@@ -609,6 +642,11 @@ export class AutoPause implements Feature {
             return;
         }
         if (this.isLastFocusedWindow(true)) {
+            this.notifyOthers();
+            return;
+        }
+        if (this.isLastUserFocusedTab()) {
+            this.claimFocus();
             this.notifyOthers();
             return;
         }
@@ -623,6 +661,7 @@ export class AutoPause implements Feature {
 
     private handleRemotePlay() {
         if (!this.enabled) return;
+        if (this.isCurrentVideoPiP()) return;
 
         // Foreground has priority: focused + visible tab keeps control.
         if (document.visibilityState === 'visible' && document.hasFocus()) {
@@ -669,6 +708,8 @@ export class AutoPause implements Feature {
         if (!this.enabled || !this.currentVideo) return;
         if (this.isActivelyPlaying(this.currentVideo)) return;
         this.releaseFocusOwnershipIfOwned();
+        this.clearPlaySignalIfOwned();
+        chrome.runtime.sendMessage({ type: 'VB_PLAYBACK_STATE', state: 'stopped' }).catch(() => {});
     }
 
     // --- Helpers ---
@@ -690,15 +731,24 @@ export class AutoPause implements Feature {
         };
 
         this.lastFocusClaimAt = now;
-        this.lastFocused = newState; // Optimistic local update
-        chrome.storage.local.set({ [this.STORAGE_KEY]: newState });
+        this.lastFocused = newState;
+        chrome.storage.session.set({ [this.STORAGE_KEY]: newState });
     }
 
     private releaseFocusOwnershipIfOwned() {
         if (!this.lastFocused) return;
         if (this.lastFocused.id !== this.sync.myId) return;
         this.lastFocused = null;
-        chrome.storage.local.remove(this.STORAGE_KEY);
+        chrome.storage.session.remove(this.STORAGE_KEY);
+    }
+
+    private clearPlaySignalIfOwned(): void {
+        chrome.storage.session.get(this.PLAY_KEY, (res) => {
+            const state = this.parseSyncState(res[this.PLAY_KEY]);
+            if (state && state.id === this.sync.myId) {
+                chrome.storage.session.remove(this.PLAY_KEY);
+            }
+        });
     }
 
     private isLastFocusedWindow(ignoreFresh = false): boolean {
@@ -710,8 +760,12 @@ export class AutoPause implements Feature {
 
     private canBootstrapBackgroundOwnership(): boolean {
         if (this.lastBackgroundAt <= 0) return false;
-        const age = Date.now() - this.lastBackgroundAt;
-        return age >= 0 && age <= this.BACKGROUND_BOOTSTRAP_WINDOW_MS;
+        // No tab currently owns playback focus → allow (first to play wins)
+        if (!this.lastFocused) return true;
+        // We already own focus → allow
+        if (this.lastFocused.id === this.sync.myId) return true;
+        // Another tab owns focus → deny bootstrap to prevent race
+        return false;
     }
 
     private isPopupFocusOverrideActive(): boolean {
@@ -724,13 +778,14 @@ export class AutoPause implements Feature {
         if (!this.allowBackgroundPlayback) return;
         if (document.hasFocus()) return;
         if (!this.canBootstrapBackgroundOwnership()) return;
+        // Time-limit auto-play of paused videos to avoid surprising the user
+        const age = Date.now() - this.lastBackgroundAt;
+        if (age > this.BACKGROUND_BOOTSTRAP_WINDOW_MS) return;
         if (!video.paused) return;
 
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch(() => {
-                // Browser autoplay policy may reject; ignore silently.
-            });
+            playPromise.catch(() => {});
         }
     }
 
@@ -740,7 +795,7 @@ export class AutoPause implements Feature {
             timestamp: Date.now()
         });
         // Storage fallback: ensures cross-tab sync even if runtime message is missed
-        chrome.storage.local.set({
+        chrome.storage.session.set({
             [this.PLAY_KEY]: {
                 id: this.sync.myId,
                 timestamp: Date.now()
@@ -829,8 +884,10 @@ export class AutoPause implements Feature {
     }
 
     private handleWindowFocus = () => {
-        if (!this.shouldClaimFocusFromInteraction()) return;
-        this.claimFocus();
+        this.recordUserFocus();
+        if (this.shouldClaimFocusFromInteraction()) {
+            this.claimFocus();
+        }
     }
 
     private handleDocumentClick = (event: MouseEvent) => {
@@ -863,13 +920,19 @@ export class AutoPause implements Feature {
                 }
                 return;
             }
-            if (document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
-                this.claimFocus();
+            if (document.hasFocus()) {
+                this.recordUserFocus();
+                if (this.shouldClaimFocusFromInteraction()) {
+                    this.claimFocus();
+                }
             }
             return;
         }
-        if (document.visibilityState === 'visible' && document.hasFocus() && this.shouldClaimFocusFromInteraction()) {
-            this.claimFocus();
+        if (document.visibilityState === 'visible' && document.hasFocus()) {
+            this.recordUserFocus();
+            if (this.shouldClaimFocusFromInteraction()) {
+                this.claimFocus();
+            }
         }
         this.pauseWhenBackgroundOrUnfocused();
     }
@@ -877,6 +940,7 @@ export class AutoPause implements Feature {
     private pauseWhenBackgroundOrUnfocused() {
         if (this.allowBackgroundPlayback) return;
         if (!this.enabled || !this.currentVideo || this.currentVideo.paused) return;
+        if (this.isCurrentVideoPiP()) return;
         if (document.visibilityState === 'hidden') {
             this.currentVideo.pause();
         }
