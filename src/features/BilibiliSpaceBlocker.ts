@@ -57,6 +57,10 @@ export class BilibiliSpaceBlocker implements Feature {
 
     unmount() {
         this.enabled = false;
+        if (this.listenersRegistered) {
+            this.input.off('bb-block-space');
+            this.listenersRegistered = false;
+        }
     }
 
     updateSettings(_settings: unknown) { }

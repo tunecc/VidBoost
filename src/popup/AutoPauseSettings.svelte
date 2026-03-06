@@ -88,7 +88,7 @@
         <button
             class="p-2 -ml-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white group"
             on:click={() => dispatch("back")}
-            title="Back"
+            title={t("back")}
         >
             <svg
                 class="w-5 h-5 transform group-hover:-translate-x-0.5 transition-transform"

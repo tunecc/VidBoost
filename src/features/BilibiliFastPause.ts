@@ -85,6 +85,12 @@ export class BilibiliFastPause implements Feature {
 
     unmount() {
         this.enabled = false;
+        if (this.listenersRegistered) {
+            this.input.off('bnd-prevent');
+            this.input.off('bnd-fast-pause');
+            this.input.off('bnd-block-click');
+            this.listenersRegistered = false;
+        }
     }
 
     updateSettings(_settings: unknown) { }

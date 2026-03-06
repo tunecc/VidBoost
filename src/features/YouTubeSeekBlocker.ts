@@ -11,8 +11,6 @@ export class YouTubeSeekBlocker implements Feature {
     private blockNativeSeek = true;
 
     constructor() {
-        this.registerShortcuts();
-
         getSettings(['yt_config', 'h5_config']).then((res) => {
             if (res.yt_config) {
                 this.blockNativeSeek = res.yt_config.blockNativeSeek ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
@@ -32,10 +30,14 @@ export class YouTubeSeekBlocker implements Feature {
 
     mount() {
         this.enabled = true;
+        this.registerShortcuts();
     }
 
     unmount() {
         this.enabled = false;
+        for (let i = 0; i <= 9; i++) {
+            this.input.off(`yt-block-${i}`);
+        }
     }
 
     updateSettings(_settings: unknown) { }

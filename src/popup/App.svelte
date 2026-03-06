@@ -20,6 +20,9 @@
   import { CDN_NODES } from "../lib/bilibiliCdnData";
   import type { BilibiliCdnConfig } from "../lib/settings";
 
+  const manifestVersion =
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.2";
+
   // -- State --
   let loaded = false;
 
@@ -616,7 +619,7 @@
                     <span
                       class="active:scale-95 transition-transform duration-200 ease-out"
                     >
-                      {t("yt_member_mode_all_short") || "全部屏蔽"}
+                      {t("yt_member_mode_all_short")}
                     </span>
                   </button>
 
@@ -635,7 +638,7 @@
                     <span
                       class="active:scale-95 transition-transform duration-200 ease-out"
                     >
-                      {t("yt_member_mode_blocklist_short") || "仅屏蔽"}
+                      {t("yt_member_mode_blocklist_short")}
                     </span>
                   </button>
 
@@ -654,7 +657,7 @@
                     <span
                       class="active:scale-95 transition-transform duration-200 ease-out"
                     >
-                      {t("yt_member_mode_allowlist_short") || "仅允许"}
+                      {t("yt_member_mode_allowlist_short")}
                     </span>
                   </button>
                 </div>
@@ -722,7 +725,7 @@
                               removeTag("block", i)}
                             role="button"
                             tabindex="0"
-                            aria-label="Remove tag"
+                            aria-label={t("remove_tag")}
                             on:keydown={(e) =>
                               e.key === "Enter" && removeTag("block", i)}
                           >
@@ -819,7 +822,7 @@
                               removeTag("allow", i)}
                             role="button"
                             tabindex="0"
-                            aria-label="Remove tag"
+                            aria-label={t("remove_tag")}
                             on:keydown={(e) =>
                               e.key === "Enter" && removeTag("allow", i)}
                           >
@@ -1020,7 +1023,7 @@
           rel="noopener noreferrer"
           class="text-[10px] text-gray-400 dark:text-white/30 font-medium tracking-wide hover:text-gray-600 dark:hover:text-white/50 transition-colors cursor-pointer"
         >
-          {t("footer")}
+          v{manifestVersion}
         </a>
 
         <!-- Right-aligned Compact Language Selector (Custom Glass Dropdown) -->
@@ -1064,7 +1067,7 @@
                     showLangMenu = false;
                   }}
                 >
-                  <span class="relative z-10">Auto</span>
+                  <span class="relative z-10">{t("lang_auto")}</span>
                 </button>
                 <button
                   class="text-[12px] py-1 px-2 text-center rounded-md transition-colors whitespace-nowrap {language ===
@@ -1076,7 +1079,7 @@
                     showLangMenu = false;
                   }}
                 >
-                  <span class="relative z-10">English</span>
+                  <span class="relative z-10">{t("lang_en")}</span>
                 </button>
                 <button
                   class="text-[12px] py-1 px-2 text-center rounded-md transition-colors whitespace-nowrap {language ===
@@ -1088,7 +1091,7 @@
                     showLangMenu = false;
                   }}
                 >
-                  <span class="relative z-10">简体中文</span>
+                  <span class="relative z-10">{t("lang_zh")}</span>
                 </button>
               </div>
 
@@ -1096,7 +1099,7 @@
               <button
                 type="button"
                 class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
-                aria-label="Close language menu"
+                aria-label={t("close_language_menu")}
                 on:click={() => (showLangMenu = false)}
               ></button>
             {/if}

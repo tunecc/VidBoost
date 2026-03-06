@@ -35,10 +35,14 @@ export class H5Enhancer implements Feature {
     private seekAccumulator = 0;
     private seekResetTimer: number | null = null;
     private lastSpeed = 1.5; // Default toggle speed
+    private readonly listenerIds = [
+        'h5-speed-1', 'h5-speed-2', 'h5-speed-3',
+        'h5-speed-4', 'h5-speed-5', 'h5-speed-6',
+        'h5-speed-up', 'h5-speed-down', 'h5-speed-reset',
+        'h5-fullscreen', 'h5-seek-forward', 'h5-seek-back'
+    ];
 
     constructor() {
-        this.registerShortcuts();
-
         // Initial load
         getSettings(['h5_config']).then((res) => {
             if (res.h5_config) this.updateLocalConfig(res.h5_config);
@@ -54,10 +58,17 @@ export class H5Enhancer implements Feature {
 
     mount() {
         this.enabled = true;
+        this.registerShortcuts();
     }
 
     unmount() {
         this.enabled = false;
+        this.listenerIds.forEach(id => this.input.off(id));
+        if (this.seekResetTimer) {
+            clearTimeout(this.seekResetTimer);
+            this.seekResetTimer = null;
+        }
+        this.seekAccumulator = 0;
     }
 
     updateSettings(_settings: unknown) { }

@@ -137,7 +137,7 @@ export class InputManager {
         const realTarget = (path[0] || e.target) as EventTarget;
 
         const interactive = type === 'keydown' && this.isInteractive(realTarget, path as EventTarget[]);
-        if (type === 'keydown') {
+        if (import.meta.env.DEV && type === 'keydown') {
             try {
                 const ke = e as KeyboardEvent;
                 (

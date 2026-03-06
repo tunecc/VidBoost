@@ -122,6 +122,12 @@ export class YouTubeFastPause implements Feature {
 
     unmount() {
         this.enabled = false;
+        if (this.listenersRegistered) {
+            this.input.off('ytfp-prevent');
+            this.input.off('ytfp-fast-pause');
+            this.input.off('ytfp-block-click');
+            this.listenersRegistered = false;
+        }
     }
 
     updateSettings(_settings: unknown) { }

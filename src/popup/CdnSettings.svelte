@@ -64,7 +64,7 @@
             <button
                 class="p-2 -ml-2 mt-[-2px] rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white group"
                 on:click={goBack}
-                title="Back"
+                title={t("back")}
             >
                 <svg
                     class="w-5 h-5 transform group-hover:-translate-x-0.5 transition-transform"
@@ -102,7 +102,7 @@
             disabled={!globalEnabled || !bbCdnEnabled}
             on:click={startSpeedTest}
         >
-            {bbCdnTesting ? "Stop Test" : t("bb_cdn_speed_test")}
+            {bbCdnTesting ? t("stop_test") : t("bb_cdn_speed_test")}
         </button>
     </div>
 
@@ -130,7 +130,7 @@
                 <span
                     class="text-[10px] text-gray-500 dark:text-white/40 leading-tight mt-[2px]"
                 >
-                    Auto (System Default)
+                    {t("auto_system_default")}
                 </span>
             </div>
             <div class="flex items-center gap-2 shrink-0">

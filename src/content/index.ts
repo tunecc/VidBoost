@@ -38,6 +38,7 @@ type ContentDebugState = {
 };
 
 function publishDebug(settings: ContentDebugState['settings']) {
+    if (!import.meta.env.DEV) return;
     try {
         (window as Window & { __VIDBOOST_DEBUG__?: ContentDebugState }).__VIDBOOST_DEBUG__ = {
             mounted: [...mountedState],

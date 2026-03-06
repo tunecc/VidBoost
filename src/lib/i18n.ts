@@ -48,7 +48,11 @@ const strings = {
         yt_member_blocklist_placeholder: "Add @channel...",
         yt_member_allowlist_label: "Allowed Channels",
         yt_member_allowlist_placeholder: "Add @channel...",
-        footer: "v1.2",
+        back: "Back",
+        stop_test: "Stop Test",
+        remove_tag: "Remove",
+        close_language_menu: "Close language menu",
+        auto_system_default: "Auto (System Default)",
 
         // H5 Settings
         settings_title: "h5player Settings",
@@ -132,7 +136,11 @@ const strings = {
         yt_member_blocklist_placeholder: "添加 @频道名...",
         yt_member_allowlist_label: "允许频道列表",
         yt_member_allowlist_placeholder: "添加 @频道名...",
-        footer: "v1.2",
+        back: "返回",
+        stop_test: "停止测速",
+        remove_tag: "移除",
+        close_language_menu: "关闭语言菜单",
+        auto_system_default: "自动（跟随系统）",
 
         // H5 Settings
         settings_title: "h5player 设置",

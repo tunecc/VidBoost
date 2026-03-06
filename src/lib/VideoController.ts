@@ -161,11 +161,14 @@ export class VideoController {
         this.onVideoFound.forEach(cb => cb(video));
     }
 
-    public subscribe(callback: (video: HTMLVideoElement) => void) {
+    public subscribe(callback: (video: HTMLVideoElement) => void): () => void {
         this.onVideoFound.push(callback);
         if (this.currentVideo) {
             callback(this.currentVideo);
         }
+        return () => {
+            this.onVideoFound = this.onVideoFound.filter(cb => cb !== callback);
+        };
     }
 
     /**
