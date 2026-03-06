@@ -15,11 +15,12 @@ import {
     type Settings
 } from '../lib/settings-content';
 
+const autoPause = new AutoPause();
 const bilibiliCdn = new BilibiliCDN();
 
 const features = [
     new H5Enhancer(),
-    new AutoPause(),
+    autoPause,
     new BilibiliFastPause(),
     new YouTubeSeekBlocker(),
     new YouTubeFastPause(),
@@ -101,7 +102,10 @@ onSettingsChanged(() => {
 
 // Speed test relay: popup → content script → page script → results → storage
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'VB_CDN_SPEED_TEST' && Array.isArray(message.nodes)) {
+    if (message?.type === 'VB_POPUP_FOCUS_OVERRIDE') {
+        autoPause.setPopupFocusOverride(message?.active === true);
+        sendResponse({ ok: true });
+    } else if (message?.type === 'VB_CDN_SPEED_TEST' && Array.isArray(message.nodes)) {
         const results: Record<string, { speed: string; error: boolean }> = {};
         bilibiliCdn.runSpeedTest(
             message.nodes.map((n: { id: string; host: string }) => ({ id: n.id, label: '', host: n.host })),

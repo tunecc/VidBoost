@@ -37,6 +37,9 @@ export class AutoPause implements Feature {
     private currentVideoScore = Number.NEGATIVE_INFINITY;
     private lastUserGestureVideo: HTMLVideoElement | null = null;
     private lastUserGestureAt = 0;
+    private lastBackgroundAt = 0;
+    private lastFocusClaimAt = 0;
+    private popupFocusOverrideAt = 0;
 
     // Bound handler (for proper removal)
     private boundOnPlay: ((this: HTMLVideoElement) => void) | null = null;
@@ -52,6 +55,9 @@ export class AutoPause implements Feature {
     private readonly PRIMARY_VIDEO_SCORE_THRESHOLD = 40;
     private readonly PRIMARY_VIDEO_SWITCH_MARGIN = 15;
     private readonly USER_GESTURE_TTL_MS = 1_500;
+    private readonly FOCUS_CLAIM_DEBOUNCE_MS = 500;
+    private readonly BACKGROUND_BOOTSTRAP_WINDOW_MS = 30_000;
+    private readonly POPUP_FOCUS_OVERRIDE_TTL_MS = 3_000;
     private readonly OBSERVER_SCOPE = 'site-tracking';
     private readonly ROOT_OBSERVER_NAME = 'root';
     private readonly CONTAINER_OBSERVER_NAME = 'container';
@@ -96,6 +102,15 @@ export class AutoPause implements Feature {
             (changes) => {
                 if (Object.prototype.hasOwnProperty.call(changes, this.STORAGE_KEY)) {
                     this.lastFocused = this.parseSyncState(changes[this.STORAGE_KEY]);
+                    if (
+                        this.allowBackgroundPlayback &&
+                        this.lastFocused &&
+                        this.lastFocused.id !== this.sync.myId
+                    ) {
+                        // Focus ownership change is also an arbitration signal.
+                        // This helps resolve races when a hidden tab temporarily claims ownership.
+                        this.handleRemotePlay();
+                    }
                 }
                 if (!Object.prototype.hasOwnProperty.call(changes, this.PLAY_KEY)) return;
                 const payload = this.parseSyncState(changes[this.PLAY_KEY]);
@@ -156,7 +171,19 @@ export class AutoPause implements Feature {
         this.stop();
     }
 
-    updateSettings(_settings: unknown) { }
+    updateSettings(settings: unknown) {
+        const payload = settings as { popupFocusOverride?: boolean } | null;
+        if (!payload || typeof payload.popupFocusOverride !== 'boolean') return;
+        this.setPopupFocusOverride(payload.popupFocusOverride);
+    }
+
+    public setPopupFocusOverride(active: boolean): void {
+        if (!active) {
+            this.popupFocusOverrideAt = 0;
+            return;
+        }
+        this.popupFocusOverrideAt = Date.now();
+    }
 
     private applyPolicy() {
         if (!this.enabled) return;
@@ -170,6 +197,9 @@ export class AutoPause implements Feature {
 
     private start() {
         this.active = true;
+        if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+            this.lastBackgroundAt = Date.now();
+        }
         this.initFocusListeners();
         this.initSiteSpecificTracking();
         // Generic detection is a safety net before main player container is identified.
@@ -380,6 +410,7 @@ export class AutoPause implements Feature {
         this.currentVideo.addEventListener('volumechange', this.boundOnVolumeChange);
         this.currentVideo.addEventListener('pause', this.boundOnPauseOrEnded);
         this.currentVideo.addEventListener('ended', this.boundOnPauseOrEnded);
+        this.tryBootstrapBackgroundPlay(this.currentVideo);
         if (triggerPlay && this.isActivelyPlaying(this.currentVideo)) this.onPlay();
         return true;
     }
@@ -492,17 +523,35 @@ export class AutoPause implements Feature {
         return this.lastUserGestureVideo === video;
     }
 
+    private markUserGestureVideo(video: HTMLVideoElement): void {
+        this.lastUserGestureVideo = video;
+        this.lastUserGestureAt = Date.now();
+    }
+
     private captureUserGestureVideo(event: MouseEvent): void {
         const target = event.target as Element | null;
         const directTarget = target?.closest('video');
         const directVideo = directTarget instanceof HTMLVideoElement ? directTarget : null;
         if (directVideo) {
-            this.lastUserGestureVideo = directVideo;
-            this.lastUserGestureAt = Date.now();
+            this.markUserGestureVideo(directVideo);
             return;
         }
 
-        const videos = Array.from(document.querySelectorAll('video'));
+        if (
+            target &&
+            this.currentVideo &&
+            this.currentVideo.isConnected &&
+            this.trackedContainer &&
+            this.trackedContainer.contains(target)
+        ) {
+            this.markUserGestureVideo(this.currentVideo);
+            return;
+        }
+
+        const scanRoot = this.trackedContainer && this.trackedContainer.isConnected
+            ? this.trackedContainer
+            : document;
+        const videos = Array.from(scanRoot.querySelectorAll('video'));
         let bestVideo: HTMLVideoElement | null = null;
         let bestArea = 0;
         for (const video of videos) {
@@ -517,8 +566,7 @@ export class AutoPause implements Feature {
             }
         }
         if (bestVideo) {
-            this.lastUserGestureVideo = bestVideo;
-            this.lastUserGestureAt = Date.now();
+            this.markUserGestureVideo(bestVideo);
         }
     }
 
@@ -538,7 +586,9 @@ export class AutoPause implements Feature {
 
         // Strict mode: background/non-focused playback is not allowed.
         if (!this.allowBackgroundPlayback) {
-            if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+            const hidden = document.visibilityState !== 'visible';
+            const unfocused = !document.hasFocus();
+            if (hidden || (unfocused && !this.isPopupFocusOverrideActive())) {
                 this.currentVideo.pause();
                 return;
             }
@@ -550,13 +600,10 @@ export class AutoPause implements Feature {
 
         // Background playback mode:
         // only focused tab or the current owner may continue.
+        // Bootstrap is allowed for a short grace window after tab goes background,
+        // so refresh/loading delays can still continue playback as expected.
         if (!this.shouldArbitrateCurrentVideo()) return;
         if (document.hasFocus()) {
-            this.claimFocus();
-            this.notifyOthers();
-            return;
-        }
-        if (!this.lastFocused) {
             this.claimFocus();
             this.notifyOthers();
             return;
@@ -565,7 +612,7 @@ export class AutoPause implements Feature {
             this.notifyOthers();
             return;
         }
-        if (!this.hasFreshFocusOwner()) {
+        if (this.canBootstrapBackgroundOwnership()) {
             this.claimFocus();
             this.notifyOthers();
             return;
@@ -628,12 +675,21 @@ export class AutoPause implements Feature {
 
     private claimFocus = () => {
         if (!this.enabled) return;
+        const now = Date.now();
+        if (
+            this.lastFocused &&
+            this.lastFocused.id === this.sync.myId &&
+            now - this.lastFocusClaimAt < this.FOCUS_CLAIM_DEBOUNCE_MS
+        ) {
+            return;
+        }
 
         const newState: LastFocusedState = {
             id: this.sync.myId,
-            timestamp: Date.now()
+            timestamp: now
         };
 
+        this.lastFocusClaimAt = now;
         this.lastFocused = newState; // Optimistic local update
         chrome.storage.local.set({ [this.STORAGE_KEY]: newState });
     }
@@ -652,9 +708,30 @@ export class AutoPause implements Feature {
         return true;
     }
 
-    private hasFreshFocusOwner(): boolean {
-        if (!this.lastFocused) return false;
-        return this.isFreshFocusedState(this.lastFocused.timestamp);
+    private canBootstrapBackgroundOwnership(): boolean {
+        if (this.lastBackgroundAt <= 0) return false;
+        const age = Date.now() - this.lastBackgroundAt;
+        return age >= 0 && age <= this.BACKGROUND_BOOTSTRAP_WINDOW_MS;
+    }
+
+    private isPopupFocusOverrideActive(): boolean {
+        if (this.popupFocusOverrideAt <= 0) return false;
+        const age = Date.now() - this.popupFocusOverrideAt;
+        return age >= 0 && age <= this.POPUP_FOCUS_OVERRIDE_TTL_MS;
+    }
+
+    private tryBootstrapBackgroundPlay(video: HTMLVideoElement): void {
+        if (!this.allowBackgroundPlayback) return;
+        if (document.hasFocus()) return;
+        if (!this.canBootstrapBackgroundOwnership()) return;
+        if (!video.paused) return;
+
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {
+                // Browser autoplay policy may reject; ignore silently.
+            });
+        }
     }
 
     private notifyOthers() {
@@ -762,7 +839,10 @@ export class AutoPause implements Feature {
     }
 
     private handleWindowBlur = () => {
-        if (this.isPlayEventArbitrationMode()) return;
+        if (this.isPlayEventArbitrationMode()) {
+            this.lastBackgroundAt = Date.now();
+            return;
+        }
         // Clicking extension popup can blur the page while it is still visible.
         // Avoid pausing on blur-only transitions.
         if (document.visibilityState === 'hidden') {
@@ -777,6 +857,7 @@ export class AutoPause implements Feature {
     private handleVisibilityChange = () => {
         if (this.isPlayEventArbitrationMode()) {
             if (document.visibilityState === 'hidden') {
+                this.lastBackgroundAt = Date.now();
                 if (!this.currentVideo || !this.isActivelyPlaying(this.currentVideo)) {
                     this.releaseFocusOwnershipIfOwned();
                 }

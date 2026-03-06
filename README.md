@@ -42,6 +42,15 @@
   <img src="./assets/auto_pause.png" width="48%" alt="Auto Pause 设置截图" />
 </p>
 
+**Fast Pause - 禁用双击全屏与极速暂停**
+<p align="center">
+  <img src="./assets/fastPause.png" width="60%" alt="Fast Pausee 设置截图" />
+</p>
+在 YouTube / Bilibili 看视频时，频繁点击暂停/播放很容易误触原生双击全屏，或者遇到原生点击响应偏慢的问题。
+
+- **使用场景**：开启后会拦截视频区域的双击全屏行为，并把暂停/播放响应前置到按下鼠标瞬间，让高频连击更稳定。
+- **可控范围**：该功能位于 **通用 (General)**，支持总开关，同时可分别对 **YouTube** 与 **Bilibili** 单独启用或关闭。
+
 ### 2. YouTube 专属增强
 
 <p align="center">

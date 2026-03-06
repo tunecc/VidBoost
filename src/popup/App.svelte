@@ -194,7 +194,24 @@
     }, SAVE_DEBOUNCE_MS);
   }
 
+  function notifyPopupFocusOverride(active: boolean) {
+    if (!globalThis.chrome?.tabs?.query || !globalThis.chrome?.tabs?.sendMessage) return;
+    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tabId = tabs[0]?.id;
+      if (!tabId) return;
+      globalThis.chrome.tabs
+        .sendMessage(tabId, {
+          type: "VB_POPUP_FOCUS_OVERRIDE",
+          active,
+        })
+        .catch(() => {
+          // Ignore tabs without content script injection.
+        });
+    });
+  }
+
   onMount(() => {
+    notifyPopupFocusOverride(true);
     getSettings([...POPUP_SETTINGS_KEYS]).then((res) => {
       globalEnabled = res.enabled;
       h5Enabled = res.h5_enabled;
@@ -266,6 +283,7 @@
   }
 
   onDestroy(() => {
+    notifyPopupFocusOverride(false);
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
