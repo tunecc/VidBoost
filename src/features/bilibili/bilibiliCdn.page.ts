@@ -61,6 +61,7 @@ type BridgeToPageMessage = {
     // --- Helpers ---
 
     const IGNORE_HOST_RE = /^(?:bvc|data|pbp|api|api\w+)\./;
+    const LIVE_HOST = 'live.bilibili.com';
 
     const hasMediaDomain = (s: string): boolean =>
         s.indexOf('bilivideo.') !== -1
@@ -68,8 +69,14 @@ type BridgeToPageMessage = {
         || s.indexOf('edge.mountaintoys.cn') !== -1
         || s.indexOf('akamaized.net') !== -1;
 
+    function isLiveContext(): boolean {
+        return location.host === LIVE_HOST;
+    }
+
     function shouldApply(): boolean {
-        return enabled && cdnNode !== '';
+        // Our selectable CDN nodes are only intended for on-demand video.
+        // Live playback uses different stream capabilities and should stay untouched.
+        return enabled && cdnNode !== '' && !isLiveContext();
     }
 
     // --- Cached replacement values (avoid repeated new URL() parsing) ---
