@@ -21,7 +21,7 @@
   import type { BilibiliCdnConfig } from "../lib/settings";
 
   const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.2";
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3";
 
   // -- State --
   let loaded = false;
