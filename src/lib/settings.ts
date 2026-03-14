@@ -24,6 +24,14 @@ export type BilibiliCdnConfig = {
     bangumiMode: boolean;
 };
 
+export type BilibiliCdnTestConfig = {
+    includeOverseas: boolean;
+    autoSelectBest: boolean;
+    sortBySpeed: boolean;
+    sampleSizeMiB: number;
+    timeoutSeconds: number;
+};
+
 export type AutoPauseSites = {
     'youtube.com'?: boolean;
     'bilibili.com'?: boolean;
@@ -42,6 +50,7 @@ export type Settings = {
     fast_pause_master: boolean;
     bb_block_space: boolean;
     bb_cdn: BilibiliCdnConfig;
+    bb_cdn_test: BilibiliCdnTestConfig;
     language: 'auto' | 'en' | 'zh';
     yt_config: YTConfig;
     h5_config: H5Config;
@@ -76,6 +85,7 @@ export const POPUP_SETTINGS_KEYS = [
     'h5_config',
     'ui_state',
     'bb_cdn',
+    'bb_cdn_test',
     'yt_member_block_mode',
     'yt_member_blocklist',
     'yt_member_allowlist'
@@ -98,6 +108,13 @@ export const DEFAULT_SETTINGS: Settings = {
     fast_pause_master: true,
     bb_block_space: true,
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
+    bb_cdn_test: {
+        includeOverseas: true,
+        autoSelectBest: false,
+        sortBySpeed: false,
+        sampleSizeMiB: 8,
+        timeoutSeconds: 10
+    },
     language: 'auto',
     yt_config: {
         blockNativeSeek: true,
@@ -128,6 +145,7 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
         ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
         bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
+        bb_cdn_test: { ...DEFAULT_SETTINGS.bb_cdn_test, ...(source.bb_cdn_test ?? {}) },
         ap_sites: { ...DEFAULT_SETTINGS.ap_sites, ...(source.ap_sites ?? {}) },
         ap_custom_sites: Array.isArray(source.ap_custom_sites)
             ? [...source.ap_custom_sites]

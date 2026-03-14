@@ -20,6 +20,8 @@ import {
     BB_CDN_CONTENT_SOURCE,
     BB_CDN_GLOBAL_KEY,
     BB_CDN_PAGE_SOURCE,
+    sanitizeBilibiliCdnSpeedTestOptions,
+    type BilibiliCdnSpeedTestOptions,
     type BilibiliCdnPageConfig,
     type SpeedTestResult
 } from './bilibiliCdn.shared';
@@ -30,6 +32,7 @@ type BridgeToPageMessage = {
     type: 'initial' | 'change' | 'start-speed-test' | 'abort-speed-test';
     config?: BilibiliCdnPageConfig;
     nodes?: Array<{ id: string; host: string }>;
+    options?: BilibiliCdnSpeedTestOptions;
 };
 
 (() => {
@@ -541,10 +544,14 @@ type BridgeToPageMessage = {
         }
     }
 
-    async function runSpeedTest(nodes: Array<{ id: string; host: string }>) {
+    async function runSpeedTest(
+        nodes: Array<{ id: string; host: string }>,
+        options?: BilibiliCdnSpeedTestOptions
+    ) {
         if (speedTestAbortController) speedTestAbortController.abort();
         speedTestAbortController = new AbortController();
         const signal = speedTestAbortController.signal;
+        const speedTestOptions = sanitizeBilibiliCdnSpeedTestOptions(options);
 
         let sampleUrl: string;
         try {
@@ -557,8 +564,8 @@ type BridgeToPageMessage = {
             return;
         }
 
-        const MAX_BYTES = 8 * 1024 * 1024;
-        const TIMEOUT_MS = 10000;
+        const MAX_BYTES = speedTestOptions.sampleSizeMiB * 1024 * 1024;
+        const TIMEOUT_MS = speedTestOptions.timeoutSeconds * 1000;
 
         for (const node of nodes) {
             if (signal.aborted) break;
@@ -626,7 +633,7 @@ type BridgeToPageMessage = {
         if (data.type === 'initial' || data.type === 'change') {
             updateConfig(data.config);
         } else if (data.type === 'start-speed-test' && Array.isArray(data.nodes)) {
-            runSpeedTest(data.nodes);
+            runSpeedTest(data.nodes, data.options);
         } else if (data.type === 'abort-speed-test') {
             if (speedTestAbortController) speedTestAbortController.abort();
             postSpeedDone();

@@ -14,7 +14,9 @@ import {
     BB_CDN_CONTENT_SOURCE,
     BB_CDN_PAGE_SOURCE,
     cloneBilibiliCdnPageConfig,
+    sanitizeBilibiliCdnSpeedTestOptions,
     type BilibiliCdnPageConfig,
+    type BilibiliCdnSpeedTestOptions,
     type SpeedTestResult
 } from './bilibiliCdn.shared';
 
@@ -98,6 +100,7 @@ export function pushBilibiliCdnConfig(config: BilibiliCdnPageConfig) {
 
 export function startSpeedTest(
     nodes: Array<{ id: string; host: string }>,
+    options: BilibiliCdnSpeedTestOptions,
     onResult: (result: SpeedTestResult) => void,
     onDone: () => void
 ) {
@@ -109,6 +112,7 @@ export function startSpeedTest(
         source: BB_CDN_CONTENT_SOURCE,
         channel: BB_CDN_BRIDGE_CHANNEL,
         type: 'start-speed-test',
-        nodes
+        nodes,
+        options: sanitizeBilibiliCdnSpeedTestOptions(options)
     }, window.location.origin);
 }

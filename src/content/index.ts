@@ -117,6 +117,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const results: Record<string, { speed: string; error: boolean }> = {};
         bilibiliCdn.runSpeedTest(
             message.nodes.map((n: { id: string; host: string }) => ({ id: n.id, label: '', host: n.host })),
+            message.options ?? { sampleSizeMiB: 8, timeoutSeconds: 10 },
             (result) => {
                 results[result.nodeId] = { speed: result.speed, error: result.error };
                 chrome.storage.local.set({ bb_cdn_speed_results: { ...results } });

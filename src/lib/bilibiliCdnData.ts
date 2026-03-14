@@ -9,6 +9,7 @@ export type CdnNode = {
     id: string;
     label: string;
     host: string;
+    overseas?: boolean;
 };
 
 export const CDN_NODES: CdnNode[] = [
@@ -26,11 +27,11 @@ export const CDN_NODES: CdnNode[] = [
     { id: 'hw_08ct', label: '08ct（华为云）', host: 'upos-sz-mirror08ct.bilivideo.com' },
     { id: 'tf_hw', label: 'tf_hw（华为云）', host: 'upos-tf-all-hw.bilivideo.com' },
     { id: 'tf_tx', label: 'tf_tx（腾讯云）', host: 'upos-tf-all-tx.bilivideo.com' },
-    { id: 'akamai', label: 'akamai（Akamai 海外）', host: 'upos-hz-mirrorakam.akamaized.net' },
-    { id: 'aliov', label: 'aliov（阿里云海外）', host: 'upos-sz-mirroraliov.bilivideo.com' },
-    { id: 'cosov', label: 'cosov（腾讯云海外）', host: 'upos-sz-mirrorcosov.bilivideo.com' },
-    { id: 'hwov', label: 'hwov（华为云海外）', host: 'upos-sz-mirrorhwov.bilivideo.com' },
-    { id: 'hk_bcache', label: 'hk_bcache（Bilibili 海外）', host: 'cn-hk-eq-bcache-01.bilivideo.com' },
+    { id: 'akamai', label: 'akamai（Akamai 海外）', host: 'upos-hz-mirrorakam.akamaized.net', overseas: true },
+    { id: 'aliov', label: 'aliov（阿里云海外）', host: 'upos-sz-mirroraliov.bilivideo.com', overseas: true },
+    { id: 'cosov', label: 'cosov（腾讯云海外）', host: 'upos-sz-mirrorcosov.bilivideo.com', overseas: true },
+    { id: 'hwov', label: 'hwov（华为云海外）', host: 'upos-sz-mirrorhwov.bilivideo.com', overseas: true },
+    { id: 'hk_bcache', label: 'hk_bcache（Bilibili 海外）', host: 'cn-hk-eq-bcache-01.bilivideo.com', overseas: true },
 ];
 
 /** Speed test sample video — a short public video for download benchmarking */

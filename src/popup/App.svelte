@@ -17,11 +17,14 @@
   import SectionCard from "../components/SectionCard.svelte";
   import ToggleItem from "../components/ToggleItem.svelte";
   import AccordionItem from "../components/AccordionItem.svelte";
-  import { CDN_NODES } from "../lib/bilibiliCdnData";
-  import type { BilibiliCdnConfig } from "../lib/settings";
+  import { CDN_NODES, type CdnNode } from "../lib/bilibiliCdnData";
+  import {
+    sanitizeBilibiliCdnSpeedTestOptions,
+    type BilibiliCdnSpeedTestOptions,
+  } from "../features/bilibili/bilibiliCdn.shared";
 
   const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.1";
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.2";
 
   // -- State --
   let loaded = false;
@@ -60,6 +63,211 @@
   let bbCdnOpen = false;
   let bbCdnSpeedResults: Record<string, { speed: string; error: boolean }> = {};
   let bbCdnTesting = false;
+  let bbCdnTestIncludeOverseas =
+    DEFAULT_SETTINGS.bb_cdn_test.includeOverseas;
+  let bbCdnTestAutoSelectBest =
+    DEFAULT_SETTINGS.bb_cdn_test.autoSelectBest;
+  let bbCdnTestSortBySpeed = DEFAULT_SETTINGS.bb_cdn_test.sortBySpeed;
+  let bbCdnTestSampleSizeMiB = DEFAULT_SETTINGS.bb_cdn_test.sampleSizeMiB;
+  let bbCdnTestTimeoutSeconds = DEFAULT_SETTINGS.bb_cdn_test.timeoutSeconds;
+  let bbCdnSpeedTestRunId = 0;
+
+  const BB_CDN_SPEED_RESULT_KEY = "bb_cdn_speed_results";
+
+  function getBilibiliSpeedTestNodes(): CdnNode[] {
+    return CDN_NODES.filter(
+      (node) => bbCdnTestIncludeOverseas || !node.overseas,
+    );
+  }
+
+  function getBilibiliSpeedTestOptions(): BilibiliCdnSpeedTestOptions {
+    return sanitizeBilibiliCdnSpeedTestOptions({
+      sampleSizeMiB: bbCdnTestSampleSizeMiB,
+      timeoutSeconds: bbCdnTestTimeoutSeconds,
+    });
+  }
+
+  function parseBilibiliSpeed(
+    result?: { speed: string; error?: boolean },
+  ): number | null {
+    if (!result || result.error) return null;
+    const value = Number.parseFloat(result.speed);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function findFastestBilibiliNode(
+    results: Record<string, { speed: string; error: boolean }>,
+    testedNodes: CdnNode[],
+  ): CdnNode | null {
+    let bestNode: CdnNode | null = null;
+    let bestSpeed = -1;
+
+    testedNodes.forEach((node) => {
+      const speed = parseBilibiliSpeed(results[node.id]);
+      if (speed === null || speed <= bestSpeed) return;
+      bestSpeed = speed;
+      bestNode = node;
+    });
+
+    return bestNode;
+  }
+
+  function cleanupBilibiliSpeedTestResults() {
+    globalThis.chrome?.storage?.local?.remove?.([BB_CDN_SPEED_RESULT_KEY]);
+  }
+
+  function finishBilibiliSpeedTest(
+    runId: number,
+    testedNodes: CdnNode[],
+    results: Record<string, { speed: string; error: boolean }>,
+  ) {
+    if (runId !== bbCdnSpeedTestRunId) return;
+
+    bbCdnTesting = false;
+    bbCdnSpeedResults = { ...results };
+
+    if (bbCdnTestAutoSelectBest) {
+      const fastestNode = findFastestBilibiliNode(results, testedNodes);
+      if (fastestNode) {
+        bbCdnNode = fastestNode.host;
+      }
+    }
+
+    cleanupBilibiliSpeedTestResults();
+  }
+
+  function pollBilibiliSpeedTest(
+    runId: number,
+    testedNodes: CdnNode[],
+    expectedCount: number,
+  ) {
+    if (
+      runId !== bbCdnSpeedTestRunId ||
+      !bbCdnTesting ||
+      !globalThis.chrome?.storage?.local
+    ) {
+      return;
+    }
+
+    const expectedIds = new Set(testedNodes.map((node) => node.id));
+
+    globalThis.chrome.storage.local.get([BB_CDN_SPEED_RESULT_KEY], (res) => {
+      if (runId !== bbCdnSpeedTestRunId || !bbCdnTesting) return;
+
+      const storedResults =
+        (res[BB_CDN_SPEED_RESULT_KEY] as Record<
+          string,
+          { speed: string; error: boolean }
+        > | null) ?? null;
+
+      if (storedResults) {
+        const results = Object.fromEntries(
+          Object.entries(storedResults).filter(([nodeId]) => expectedIds.has(nodeId)),
+        ) as Record<string, { speed: string; error: boolean }>;
+
+        bbCdnSpeedResults = { ...results };
+        if (Object.keys(results).length >= expectedCount) {
+          finishBilibiliSpeedTest(runId, testedNodes, results);
+          return;
+        }
+      }
+
+      window.setTimeout(
+        () => pollBilibiliSpeedTest(runId, testedNodes, expectedCount),
+        800,
+      );
+    });
+  }
+
+  function startBilibiliSpeedTest() {
+    if (bbCdnTesting) return;
+
+    const testedNodes = getBilibiliSpeedTestNodes();
+    const speedTestOptions = getBilibiliSpeedTestOptions();
+    if (!testedNodes.length) return;
+
+    bbCdnTesting = true;
+    bbCdnSpeedResults = {};
+
+    const runId = ++bbCdnSpeedTestRunId;
+
+    if (
+      !globalThis.chrome?.tabs?.query ||
+      !globalThis.chrome?.tabs?.sendMessage ||
+      !globalThis.chrome?.storage?.local
+    ) {
+      bbCdnTesting = false;
+      return;
+    }
+
+    cleanupBilibiliSpeedTestResults();
+
+    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (runId !== bbCdnSpeedTestRunId) return;
+
+      const tabId = tabs[0]?.id;
+      if (!tabId) {
+        bbCdnTesting = false;
+        return;
+      }
+
+      globalThis.chrome.tabs.sendMessage(
+        tabId,
+        {
+          type: "VB_CDN_SPEED_TEST",
+          nodes: testedNodes.map((node) => ({ id: node.id, host: node.host })),
+          options: speedTestOptions,
+        },
+        (response) => {
+          if (runId !== bbCdnSpeedTestRunId) return;
+
+          if (globalThis.chrome.runtime.lastError) {
+            console.warn(
+              "Speed test failed: Content script not found on this tab.",
+              globalThis.chrome.runtime.lastError.message,
+            );
+            bbCdnTesting = false;
+            return;
+          }
+
+          if (!response?.started) {
+            bbCdnTesting = false;
+            return;
+          }
+
+          window.setTimeout(() => {
+            pollBilibiliSpeedTest(runId, testedNodes, testedNodes.length);
+          }, 1500);
+        },
+      );
+    });
+  }
+
+  function abortBilibiliSpeedTest() {
+    bbCdnTesting = false;
+    bbCdnSpeedTestRunId += 1;
+    cleanupBilibiliSpeedTestResults();
+
+    if (!globalThis.chrome?.tabs?.query || !globalThis.chrome?.tabs?.sendMessage) {
+      return;
+    }
+
+    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tabId = tabs[0]?.id;
+      if (!tabId) return;
+      globalThis.chrome.tabs.sendMessage(
+        tabId,
+        { type: "VB_CDN_ABORT_SPEED_TEST" },
+        () => {},
+      );
+    });
+  }
+
+  function handleBilibiliCdnNodeUpdate(
+    event: CustomEvent<{ bbCdnNode: string }>,
+  ) {
+    bbCdnNode = event.detail.bbCdnNode;
+  }
 
   function addTags(mode: "block" | "allow", input: string) {
     if (!input.trim()) return;
@@ -237,6 +445,17 @@
         bbCdnNode = res.bb_cdn.node ?? "";
         bbCdnBangumi = res.bb_cdn.bangumiMode ?? false;
       }
+      if (res.bb_cdn_test) {
+        const speedTestOptions = sanitizeBilibiliCdnSpeedTestOptions({
+          sampleSizeMiB: res.bb_cdn_test.sampleSizeMiB,
+          timeoutSeconds: res.bb_cdn_test.timeoutSeconds,
+        });
+        bbCdnTestIncludeOverseas = res.bb_cdn_test.includeOverseas ?? true;
+        bbCdnTestAutoSelectBest = res.bb_cdn_test.autoSelectBest ?? false;
+        bbCdnTestSortBySpeed = res.bb_cdn_test.sortBySpeed ?? false;
+        bbCdnTestSampleSizeMiB = speedTestOptions.sampleSizeMiB;
+        bbCdnTestTimeoutSeconds = speedTestOptions.timeoutSeconds;
+      }
 
       language = res.language || DEFAULT_SETTINGS.language;
 
@@ -266,6 +485,18 @@
   $: {
     if (loaded && typeof chrome !== "undefined" && chrome.storage) {
       scheduleSettingsSave({
+        ...(() => {
+          const speedTestOptions = getBilibiliSpeedTestOptions();
+          return {
+            bb_cdn_test: {
+              includeOverseas: bbCdnTestIncludeOverseas,
+              autoSelectBest: bbCdnTestAutoSelectBest,
+              sortBySpeed: bbCdnTestSortBySpeed,
+              sampleSizeMiB: speedTestOptions.sampleSizeMiB,
+              timeoutSeconds: speedTestOptions.timeoutSeconds,
+            },
+          };
+        })(),
         enabled: globalEnabled,
         h5_enabled: h5Enabled,
         ap_enabled: autoPauseEnabled,
@@ -1170,95 +1401,20 @@
     >
       <CdnSettings
         on:back={() => (currentView = "main")}
-        on:update={(e) => {
-          bbCdnNode = e.detail.bbCdnNode;
-        }}
-        on:speedtest={() => {
-          if (bbCdnTesting) return;
-          bbCdnTesting = true;
-          bbCdnSpeedResults = {};
-          if (globalThis.chrome && globalThis.chrome.tabs) {
-            globalThis.chrome.tabs.query(
-              { active: true, currentWindow: true },
-              (tabs) => {
-                if (tabs[0]?.id) {
-                  globalThis.chrome.tabs.sendMessage(
-                    tabs[0].id,
-                    {
-                      type: "VB_CDN_SPEED_TEST",
-                      nodes: CDN_NODES.map((n) => ({ id: n.id, host: n.host })),
-                    },
-                    (response) => {
-                      if (globalThis.chrome.runtime.lastError) {
-                        console.warn(
-                          "Speed test failed: Content script not found on this tab.",
-                          globalThis.chrome.runtime.lastError.message,
-                        );
-                        bbCdnTesting = false;
-                        return;
-                      }
-                      if (!response?.started) {
-                        bbCdnTesting = false;
-                        return;
-                      }
-
-                      const resultKey = "bb_cdn_speed_results";
-                      const checkResults = () => {
-                        globalThis.chrome.storage.local.get(
-                          [resultKey],
-                          (res) => {
-                            if (res[resultKey]) {
-                              bbCdnSpeedResults = res[resultKey];
-                              if (
-                                Object.keys(bbCdnSpeedResults).length >=
-                                CDN_NODES.length
-                              ) {
-                                bbCdnTesting = false;
-                                globalThis.chrome.storage.local.remove([
-                                  resultKey,
-                                ]);
-                              } else {
-                                setTimeout(checkResults, 800);
-                              }
-                            } else {
-                              setTimeout(checkResults, 800);
-                            }
-                          },
-                        );
-                      };
-                      setTimeout(checkResults, 1500);
-                    },
-                  );
-                } else {
-                  bbCdnTesting = false;
-                }
-              },
-            );
-          }
-        }}
-        on:abortspeedtest={() => {
-          bbCdnTesting = false;
-          if (globalThis.chrome && globalThis.chrome.tabs) {
-            globalThis.chrome.tabs.query(
-              { active: true, currentWindow: true },
-              (tabs) => {
-                if (tabs[0]?.id) {
-                  globalThis.chrome.tabs.sendMessage(
-                    tabs[0].id,
-                    { type: "VB_CDN_ABORT_SPEED_TEST" },
-                    () => {},
-                  );
-                }
-              },
-            );
-          }
-        }}
+        on:update={handleBilibiliCdnNodeUpdate}
+        on:speedtest={startBilibiliSpeedTest}
+        on:abortspeedtest={abortBilibiliSpeedTest}
         {language}
         {globalEnabled}
         {bbCdnEnabled}
         {bbCdnNode}
         {bbCdnTesting}
         {bbCdnSpeedResults}
+        bind:speedTestIncludeOverseas={bbCdnTestIncludeOverseas}
+        bind:speedTestAutoSelectBest={bbCdnTestAutoSelectBest}
+        bind:speedTestSortBySpeed={bbCdnTestSortBySpeed}
+        bind:speedTestSampleSizeMiB={bbCdnTestSampleSizeMiB}
+        bind:speedTestTimeoutSeconds={bbCdnTestTimeoutSeconds}
       />
     </div>
   {/if}

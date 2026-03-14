@@ -15,6 +15,7 @@ export type {
     SettingsKey,
     H5Config,
     YTConfig,
+    BilibiliCdnTestConfig,
     AutoPauseSites,
     YTMemberBlockMode
 } from './settings';

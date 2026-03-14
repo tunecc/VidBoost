@@ -2,7 +2,7 @@ import type { Feature } from './Feature';
 import { isSiteHost } from '../lib/siteProfiles';
 import { installBilibiliCdnBridge, pushBilibiliCdnConfig, startSpeedTest, abortSpeedTest } from './bilibili/bilibiliCdn';
 import type { BilibiliCdnConfig } from '../lib/settings';
-import type { SpeedTestResult } from './bilibili/bilibiliCdn.shared';
+import type { BilibiliCdnSpeedTestOptions, SpeedTestResult } from './bilibili/bilibiliCdn.shared';
 import type { CdnNode } from '../lib/bilibiliCdnData';
 
 export class BilibiliCDN implements Feature {
@@ -48,6 +48,7 @@ export class BilibiliCDN implements Feature {
 
     runSpeedTest(
         nodes: CdnNode[],
+        options: BilibiliCdnSpeedTestOptions,
         onResult: (result: SpeedTestResult) => void,
         onDone: () => void
     ) {
@@ -60,6 +61,7 @@ export class BilibiliCDN implements Feature {
 
         startSpeedTest(
             nodes.map(n => ({ id: n.id, host: n.host })),
+            options,
             onResult,
             onDone
         );
