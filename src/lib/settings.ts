@@ -9,6 +9,7 @@ export type H5Config = {
 
 export type YTConfig = {
     blockNativeSeek?: boolean;
+    alwaysUseOriginalAudio?: boolean;
 };
 
 export type UIState = {
@@ -98,7 +99,10 @@ export const DEFAULT_SETTINGS: Settings = {
     bb_block_space: true,
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
     language: 'auto',
-    yt_config: { blockNativeSeek: true },
+    yt_config: {
+        blockNativeSeek: true,
+        alwaysUseOriginalAudio: false
+    },
     h5_config: {
         speedStep: 0.1,
         maxSpeed: 16.0,

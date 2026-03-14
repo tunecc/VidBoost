@@ -6,6 +6,7 @@ import { YouTubeFastPause } from '../features/YouTubeFastPause';
 import { BilibiliSpaceBlocker } from '../features/BilibiliSpaceBlocker';
 import { YouTubeMemberBlocker } from '../features/YouTubeMemberBlocker';
 import { BilibiliCDN } from '../features/BilibiliCDN';
+import { YouTubeOriginalAudio } from '../features/YouTubeOriginalAudio';
 import {
     getSettings,
     onSettingsChanged,
@@ -17,6 +18,7 @@ import {
 
 const autoPause = new AutoPause();
 const bilibiliCdn = new BilibiliCDN();
+const youtubeOriginalAudio = new YouTubeOriginalAudio();
 
 const features = [
     new H5Enhancer(),
@@ -24,6 +26,7 @@ const features = [
     new BilibiliFastPause(),
     new YouTubeSeekBlocker(),
     new YouTubeFastPause(),
+    youtubeOriginalAudio,
     new BilibiliSpaceBlocker(),
     new YouTubeMemberBlocker(),
     bilibiliCdn
@@ -70,18 +73,22 @@ function applyFromSettings(res: Partial<Settings>) {
     const bndOn = settings.bnd_enabled !== false && fastPauseMasterOn;
     const ytFastPauseOn = settings.yt_fast_pause !== false && fastPauseMasterOn;
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
+    const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
     const bbCdnOn = settings.bb_cdn.enabled === true;
+
+    youtubeOriginalAudio.updateSettings(settings);
 
     setFeatureEnabled(0, settings.h5_enabled !== false);
     setFeatureEnabled(1, settings.ap_enabled !== false);
     setFeatureEnabled(2, bndOn);
     setFeatureEnabled(3, ytBlockNativeOn);
     setFeatureEnabled(4, ytFastPauseOn);
-    setFeatureEnabled(5, bbBlockSpaceOn);
-    setFeatureEnabled(6, ytMemberBlockOn);
-    setFeatureEnabled(7, bbCdnOn);
+    setFeatureEnabled(5, ytOriginalAudioOn);
+    setFeatureEnabled(6, bbBlockSpaceOn);
+    setFeatureEnabled(7, ytMemberBlockOn);
+    setFeatureEnabled(8, bbCdnOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);

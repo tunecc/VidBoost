@@ -21,7 +21,7 @@
   import type { BilibiliCdnConfig } from "../lib/settings";
 
   const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3";
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.1";
 
   // -- State --
   let loaded = false;
@@ -32,6 +32,8 @@
 
   // New Config for YouTube Optimizer
   let ytBlockNative = DEFAULT_SETTINGS.yt_config.blockNativeSeek ?? true;
+  let ytAlwaysUseOriginalAudio =
+    DEFAULT_SETTINGS.yt_config.alwaysUseOriginalAudio ?? false;
 
   // Bilibili Config
   let bbBlockSpace = DEFAULT_SETTINGS.bb_block_space;
@@ -244,6 +246,8 @@
 
       if (res.yt_config) {
         ytBlockNative = res.yt_config.blockNativeSeek ?? true;
+        ytAlwaysUseOriginalAudio =
+          res.yt_config.alwaysUseOriginalAudio ?? false;
       } else if (res.h5_config) {
         ytBlockNative = res.h5_config.blockNumKeys ?? true;
       }
@@ -270,7 +274,10 @@
         fast_pause_master: fastPauseMaster,
         bb_block_space: bbBlockSpace,
         language: language,
-        yt_config: { blockNativeSeek: ytBlockNative },
+        yt_config: {
+          blockNativeSeek: ytBlockNative,
+          alwaysUseOriginalAudio: ytAlwaysUseOriginalAudio,
+        },
         ui_state: sectionOpen,
         yt_member_block: ytMemberBlock,
         yt_member_block_mode: ytMemberBlockMode,
@@ -549,6 +556,38 @@
                   d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                 /></svg
               >
+            </div>
+          </ToggleItem>
+
+          <ToggleItem
+            title={t("yt_original_audio")}
+            desc={t("yt_original_audio_desc")}
+            checked={ytAlwaysUseOriginalAudio}
+            iconColor="red"
+            disabled={!globalEnabled}
+            onClick={() =>
+              globalEnabled &&
+              (ytAlwaysUseOriginalAudio = !ytAlwaysUseOriginalAudio)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 18V6l10-2v12"
+                />
+                <circle cx="6" cy="18" r="3" stroke-width="2" />
+                <circle cx="16" cy="16" r="3" stroke-width="2" />
+              </svg>
             </div>
           </ToggleItem>
 
