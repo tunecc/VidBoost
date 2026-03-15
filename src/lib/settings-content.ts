@@ -15,6 +15,8 @@ export type {
     SettingsKey,
     H5Config,
     YTConfig,
+    BilibiliSubtitleConfig,
+    BilibiliSubtitleTargetMode,
     BilibiliCdnTestConfig,
     AutoPauseSites,
     YTMemberBlockMode

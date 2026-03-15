@@ -3,4 +3,5 @@ dist/
 .DS_Store
 .env
 .svelte-kit/
-
+dist.zip
+todo.md

@@ -7,6 +7,7 @@ import { BilibiliSpaceBlocker } from '../features/BilibiliSpaceBlocker';
 import { YouTubeMemberBlocker } from '../features/YouTubeMemberBlocker';
 import { BilibiliCDN } from '../features/BilibiliCDN';
 import { YouTubeOriginalAudio } from '../features/YouTubeOriginalAudio';
+import { BilibiliAutoSubtitle } from '../features/BilibiliAutoSubtitle';
 import {
     getSettings,
     onSettingsChanged,
@@ -19,6 +20,7 @@ import {
 const autoPause = new AutoPause();
 const bilibiliCdn = new BilibiliCDN();
 const youtubeOriginalAudio = new YouTubeOriginalAudio();
+const bilibiliAutoSubtitle = new BilibiliAutoSubtitle();
 
 const features = [
     new H5Enhancer(),
@@ -29,6 +31,7 @@ const features = [
     youtubeOriginalAudio,
     new BilibiliSpaceBlocker(),
     new YouTubeMemberBlocker(),
+    bilibiliAutoSubtitle,
     bilibiliCdn
 ];
 
@@ -76,9 +79,11 @@ function applyFromSettings(res: Partial<Settings>) {
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
+    const bbSubtitleOn = settings.bb_subtitle.enabled === true;
     const bbCdnOn = settings.bb_cdn.enabled === true;
 
     youtubeOriginalAudio.updateSettings(settings);
+    bilibiliAutoSubtitle.updateSettings(settings);
 
     setFeatureEnabled(0, settings.h5_enabled !== false);
     setFeatureEnabled(1, settings.ap_enabled !== false);
@@ -88,7 +93,8 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(5, ytOriginalAudioOn);
     setFeatureEnabled(6, bbBlockSpaceOn);
     setFeatureEnabled(7, ytMemberBlockOn);
-    setFeatureEnabled(8, bbCdnOn);
+    setFeatureEnabled(8, bbSubtitleOn);
+    setFeatureEnabled(9, bbCdnOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);
@@ -130,5 +136,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     } else if (message?.type === 'VB_CDN_ABORT_SPEED_TEST') {
         bilibiliCdn.abortSpeedTest();
         sendResponse({ aborted: true });
+    } else if (message?.type === 'VB_BB_SUBTITLE_CURRENT_UPLOADER') {
+        sendResponse({
+            uploader: bilibiliAutoSubtitle.getCurrentUploaderProfile()
+        });
     }
 });

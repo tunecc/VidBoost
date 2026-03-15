@@ -18,6 +18,14 @@ export type UIState = {
     bilibili?: boolean;
 };
 
+export type BilibiliSubtitleTargetMode = 'all' | 'allowlist';
+
+export type BilibiliSubtitleConfig = {
+    enabled: boolean;
+    targetMode: BilibiliSubtitleTargetMode;
+    targets: string[];
+};
+
 export type BilibiliCdnConfig = {
     enabled: boolean;
     node: string;
@@ -49,6 +57,7 @@ export type Settings = {
     yt_fast_pause: boolean;
     fast_pause_master: boolean;
     bb_block_space: boolean;
+    bb_subtitle: BilibiliSubtitleConfig;
     bb_cdn: BilibiliCdnConfig;
     bb_cdn_test: BilibiliCdnTestConfig;
     language: 'auto' | 'en' | 'zh';
@@ -74,6 +83,7 @@ export const CONTENT_SETTINGS_KEYS = [
     'yt_fast_pause',
     'fast_pause_master',
     'bb_block_space',
+    'bb_subtitle',
     'bb_cdn',
     'yt_config',
     'yt_member_block'
@@ -107,6 +117,11 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_fast_pause: true,
     fast_pause_master: true,
     bb_block_space: true,
+    bb_subtitle: {
+        enabled: false,
+        targetMode: 'all',
+        targets: []
+    },
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
     bb_cdn_test: {
         includeOverseas: true,
@@ -144,6 +159,13 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         yt_config: { ...DEFAULT_SETTINGS.yt_config, ...(source.yt_config ?? {}) },
         h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
         ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
+        bb_subtitle: {
+            ...DEFAULT_SETTINGS.bb_subtitle,
+            ...(source.bb_subtitle ?? {}),
+            targets: Array.isArray(source.bb_subtitle?.targets)
+                ? [...source.bb_subtitle.targets]
+                : [...DEFAULT_SETTINGS.bb_subtitle.targets]
+        },
         bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
         bb_cdn_test: { ...DEFAULT_SETTINGS.bb_cdn_test, ...(source.bb_cdn_test ?? {}) },
         ap_sites: { ...DEFAULT_SETTINGS.ap_sites, ...(source.ap_sites ?? {}) },
