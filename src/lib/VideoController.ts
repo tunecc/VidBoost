@@ -205,7 +205,7 @@ export class VideoController {
     public setSpeed(rate: number) {
         const v = this.video;
         if (!v) return;
-        v.playbackRate = rate;
+        this.applyPlaybackRate(v, rate);
     }
 
     public seek(seconds: number) {
@@ -292,5 +292,15 @@ export class VideoController {
             }
         }
         return false;
+    }
+
+    private applyPlaybackRate(video: HTMLVideoElement, rate: number) {
+        try {
+            video.defaultPlaybackRate = rate;
+        } catch {
+            // Ignore sites/browsers that reject default playback rate writes.
+        }
+
+        video.playbackRate = rate;
     }
 }

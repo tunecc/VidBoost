@@ -1,7 +1,12 @@
 import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
+import { getPlaybackRateConfigForHost, isSiteHost } from '../lib/siteProfiles';
 import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import {
+    installDouyinPlaybackRateGuardBridge,
+    pushDouyinPlaybackRateGuardConfig
+} from './douyin/playbackRateGuard';
 import type { Feature } from './Feature';
 
 type H5Config = {
@@ -17,6 +22,7 @@ export class H5Enhancer implements Feature {
     private videoCtrl = VideoController.getInstance();
     private osd = OSD.getInstance();
     private enabled = false;
+    private douyinStickyAbove = 3;
 
     // Config
     private config: H5Config = {
@@ -58,6 +64,7 @@ export class H5Enhancer implements Feature {
 
     mount() {
         this.enabled = true;
+        this.installSitePlaybackBridge();
         this.registerShortcuts();
     }
 
@@ -69,6 +76,7 @@ export class H5Enhancer implements Feature {
             this.seekResetTimer = null;
         }
         this.seekAccumulator = 0;
+        this.resetSitePlaybackBridge();
     }
 
     updateSettings(_settings: unknown) { }
@@ -80,6 +88,32 @@ export class H5Enhancer implements Feature {
     private showFeedback(text: string) {
         const v = this.videoCtrl.video;
         this.osd.show(text, v || undefined);
+    }
+
+    private installSitePlaybackBridge() {
+        if (!isSiteHost('douyin')) return;
+        this.douyinStickyAbove = getPlaybackRateConfigForHost(window.location.host)?.stickyAbove ?? 3;
+        installDouyinPlaybackRateGuardBridge();
+        this.syncSitePlaybackGuard(1);
+    }
+
+    private resetSitePlaybackBridge() {
+        if (!isSiteHost('douyin')) return;
+        pushDouyinPlaybackRateGuardConfig({ enabled: false, targetRate: 1 });
+    }
+
+    private syncSitePlaybackGuard(rate: number) {
+        if (!isSiteHost('douyin')) return;
+        pushDouyinPlaybackRateGuardConfig({
+            enabled: rate > this.douyinStickyAbove,
+            targetRate: rate,
+            stickyAbove: this.douyinStickyAbove
+        });
+    }
+
+    private applySpeed(rate: number) {
+        this.syncSitePlaybackGuard(rate);
+        this.videoCtrl.setSpeed(rate);
     }
 
     private setPlaybackRatePlus(num: number) {
@@ -104,7 +138,7 @@ export class H5Enhancer implements Feature {
         // Apply Limit
         if (info.value > this.config.maxSpeed) info.value = this.config.maxSpeed;
 
-        this.videoCtrl.setSpeed(info.value);
+        this.applySpeed(info.value);
         const txt = Number.isInteger(info.value) ? `${info.value}x` : `${info.value.toFixed(1)}x`;
         this.showFeedback(txt);
         return true;
@@ -162,7 +196,7 @@ export class H5Enhancer implements Feature {
                     // Round to 1 decimal to avoid floating point issues
                     newRate = parseFloat(newRate.toFixed(1));
 
-                    this.videoCtrl.setSpeed(newRate);
+                    this.applySpeed(newRate);
                     const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
                     this.showFeedback(txt);
                     return true;
@@ -187,7 +221,7 @@ export class H5Enhancer implements Feature {
                     // Round to 1 decimal
                     newRate = parseFloat(newRate.toFixed(1));
 
-                    this.videoCtrl.setSpeed(newRate);
+                    this.applySpeed(newRate);
                     const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
                     this.showFeedback(txt);
                     return true;
@@ -208,13 +242,13 @@ export class H5Enhancer implements Feature {
                 if (v) {
                     if (v.playbackRate === 1.0) {
                         // Restore
-                        this.videoCtrl.setSpeed(this.lastSpeed);
+                        this.applySpeed(this.lastSpeed);
                         const txt = Number.isInteger(this.lastSpeed) ? `${this.lastSpeed}x` : `${this.lastSpeed.toFixed(1)}x`;
                         this.showFeedback(txt);
                     } else {
                         // Reset
                         this.lastSpeed = v.playbackRate;
-                        this.videoCtrl.setSpeed(1.0);
+                        this.applySpeed(1.0);
                         this.showFeedback('1x');
                     }
                     return true;

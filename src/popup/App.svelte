@@ -25,7 +25,7 @@
   } from "../features/bilibili/bilibiliCdn.shared";
 
   const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.3";
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.4";
 
   // -- State --
   let loaded = false;

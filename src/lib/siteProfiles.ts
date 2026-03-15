@@ -1,10 +1,14 @@
 import { normalizeDomain } from './domain';
 
-export type SiteKey = 'youtube' | 'bilibili' | 'iqiyi' | 'youku' | 'qq';
+export type SiteKey = 'youtube' | 'bilibili' | 'iqiyi' | 'youku' | 'qq' | 'douyin';
 
 type FastPauseConfig = {
     videoAreaSelectors: string[];
     controlSelectors: string[];
+};
+
+type PlaybackRateConfig = {
+    stickyAbove: number;
 };
 
 type SiteProfile = {
@@ -12,6 +16,7 @@ type SiteProfile = {
     fullscreenSelector?: string;
     autoPauseContainerSelectors?: string[];
     fastPause?: FastPauseConfig;
+    playbackRate?: PlaybackRateConfig;
 };
 
 const SITE_PROFILES: Record<SiteKey, SiteProfile> = {
@@ -81,6 +86,12 @@ const SITE_PROFILES: Record<SiteKey, SiteProfile> = {
     qq: {
         domains: ['qq.com'],
         fullscreenSelector: 'txpdiv[data-report="window-fullscreen"]'
+    },
+    douyin: {
+        domains: ['douyin.com'],
+        playbackRate: {
+            stickyAbove: 3
+        }
     }
 };
 
@@ -126,4 +137,9 @@ export function getFullscreenSelectorForHost(host: string = getCurrentHost()): s
 export function getAutoPauseContainerSelectorsForHost(host: string = getCurrentHost()): string[] | null {
     const selectors = findProfileByHost(host)?.autoPauseContainerSelectors;
     return selectors ? [...selectors] : null;
+}
+
+export function getPlaybackRateConfigForHost(host: string = getCurrentHost()): PlaybackRateConfig | null {
+    const playbackRate = findProfileByHost(host)?.playbackRate;
+    return playbackRate ? { ...playbackRate } : null;
 }
