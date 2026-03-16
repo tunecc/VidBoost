@@ -9,6 +9,16 @@ export class BilibiliFastPause implements Feature {
     private config = getFastPauseConfig('bilibili');
     private enabled = false;
     private listenersRegistered = false;
+    private readonly interactiveSelectors = [
+        'input',
+        'textarea',
+        'select',
+        '[contenteditable="true"]',
+        '[contenteditable=""]',
+        '[contenteditable="plaintext-only"]',
+        '[role="textbox"]',
+        '[role="searchbox"]'
+    ].join(',');
 
     private isClickOnControls(target: HTMLElement): boolean {
         return (this.config?.controlSelectors || []).some((selector) => target.closest(selector) !== null);
@@ -17,6 +27,24 @@ export class BilibiliFastPause implements Feature {
     private isInVideoArea(target: HTMLElement): boolean {
         if (target.tagName === 'VIDEO') return true;
         return (this.config?.videoAreaSelectors || []).some((selector) => target.closest(selector) !== null);
+    }
+
+    private blurActiveTypingElement() {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement)) return;
+
+        const tag = active.tagName.toUpperCase();
+        const isTypingElement = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
+            || active.isContentEditable
+            || active.closest(this.interactiveSelectors) !== null;
+
+        if (!isTypingElement) return;
+
+        active.blur();
+
+        if (document.activeElement === active) {
+            window.getSelection()?.removeAllRanges();
+        }
     }
 
     mount() {
@@ -54,6 +82,10 @@ export class BilibiliFastPause implements Feature {
 
             // Safety check: Don't trigger on controls
             if (this.isClickOnControls(target)) return false;
+
+            // We stop Bilibili's native click flow below, so manually restore
+            // the normal "click video => input loses focus" behavior.
+            this.blurActiveTypingElement();
 
             // Action: Toggle Play/Pause via Controller
             this.videoCtrl.togglePlay();
