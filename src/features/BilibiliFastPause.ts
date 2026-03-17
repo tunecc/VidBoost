@@ -2,6 +2,13 @@ import type { Feature } from './Feature';
 import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { getFastPauseConfig, isSiteHost } from '../lib/siteProfiles';
+import {
+    eventMatchesSelectors,
+    eventTargetsProtectedCursor,
+    eventTargetsGenericInteractive,
+    eventTargetsSelectableText,
+    getEventElements
+} from '../lib/pointerTargets';
 
 export class BilibiliFastPause implements Feature {
     private input = InputManager.getInstance();
@@ -9,24 +16,25 @@ export class BilibiliFastPause implements Feature {
     private config = getFastPauseConfig('bilibili');
     private enabled = false;
     private listenersRegistered = false;
-    private readonly interactiveSelectors = [
-        'input',
-        'textarea',
-        'select',
-        '[contenteditable="true"]',
-        '[contenteditable=""]',
-        '[contenteditable="plaintext-only"]',
-        '[role="textbox"]',
-        '[role="searchbox"]'
-    ].join(',');
 
-    private isClickOnControls(target: HTMLElement): boolean {
-        return (this.config?.controlSelectors || []).some((selector) => target.closest(selector) !== null);
+    private isClickOnControls(e: Event): boolean {
+        const controlSelectors = this.config?.controlSelectors || [];
+        if (eventMatchesSelectors(e, controlSelectors)) return true;
+        return eventTargetsGenericInteractive(e);
     }
 
-    private isInVideoArea(target: HTMLElement): boolean {
-        if (target.tagName === 'VIDEO') return true;
-        return (this.config?.videoAreaSelectors || []).some((selector) => target.closest(selector) !== null);
+    private shouldIgnorePointerAction(e: Event): boolean {
+        return this.isClickOnControls(e)
+            || eventTargetsSelectableText(e)
+            || eventTargetsProtectedCursor(e);
+    }
+
+    private isInVideoArea(e: Event): boolean {
+        const elements = getEventElements(e);
+        if (elements.some((element) => element.tagName === 'VIDEO')) return true;
+        return (this.config?.videoAreaSelectors || []).some((selector) =>
+            elements.some((element) => element.closest(selector) !== null)
+        );
     }
 
     private blurActiveTypingElement() {
@@ -36,7 +44,7 @@ export class BilibiliFastPause implements Feature {
         const tag = active.tagName.toUpperCase();
         const isTypingElement = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
             || active.isContentEditable
-            || active.closest(this.interactiveSelectors) !== null;
+            || active.closest('input,textarea,select,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"],[role="textbox"],[role="searchbox"]') !== null;
 
         if (!isTypingElement) return;
 
@@ -60,8 +68,8 @@ export class BilibiliFastPause implements Feature {
         this.input.on('dblclick', 'bnd-prevent', (e) => {
             if (!this.enabled) return false;
 
-            const target = e.target as HTMLElement;
-            if (!this.isInVideoArea(target)) return false;
+            if (!this.isInVideoArea(e)) return false;
+            if (this.shouldIgnorePointerAction(e)) return false;
 
             // Stop default behavior (Fullscreen)
             return true;
@@ -76,12 +84,10 @@ export class BilibiliFastPause implements Feature {
             // Only Left Click
             if (event.button !== 0) return false;
 
-            const target = event.target as HTMLElement;
-
-            if (!this.isInVideoArea(target)) return false;
+            if (!this.isInVideoArea(event)) return false;
 
             // Safety check: Don't trigger on controls
-            if (this.isClickOnControls(target)) return false;
+            if (this.shouldIgnorePointerAction(event)) return false;
 
             // We stop Bilibili's native click flow below, so manually restore
             // the normal "click video => input loses focus" behavior.
@@ -103,12 +109,10 @@ export class BilibiliFastPause implements Feature {
 
             if (event.button !== 0) return false;
 
-            const target = event.target as HTMLElement;
-
-            if (!this.isInVideoArea(target)) return false;
+            if (!this.isInVideoArea(event)) return false;
 
             // Safety check
-            if (this.isClickOnControls(target)) return false;
+            if (this.shouldIgnorePointerAction(event)) return false;
 
             // Block it!
             return true;
