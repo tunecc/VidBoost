@@ -25,7 +25,7 @@
   } from "../features/bilibili/bilibiliCdn.shared";
 
   const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.5";
+    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.3.6";
 
   // -- State --
   let loaded = false;
@@ -45,7 +45,9 @@
     DEFAULT_SETTINGS.bb_subtitle.targetMode;
   let bbSubtitleTargetsList: string[] = [...DEFAULT_SETTINGS.bb_subtitle.targets];
   let bbSubtitleDraftText = "";
+  let bbSubtitleDraftInputRef: HTMLInputElement | null = null;
   let bbSubtitleOpen = false;
+  let bbSubtitleTargetsTooltipOpen = false;
   let bbSubtitleAddCurrentPending = false;
   let bbSubtitleAddCurrentStatus = "";
   let bbSubtitleAddCurrentTone: "neutral" | "success" | "error" = "neutral";
@@ -280,6 +282,44 @@
     const parsed = parseBilibiliSubtitleTargets(bbSubtitleDraftText);
     bbSubtitleDraftText = "";
     appendBilibiliSubtitleTargets(parsed);
+  }
+
+  function handleBilibiliSubtitleDraftKeyDown(event: KeyboardEvent) {
+    if (event.isComposing) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      commitBilibiliSubtitleDraft();
+      return;
+    }
+
+    if (event.key === "Backspace" && bbSubtitleDraftText === "") {
+      event.preventDefault();
+      bbSubtitleTargetsList = bbSubtitleTargetsList.slice(0, -1);
+    }
+  }
+
+  function handleBilibiliSubtitleDraftPaste(event: ClipboardEvent) {
+    if (!event.clipboardData) return;
+
+    const pastedText = event.clipboardData.getData("text").trim();
+    if (!pastedText) return;
+
+    const hasStructuredSeparators = /[\n,，、]/.test(pastedText);
+    if (!hasStructuredSeparators && bbSubtitleDraftText.trim()) {
+      return;
+    }
+
+    event.preventDefault();
+    appendBilibiliSubtitleTargets(parseBilibiliSubtitleTargets(pastedText));
+    bbSubtitleDraftText = "";
+  }
+
+  function focusBilibiliSubtitleDraftInput() {
+    if (!globalEnabled || !bbSubtitleEnabled) return;
+    bbSubtitleDraftInputRef?.focus();
   }
 
   function removeBilibiliSubtitleTarget(target: string) {
@@ -754,14 +794,36 @@
   });
 
   function navigate(view: string) {
+    bbSubtitleTargetsTooltipOpen = false;
     if (!globalEnabled) return;
     currentView = view;
   }
 
   function toggleSection(section: "general" | "youtube" | "bilibili") {
+    bbSubtitleTargetsTooltipOpen = false;
     sectionOpen[section] = !sectionOpen[section];
   }
+
+  function toggleBilibiliSubtitleTargetsTooltip() {
+    bbSubtitleTargetsTooltipOpen = !bbSubtitleTargetsTooltipOpen;
+  }
+
+  function closeBilibiliSubtitleTargetsTooltip() {
+    bbSubtitleTargetsTooltipOpen = false;
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      closeBilibiliSubtitleTargetsTooltip();
+    }
+  }
+
+  $: if (bbSubtitleTargetMode !== "allowlist" && bbSubtitleTargetsTooltipOpen) {
+    bbSubtitleTargetsTooltipOpen = false;
+  }
 </script>
+
+<svelte:window on:keydown={handleWindowKeydown} />
 
 <main
   class="w-[360px] h-[600px] glass-card text-primary font-sans select-none overflow-hidden relative flex flex-col"
@@ -1389,171 +1451,164 @@
               </svg>
             </div>
             <div slot="content" class="space-y-3 px-1">
-              <div class="rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-cyan-500/[0.10] via-white/45 to-transparent p-1.5 shadow-[0_10px_30px_rgba(8,145,178,0.08)] dark:border-cyan-400/10 dark:from-cyan-500/[0.14] dark:via-white/[0.03] dark:to-transparent">
-                <div class="flex items-center px-2 py-1.5">
-                  <span
-                    class="text-[10px] font-semibold tracking-[0.16em] uppercase text-cyan-700/80 dark:text-cyan-300/70"
+              <!-- Artwork-Level Elegance: Mode Slider -->
+              <div
+                class="relative p-1 bg-black/5 dark:bg-black/20 rounded-[12px] border border-black/[0.04] dark:border-white/5 w-fit mx-auto mt-2 mb-3 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.2)] isolate"
+              >
+                <div class="relative flex items-center">
+                  <!-- Animated Thumb -->
+                  <div
+                    class="absolute left-0 top-0 bottom-0 w-1/2 rounded-[10px] bg-white dark:bg-[#32363F] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] border border-black/[0.04] dark:border-white/[0.05] z-0 pointer-events-none"
+                    style="transform: translateX(calc({bbSubtitleTargetMode ===
+                    'all'
+                      ? 0
+                      : 1} * 100%)); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);"
+                  ></div>
+
+                  <!-- Mode: All -->
+                  <button
+                    class="relative z-10 w-[86px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {bbSubtitleTargetMode ===
+                    'all'
+                      ? 'text-cyan-600 dark:text-cyan-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    disabled={!globalEnabled || !bbSubtitleEnabled}
+                    on:click={() =>
+                      globalEnabled &&
+                      bbSubtitleEnabled &&
+                      (bbSubtitleTargetMode = 'all')}
                   >
-                    {t("bb_subtitle_scope")}
-                  </span>
-                </div>
-                <div class="grid grid-cols-2 gap-1.5">
-                  <div class="relative">
-                    <button
-                      type="button"
-                      class={`w-full rounded-[1rem] border px-3 py-3 text-left transition-all ${
-                        bbSubtitleTargetMode === "all"
-                          ? "border-cyan-500/25 bg-white/80 text-cyan-800 shadow-[0_8px_20px_rgba(8,145,178,0.10)] dark:border-cyan-400/20 dark:bg-cyan-500/10 dark:text-cyan-200"
-                          : "border-black/5 bg-white/45 text-gray-600 hover:bg-white/70 hover:border-cyan-500/15 dark:border-white/8 dark:bg-white/[0.03] dark:text-white/65 dark:hover:bg-white/[0.06]"
-                      }`}
-                      disabled={!globalEnabled || !bbSubtitleEnabled}
-                      on:click={() => (bbSubtitleTargetMode = "all")}
+                    <span
+                      class="active:scale-95 transition-transform duration-200 ease-out"
                     >
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="min-w-0">
-                          <span class="inline-flex max-w-full items-center truncate text-xs font-semibold leading-none">
-                            {t("bb_subtitle_scope_all")}
-                          </span>
-                        </div>
-                        <span
-                          class={`h-2.5 w-2.5 rounded-full transition-all ${
-                            bbSubtitleTargetMode === "all"
-                              ? "bg-cyan-500 shadow-[0_0_0_4px_rgba(6,182,212,0.14)]"
-                              : "bg-gray-300 dark:bg-white/20"
-                          }`}
-                        ></span>
-                      </div>
-                    </button>
-                  </div>
-                  <div class="relative">
-                    <button
-                      type="button"
-                      class={`w-full rounded-[1rem] border px-3 py-3 text-left transition-all ${
-                        bbSubtitleTargetMode === "allowlist"
-                          ? "border-cyan-500/25 bg-white/80 text-cyan-800 shadow-[0_8px_20px_rgba(8,145,178,0.10)] dark:border-cyan-400/20 dark:bg-cyan-500/10 dark:text-cyan-200"
-                          : "border-black/5 bg-white/45 text-gray-600 hover:bg-white/70 hover:border-cyan-500/15 dark:border-white/8 dark:bg-white/[0.03] dark:text-white/65 dark:hover:bg-white/[0.06]"
-                      }`}
-                      disabled={!globalEnabled || !bbSubtitleEnabled}
-                      on:click={() => (bbSubtitleTargetMode = "allowlist")}
+                      {t("bb_subtitle_scope_all")}
+                    </span>
+                  </button>
+
+                  <!-- Mode: Allowlist -->
+                  <button
+                    class="relative z-10 w-[86px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {bbSubtitleTargetMode ===
+                    'allowlist'
+                      ? 'text-cyan-600 dark:text-cyan-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    disabled={!globalEnabled || !bbSubtitleEnabled}
+                    on:click={() =>
+                      globalEnabled &&
+                      bbSubtitleEnabled &&
+                      (bbSubtitleTargetMode = 'allowlist')}
+                  >
+                    <span
+                      class="active:scale-95 transition-transform duration-200 ease-out"
                     >
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="min-w-0">
-                          <span class="inline-flex max-w-full items-center truncate text-xs font-semibold leading-none">
-                            {t("bb_subtitle_scope_allowlist")}
-                          </span>
-                        </div>
-                        <span
-                          class={`h-2.5 w-2.5 rounded-full transition-all ${
-                            bbSubtitleTargetMode === "allowlist"
-                              ? "bg-cyan-500 shadow-[0_0_0_4px_rgba(6,182,212,0.14)]"
-                              : "bg-gray-300 dark:bg-white/20"
-                          }`}
-                        ></span>
-                      </div>
-                    </button>
-                  </div>
+                      {t("bb_subtitle_scope_allowlist")}
+                    </span>
+                  </button>
                 </div>
               </div>
 
               {#if bbSubtitleTargetMode === "allowlist"}
-                <div class="rounded-[1.35rem] border border-black/5 bg-white/55 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/8 dark:bg-white/[0.035] dark:shadow-[0_16px_40px_rgba(0,0,0,0.24)] overflow-hidden">
-                  <div class="flex items-start justify-between gap-3 border-b border-black/5 px-3.5 py-2.5 dark:border-white/6">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="text-[10px] font-semibold tracking-[0.14em] uppercase text-cyan-700/80 dark:text-cyan-300/70"
-                      >
+                <div class="pt-1">
+                  <div class="flex items-center justify-between mb-1.5 px-0.5 relative z-20">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide">
                         {t("bb_subtitle_targets")}
                       </span>
-                      <span class="h-1.5 w-1.5 rounded-full bg-cyan-400/80"></span>
+
+                      <div class="relative flex shrink-0 items-center">
+                        <button
+                          type="button"
+                          aria-controls="bb-subtitle-targets-tooltip"
+                          aria-expanded={bbSubtitleTargetsTooltipOpen}
+                          class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
+                          on:click|stopPropagation={toggleBilibiliSubtitleTargetsTooltip}
+                        >
+                          ?
+                        </button>
+
+                        {#if bbSubtitleTargetsTooltipOpen}
+                          <div
+                            id="bb-subtitle-targets-tooltip"
+                            role="tooltip"
+                            class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                            in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                            out:fade|local={{ duration: 120 }}
+                          >
+                            {t("bb_subtitle_targets_desc")}
+                          </div>
+
+                          <button
+                            type="button"
+                            class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                            aria-label={t("bb_subtitle_targets_desc")}
+                            on:click={closeBilibiliSubtitleTargetsTooltip}
+                          ></button>
+                        {/if}
+                      </div>
                     </div>
-                    <div class="shrink-0 rounded-full border border-black/5 bg-black/[0.03] px-2.5 py-1 text-[10px] font-medium text-gray-500 dark:border-white/8 dark:bg-white/[0.04] dark:text-white/45">
+                    <span class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium">
                       {bbSubtitleTargetsList.length}
-                    </div>
+                    </span>
                   </div>
 
-                  <div class="space-y-2 p-2.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        class="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/[0.08] px-3.5 py-1.5 text-[11px] font-semibold text-cyan-700 shadow-[0_8px_18px_rgba(8,145,178,0.10)] transition-all hover:bg-cyan-500/[0.12] hover:shadow-[0_10px_24px_rgba(8,145,178,0.14)] active:scale-[0.98] dark:border-cyan-400/18 dark:bg-cyan-500/[0.12] dark:text-cyan-300 dark:hover:bg-cyan-500/[0.18] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                        disabled={!globalEnabled || !bbSubtitleEnabled || bbSubtitleAddCurrentPending}
-                        on:click={addCurrentBilibiliUploaderToAllowlist}
-                      >
-                        <span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-cyan-600 dark:bg-white/10 dark:text-cyan-300">
-                          <svg
-                            class="h-3.5 w-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M12 4v16m8-8H4"
-                            />
-                          </svg>
-                        </span>
-                        {bbSubtitleAddCurrentPending
-                          ? t("bb_subtitle_add_current_loading")
-                          : t("bb_subtitle_add_current")}
-                      </button>
-
-                      {#if bbSubtitleAddCurrentStatus}
-                        <div
-                          class={`inline-flex max-w-full items-center rounded-full border px-3 py-1.5 text-[10px] font-medium shadow-[0_4px_12px_rgba(15,23,42,0.04)] ${getBilibiliSubtitleStatusClass()}`}
+                  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                  <div
+                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-cyan-400/50 focus-within:border-cyan-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {bbSubtitleTargetsList.length ===
+                    0
+                      ? 'items-start'
+                      : 'items-center'}"
+                    on:click={(event) => {
+                      if (event.target === event.currentTarget) {
+                        focusBilibiliSubtitleDraftInput();
+                      }
+                    }}
+                  >
+                    {#each bbSubtitleTargetsList as item}
+                      <div class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] cursor-default max-w-full flex-shrink-0 group hover:bg-white hover:border-cyan-400/30 dark:hover:bg-black/40 transition-all">
+                        <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors">{item}</span>
+                        <button
+                          type="button"
+                          class="text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 dark:text-white/30 dark:hover:text-rose-400 transition-colors ml-0.5 p-0.5 rounded-full inline-flex items-center justify-center h-5 w-5"
+                          on:click={() => removeBilibiliSubtitleTarget(item)}
+                          title={t("remove_tag")}
                         >
-                          <span class="truncate">{bbSubtitleAddCurrentStatus}</span>
-                        </div>
-                      {/if}
-                    </div>
-
-                    {#if bbSubtitleTargetsList.length > 0}
-                      <div class="max-h-[122px] overflow-y-auto no-scrollbar pt-0.5">
-                        <div class="flex flex-wrap gap-1.5">
-                          {#each bbSubtitleTargetsList as item}
-                            <div class="flex max-w-full items-center gap-1.5 rounded-xl border border-black/5 bg-white/70 pl-2.5 pr-1 py-1 text-[10px] text-gray-600 shadow-[0_1px_3px_rgba(15,23,42,0.04)] dark:border-white/8 dark:bg-white/[0.05] dark:text-white/65">
-                              <span class="truncate font-mono">{item}</span>
-                              <button
-                                type="button"
-                                class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-white/25 dark:hover:bg-rose-500/20 dark:hover:text-rose-300"
-                                on:click={() => removeBilibiliSubtitleTarget(item)}
-                                aria-label={t("remove_tag")}
-                              >
-                                <svg
-                                  class="h-3 w-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                  stroke-width="2.5"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M6 18L18 6M6 6l12 12"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          {/each}
-                        </div>
+                          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                          </svg>
+                        </button>
                       </div>
+                    {/each}
+
+                    <input
+                      id="bb-subtitle-targets-input"
+                      bind:this={bbSubtitleDraftInputRef}
+                      class="flex-1 min-w-[96px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                      placeholder={t("bb_subtitle_targets_placeholder")}
+                      disabled={!globalEnabled || !bbSubtitleEnabled}
+                      bind:value={bbSubtitleDraftText}
+                      on:keydown={handleBilibiliSubtitleDraftKeyDown}
+                      on:paste={handleBilibiliSubtitleDraftPaste}
+                      on:blur={commitBilibiliSubtitleDraft}
+                      spellcheck="false"
+                    />
+                  </div>
+                  
+                  <div class="flex items-center justify-between mt-2.5 px-0.5 gap-2">
+                    <button
+                      type="button"
+                      class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-1.5 text-[11px] font-medium text-cyan-700 shadow-[0_2px_8px_rgba(8,145,178,0.08)] transition-all hover:bg-cyan-500/[0.12] active:scale-[0.98] dark:border-cyan-400/18 dark:bg-cyan-500/[0.12] dark:text-cyan-300 dark:hover:bg-cyan-500/[0.18] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!globalEnabled || !bbSubtitleEnabled || bbSubtitleAddCurrentPending}
+                      on:click={addCurrentBilibiliUploaderToAllowlist}
+                    >
+                      <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      {bbSubtitleAddCurrentPending ? t("bb_subtitle_add_current_loading") : t("bb_subtitle_add_current")}
+                    </button>
+
+                    {#if bbSubtitleAddCurrentStatus}
+                      <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full border truncate ${bbSubtitleAddCurrentTone === 'success' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/20' : bbSubtitleAddCurrentTone === 'error' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/20' : 'bg-black/5 text-gray-500 border-black/5 dark:bg-white/10 dark:text-gray-300 dark:border-white/10'}`}>
+                        {bbSubtitleAddCurrentStatus}
+                      </span>
                     {/if}
-
-                    <div class="rounded-[1.05rem] border border-black/6 bg-white/65 shadow-inner shadow-white/40 transition-all focus-within:border-cyan-500/30 focus-within:bg-cyan-500/[0.035] focus-within:shadow-[0_0_0_1px_rgba(6,182,212,0.12)] dark:border-white/8 dark:bg-white/[0.04] dark:shadow-black/10 dark:focus-within:bg-cyan-500/[0.07] dark:focus-within:shadow-[0_0_0_1px_rgba(34,211,238,0.18)]">
-                      <textarea
-                        class="w-full min-h-[72px] resize-none bg-transparent px-3 py-2.5 text-xs font-mono leading-5 text-gray-800 placeholder:text-gray-400/80 outline-none dark:text-white/85 dark:placeholder:text-white/24 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={!globalEnabled || !bbSubtitleEnabled}
-                        bind:value={bbSubtitleDraftText}
-                        on:blur={commitBilibiliSubtitleDraft}
-                        placeholder={t("bb_subtitle_targets_placeholder")}
-                        spellcheck="false"
-                      ></textarea>
-                    </div>
-
-                    <p class="px-0.5 text-[10px] leading-relaxed text-gray-500 dark:text-white/45">
-                      {t("bb_subtitle_targets_desc")}
-                    </p>
                   </div>
                 </div>
               {/if}
