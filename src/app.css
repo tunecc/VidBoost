@@ -110,7 +110,6 @@ body {
 }
 
 @layer components {
-
   /* Glass Card Utility */
   .glass-card {
     background: var(--glass-surface);

@@ -23,7 +23,7 @@
         <div class="flex items-center gap-3">
             <!-- Icon -->
             <div
-                class="w-8 h-8 rounded-lg flex items-center justify-center border transition-colors duration-300"
+                class="w-8 h-8 shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                 style="
             background-color: {iconColor === 'blue'
                     ? 'rgba(59,130,246,0.1)'

@@ -25,7 +25,7 @@
   <div class="flex items-center gap-3">
     <!-- Icon Placeholder -->
     <div
-      class="rounded-lg flex items-center justify-center border transition-colors duration-300"
+      class="shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
       class:w-8={!compact}
       class:h-8={!compact}
       class:w-6={compact}
@@ -74,7 +74,7 @@
       <slot name="icon">
         <!-- Default Icon if none provided -->
         <div
-          class="bg-current rounded-full opacity-50"
+          class="bg-current rounded-[4px] opacity-50"
           class:w-4={!compact}
           class:h-4={!compact}
           class:w-3={compact}

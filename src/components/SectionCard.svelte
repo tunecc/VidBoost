@@ -23,7 +23,7 @@
            Actually, let's use a mapping for the dot color to be safe with Tailwind. -->
 
       <div
-        class="w-2 h-2 rounded-full {iconColor === 'blue'
+        class="w-2.5 h-2.5 rounded-[4px] border border-white/40 dark:border-white/10 {iconColor === 'blue'
           ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
           : ''} {iconColor === 'red'
           ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'

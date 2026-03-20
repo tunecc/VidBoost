@@ -115,6 +115,8 @@ const strings = {
         // General
         language: "Language",
         general: "General",
+        github_repo: "Open GitHub repository",
+        github_releases: "View release notes",
         lang_auto: "Auto",
         lang_en: "English",
         lang_zh: "Chinese"
@@ -233,6 +235,8 @@ const strings = {
         // General
         language: "语言",
         general: "通用",
+        github_repo: "打开 GitHub 仓库",
+        github_releases: "查看版本发布说明",
         lang_auto: "跟随系统",
         lang_en: "English",
         lang_zh: "简体中文"
