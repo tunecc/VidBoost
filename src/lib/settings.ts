@@ -52,6 +52,7 @@ export type YTMemberBlockMode = 'all' | 'blocklist' | 'allowlist';
 export type Settings = {
     enabled: boolean;
     h5_enabled: boolean;
+    stats_speed_converter: boolean;
     ap_enabled: boolean;
     ap_allow_background: boolean;
     bnd_enabled: boolean;
@@ -79,6 +80,7 @@ export type SettingsKey = keyof Settings;
 export const CONTENT_SETTINGS_KEYS = [
     'enabled',
     'h5_enabled',
+    'stats_speed_converter',
     'ap_enabled',
     'bnd_enabled',
     'yt_fast_pause',
@@ -112,6 +114,7 @@ export const YT_MEMBER_BLOCK_SETTINGS_KEYS = [
 export const DEFAULT_SETTINGS: Settings = {
     enabled: true,
     h5_enabled: true,
+    stats_speed_converter: false,
     ap_enabled: true,
     ap_allow_background: true,
     bnd_enabled: true,

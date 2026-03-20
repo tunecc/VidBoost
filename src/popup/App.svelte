@@ -32,6 +32,7 @@
 
   let globalEnabled = DEFAULT_SETTINGS.enabled;
   let h5Enabled = DEFAULT_SETTINGS.h5_enabled;
+  let statsSpeedConverter = DEFAULT_SETTINGS.stats_speed_converter;
   let autoPauseEnabled = DEFAULT_SETTINGS.ap_enabled;
 
   // New Config for YouTube Optimizer
@@ -673,6 +674,7 @@
     getSettings([...POPUP_SETTINGS_KEYS]).then((res) => {
       globalEnabled = res.enabled;
       h5Enabled = res.h5_enabled;
+      statsSpeedConverter = res.stats_speed_converter;
       autoPauseEnabled = res.ap_enabled;
 
       bndEnabled = res.bnd_enabled;
@@ -753,6 +755,7 @@
         })(),
         enabled: globalEnabled,
         h5_enabled: h5Enabled,
+        stats_speed_converter: statsSpeedConverter,
         ap_enabled: autoPauseEnabled,
         bnd_enabled: bndEnabled,
         yt_fast_pause: ytFastPause,
@@ -910,6 +913,35 @@
                   d="M13 10V3L4 14h7v7l9-11h-7z"
                 /></svg
               >
+            </div>
+          </ToggleItem>
+
+          <ToggleItem
+            title={t("stats_speed_converter")}
+            desc={t("stats_speed_converter_desc")}
+            checked={statsSpeedConverter}
+            iconColor="blue"
+            disabled={!globalEnabled}
+            onClick={() =>
+              globalEnabled && (statsSpeedConverter = !statsSpeedConverter)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 17h4v-5H3v5zm7 0h4V7h-4v10zm7 0h4V4h-4v13z"
+                />
+              </svg>
             </div>
           </ToggleItem>
 
