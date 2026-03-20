@@ -7,6 +7,14 @@
         "storage",
         "activeTab"
     ],
+    "host_permissions": [
+        "https://dns.google/*",
+        "https://cloudflare-dns.com/*",
+        "https://dns.quad9.net/*",
+        "https://ipapi.co/*",
+        "https://ipwho.is/*",
+        "https://ipwhois.app/*"
+    ],
     "action": {
         "default_popup": "popup.html",
         "default_title": "VidBoost"
@@ -50,7 +58,8 @@
         {
             "resources": [
                 "assets/yt-member-prefilter.page.js",
-                "assets/yt-original-audio.page.js"
+                "assets/yt-original-audio.page.js",
+                "assets/yt-cdn-status.page.js"
             ],
             "matches": [
                 "*://youtu.be/*",

@@ -38,6 +38,7 @@
   let ytBlockNative = DEFAULT_SETTINGS.yt_config.blockNativeSeek ?? true;
   let ytAlwaysUseOriginalAudio =
     DEFAULT_SETTINGS.yt_config.alwaysUseOriginalAudio ?? false;
+  let ytShowCdnCountry = DEFAULT_SETTINGS.yt_config.showCdnCountry ?? false;
 
   // Bilibili Config
   let bbSubtitleEnabled = DEFAULT_SETTINGS.bb_subtitle.enabled;
@@ -719,6 +720,7 @@
         ytBlockNative = res.yt_config.blockNativeSeek ?? true;
         ytAlwaysUseOriginalAudio =
           res.yt_config.alwaysUseOriginalAudio ?? false;
+        ytShowCdnCountry = res.yt_config.showCdnCountry ?? false;
       } else if (res.h5_config) {
         ytBlockNative = res.h5_config.blockNumKeys ?? true;
       }
@@ -765,6 +767,7 @@
         yt_config: {
           blockNativeSeek: ytBlockNative,
           alwaysUseOriginalAudio: ytAlwaysUseOriginalAudio,
+          showCdnCountry: ytShowCdnCountry,
         },
         ui_state: sectionOpen,
         yt_member_block: ytMemberBlock,
@@ -1101,6 +1104,36 @@
                 />
                 <circle cx="6" cy="18" r="3" stroke-width="2" />
                 <circle cx="16" cy="16" r="3" stroke-width="2" />
+              </svg>
+            </div>
+          </ToggleItem>
+
+          <ToggleItem
+            title={t("yt_cdn_status")}
+            desc={t("yt_cdn_status_desc")}
+            checked={ytShowCdnCountry}
+            iconColor="red"
+            disabled={!globalEnabled}
+            onClick={() =>
+              globalEnabled && (ytShowCdnCountry = !ytShowCdnCountry)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="12" r="9" stroke-width="2" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"
+                />
               </svg>
             </div>
           </ToggleItem>

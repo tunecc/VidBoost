@@ -8,6 +8,7 @@ import { YouTubeMemberBlocker } from '../features/YouTubeMemberBlocker';
 import { BilibiliCDN } from '../features/BilibiliCDN';
 import { YouTubeOriginalAudio } from '../features/YouTubeOriginalAudio';
 import { BilibiliAutoSubtitle } from '../features/BilibiliAutoSubtitle';
+import { YouTubeCdnStatus } from '../features/YouTubeCdnStatus';
 import {
     getSettings,
     onSettingsChanged,
@@ -21,6 +22,7 @@ const autoPause = new AutoPause();
 const bilibiliCdn = new BilibiliCDN();
 const youtubeOriginalAudio = new YouTubeOriginalAudio();
 const bilibiliAutoSubtitle = new BilibiliAutoSubtitle();
+const youtubeCdnStatus = new YouTubeCdnStatus();
 
 const features = [
     new H5Enhancer(),
@@ -32,7 +34,8 @@ const features = [
     new BilibiliSpaceBlocker(),
     new YouTubeMemberBlocker(),
     bilibiliAutoSubtitle,
-    bilibiliCdn
+    bilibiliCdn,
+    youtubeCdnStatus
 ];
 
 const mountedState = new Array(features.length).fill(false);
@@ -77,6 +80,7 @@ function applyFromSettings(res: Partial<Settings>) {
     const ytFastPauseOn = settings.yt_fast_pause !== false && fastPauseMasterOn;
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
+    const ytCdnStatusOn = settings.yt_config.showCdnCountry === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
     const bbSubtitleOn = settings.bb_subtitle.enabled === true;
@@ -84,6 +88,7 @@ function applyFromSettings(res: Partial<Settings>) {
 
     youtubeOriginalAudio.updateSettings(settings);
     bilibiliAutoSubtitle.updateSettings(settings);
+    youtubeCdnStatus.updateSettings(settings);
 
     setFeatureEnabled(0, settings.h5_enabled !== false);
     setFeatureEnabled(1, settings.ap_enabled !== false);
@@ -95,6 +100,7 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(7, ytMemberBlockOn);
     setFeatureEnabled(8, bbSubtitleOn);
     setFeatureEnabled(9, bbCdnOn);
+    setFeatureEnabled(10, ytCdnStatusOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);

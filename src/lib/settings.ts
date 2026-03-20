@@ -10,6 +10,7 @@ export type H5Config = {
 export type YTConfig = {
     blockNativeSeek?: boolean;
     alwaysUseOriginalAudio?: boolean;
+    showCdnCountry?: boolean;
 };
 
 export type UIState = {
@@ -85,13 +86,13 @@ export const CONTENT_SETTINGS_KEYS = [
     'bb_block_space',
     'bb_subtitle',
     'bb_cdn',
+    'language',
     'yt_config',
     'yt_member_block'
 ] as const satisfies SettingsKey[];
 
 export const POPUP_SETTINGS_KEYS = [
     ...CONTENT_SETTINGS_KEYS,
-    'language',
     'h5_config',
     'ui_state',
     'bb_cdn',
@@ -133,7 +134,8 @@ export const DEFAULT_SETTINGS: Settings = {
     language: 'auto',
     yt_config: {
         blockNativeSeek: true,
-        alwaysUseOriginalAudio: false
+        alwaysUseOriginalAudio: false,
+        showCdnCountry: false
     },
     h5_config: {
         speedStep: 0.1,
