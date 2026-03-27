@@ -321,6 +321,29 @@ export class YouTubeCdnStatus implements Feature {
         return null;
     }
 
+    private applyWidgetLayout(widget: HTMLSpanElement, mode: MountPointMode) {
+        widget.style.height = '';
+        widget.style.marginRight = '';
+        widget.style.position = '';
+        widget.style.right = '';
+        widget.style.bottom = '';
+        widget.style.zIndex = '';
+        widget.style.padding = '0';
+        widget.style.textShadow = 'none';
+
+        if (mode === 'controls' || mode === 'controls-fallback') {
+            widget.style.height = '100%';
+            widget.style.marginRight = '6px';
+            return;
+        }
+
+        widget.style.position = 'absolute';
+        widget.style.right = '12px';
+        widget.style.bottom = '54px';
+        widget.style.zIndex = '999999';
+        widget.style.textShadow = '0 1px 2px rgba(0,0,0,0.6)';
+    }
+
     private createWidget(mode: MountPointMode) {
         const el = document.createElement('span');
         el.id = WIDGET_ID;
@@ -343,20 +366,7 @@ export class YouTubeCdnStatus implements Feature {
             min-width: 44px;
             text-align: right;
         `;
-
-        if (mode === 'controls' || mode === 'controls-fallback') {
-            el.style.height = '100%';
-            el.style.marginRight = '6px';
-            el.style.padding = '0';
-        } else {
-            el.style.position = 'absolute';
-            el.style.right = '12px';
-            el.style.bottom = '54px';
-            el.style.zIndex = '999999';
-            el.style.padding = '0';
-            el.style.textShadow = '0 1px 2px rgba(0,0,0,0.6)';
-        }
-
+        this.applyWidgetLayout(el, mode);
         return el;
     }
 
@@ -370,10 +380,16 @@ export class YouTubeCdnStatus implements Feature {
         if (!widget) {
             widget = this.createWidget(mountPoint.mode);
             mountPoint.el.insertBefore(widget, mountPoint.el.firstElementChild || mountPoint.el.firstChild);
+        } else if (widget.parentElement !== mountPoint.el) {
+            this.applyWidgetLayout(widget, mountPoint.mode);
+            mountPoint.el.insertBefore(widget, mountPoint.el.firstElementChild || mountPoint.el.firstChild);
+        } else {
+            this.applyWidgetLayout(widget, mountPoint.mode);
         }
 
         const right = this.getRightControls();
         if (right && widget) {
+            this.applyWidgetLayout(widget, 'controls');
             const first = right.firstElementChild;
             if (widget.parentElement !== right || first !== widget) {
                 right.insertBefore(widget, first);
