@@ -1,6 +1,6 @@
 import { InputManager } from '../lib/InputManager';
 import type { Feature } from './Feature';
-import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings-content';
 import { isSiteHost } from '../lib/siteProfiles';
 import { VideoController } from '../lib/VideoController';
 
@@ -9,24 +9,6 @@ export class YouTubeSeekBlocker implements Feature {
     private videoCtrl = VideoController.getInstance();
     private enabled = false;
     private blockNativeSeek = true;
-
-    constructor() {
-        getSettings(['yt_config', 'h5_config']).then((res) => {
-            if (res.yt_config) {
-                this.blockNativeSeek = res.yt_config.blockNativeSeek ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
-            } else if (res.h5_config?.blockNumKeys !== undefined) {
-                this.blockNativeSeek = Boolean(res.h5_config.blockNumKeys);
-            } else {
-                this.blockNativeSeek = DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
-            }
-        });
-
-        onSettingsChanged((changes) => {
-            if (changes.yt_config) {
-                this.blockNativeSeek = changes.yt_config.blockNativeSeek ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
-            }
-        });
-    }
 
     mount() {
         this.enabled = true;
@@ -40,7 +22,19 @@ export class YouTubeSeekBlocker implements Feature {
         }
     }
 
-    updateSettings(_settings: unknown) { }
+    updateSettings(settings: unknown) {
+        const payload = settings as Partial<Settings> | null;
+        if (payload?.yt_config) {
+            this.blockNativeSeek = payload.yt_config.blockNativeSeek
+                ?? DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
+            return;
+        }
+        if (payload?.h5_config?.blockNumKeys !== undefined) {
+            this.blockNativeSeek = Boolean(payload.h5_config.blockNumKeys);
+            return;
+        }
+        this.blockNativeSeek = DEFAULT_SETTINGS.yt_config.blockNativeSeek!;
+    }
 
     private registerShortcuts() {
         const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];

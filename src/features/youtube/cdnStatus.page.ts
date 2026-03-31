@@ -1,16 +1,10 @@
 import {
-    YT_CDN_STATUS_BRIDGE_CHANNEL,
-    YT_CDN_STATUS_CONTENT_SOURCE,
-    YT_CDN_STATUS_PAGE_SOURCE,
+    DEFAULT_YT_CDN_STATUS_PAGE_CONFIG,
+    YT_CDN_STATUS_CONFIG_ATTRIBUTE,
+    YT_CDN_STATUS_CONFIG_EVENT,
+    YT_CDN_STATUS_REPORT_EVENT,
     type YouTubeCdnStatusPageConfig
 } from './cdnStatus.shared';
-
-type BridgeToPageMessage = {
-    source: string;
-    channel: string;
-    type: 'initial' | 'change';
-    config?: YouTubeCdnStatusPageConfig;
-};
 
 (() => {
     const host = window as unknown as Record<string, unknown>;
@@ -22,6 +16,14 @@ type BridgeToPageMessage = {
     let lastReportedUrl = '';
     let lastReportedAt = 0;
 
+    function publishDebug(key: string, value: string) {
+        const root = document.documentElement;
+        if (!root) return;
+        root.dataset[key] = value;
+    }
+
+    publishDebug('vbYtCdnPageInstalled', '1');
+
     function isRecord(value: unknown): value is Record<string, unknown> {
         return Boolean(value) && typeof value === 'object';
     }
@@ -30,33 +32,52 @@ type BridgeToPageMessage = {
         return enabled && url.includes('googlevideo.com') && url.includes('/videoplayback');
     }
 
+    function parseConfig(value: unknown): YouTubeCdnStatusPageConfig {
+        if (typeof value !== 'string' || !value.trim()) {
+            return { ...DEFAULT_YT_CDN_STATUS_PAGE_CONFIG };
+        }
+        try {
+            const parsed = JSON.parse(value) as Partial<YouTubeCdnStatusPageConfig>;
+            return {
+                enabled: parsed.enabled === true
+            };
+        } catch {
+            return { ...DEFAULT_YT_CDN_STATUS_PAGE_CONFIG };
+        }
+    }
+
+    function applyConfig(config: YouTubeCdnStatusPageConfig) {
+        enabled = config.enabled === true;
+        publishDebug('vbYtCdnPageEnabled', enabled ? '1' : '0');
+    }
+
+    function readConfigFromDocument() {
+        const raw = document.documentElement?.getAttribute(YT_CDN_STATUS_CONFIG_ATTRIBUTE) || '';
+        applyConfig(parseConfig(raw));
+    }
+
     function report(url: string) {
         const now = Date.now();
         if (url === lastReportedUrl && now - lastReportedAt < 250) return;
         lastReportedUrl = url;
         lastReportedAt = now;
+        publishDebug('vbYtCdnPageLastUrl', url.slice(0, 96));
 
-        window.postMessage({
-            source: YT_CDN_STATUS_PAGE_SOURCE,
-            channel: YT_CDN_STATUS_BRIDGE_CHANNEL,
-            type: 'videoplayback-url',
-            url
-        }, window.location.origin);
+        document.dispatchEvent(new CustomEvent(YT_CDN_STATUS_REPORT_EVENT, {
+            detail: JSON.stringify({
+                type: 'videoplayback-url',
+                url
+            })
+        }));
     }
 
-    function onBridgeMessage(event: MessageEvent<unknown>) {
-        if (event.source !== window) return;
-        if (!isRecord(event.data)) return;
-
-        const data = event.data as Partial<BridgeToPageMessage>;
-        if (data.source !== YT_CDN_STATUS_CONTENT_SOURCE) return;
-        if (data.channel !== YT_CDN_STATUS_BRIDGE_CHANNEL) return;
-        if (data.type !== 'initial' && data.type !== 'change') return;
-
-        enabled = data.config?.enabled === true;
+    function onConfigEvent(event: Event) {
+        if (!(event instanceof CustomEvent)) return;
+        applyConfig(parseConfig(event.detail));
     }
 
-    window.addEventListener('message', onBridgeMessage as EventListener);
+    document.addEventListener(YT_CDN_STATUS_CONFIG_EVENT, onConfigEvent as EventListener);
+    readConfigFromDocument();
 
     try {
         const originalFetch = window.fetch;
@@ -99,10 +120,4 @@ type BridgeToPageMessage = {
     } catch {
         // ignore xhr patch errors
     }
-
-    window.postMessage({
-        source: YT_CDN_STATUS_PAGE_SOURCE,
-        channel: YT_CDN_STATUS_BRIDGE_CHANNEL,
-        type: 'init'
-    }, window.location.origin);
 })();

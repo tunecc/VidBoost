@@ -7,6 +7,7 @@
         DEFAULT_SETTINGS,
         type Settings,
     } from "../lib/settings";
+    import { hasStorageApi } from "../lib/webext";
 
     // Props
     export let language: I18nLang = "auto";
@@ -44,7 +45,7 @@
     });
 
     $: {
-        if (loaded && typeof chrome !== "undefined" && chrome.storage) {
+        if (loaded && hasStorageApi("local")) {
             pendingSettings = {
                 h5_config: {
                     speedStep,
@@ -70,7 +71,7 @@
             clearTimeout(saveTimer);
             saveTimer = null;
         }
-        if (pendingSettings && typeof chrome !== "undefined" && chrome.storage) {
+        if (pendingSettings && hasStorageApi("local")) {
             setSettings(pendingSettings);
             pendingSettings = null;
         }

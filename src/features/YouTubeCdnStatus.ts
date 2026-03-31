@@ -8,9 +8,20 @@ import {
     pushYouTubeCdnStatusConfig
 } from './youtube/cdnStatus';
 import {
-    YT_CDN_STATUS_BRIDGE_CHANNEL,
-    YT_CDN_STATUS_PAGE_SOURCE
+    youTubeCdnStatusStorageRequestKey,
+    youTubeCdnStatusStorageStateKey,
+    YT_CDN_STATUS_REPORT_EVENT
 } from './youtube/cdnStatus.shared';
+import {
+    addStorageChangedListener,
+    addRuntimeMessageListener,
+    isFirefoxExtensionRuntime,
+    removeStorageChangedListener,
+    removeRuntimeMessageListener,
+    runtimeSendMessage,
+    storageLocalGet,
+    storageLocalSet
+} from '../lib/webext';
 
 type YtCdnState = {
     status?: string;
@@ -119,6 +130,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
 }
 
+function isLoopbackDebugYouTubePage() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+    const host = window.location.hostname.trim().toLowerCase();
+    const isLoopbackHost = host === '127.0.0.1'
+        || host === 'localhost'
+        || host === '[::1]'
+        || host.endsWith('.localhost');
+    if (!isLoopbackHost) return false;
+    return document.documentElement?.dataset?.vbSite?.trim().toLowerCase() === 'youtube';
+}
+
 export class YouTubeCdnStatus implements Feature {
     private enabled = false;
     private config: YTConfig = {};
@@ -126,24 +148,64 @@ export class YouTubeCdnStatus implements Feature {
     private syncTimer: number | null = null;
     private routePollTimer: number | null = null;
     private widgetRefreshTimer: number | null = null;
+    private mountPointObserver: MutationObserver | null = null;
     private lastRouteKey = '';
     private lastReportedHost = '';
     private lastReportedAt = 0;
     private lastOkCountryCode = '';
+    private lastStorageHost = '';
     private displayNames = new Map<string, Intl.DisplayNames>();
+
+    private readonly handleStorageChanged = (
+        changes: Record<string, { newValue?: unknown }>,
+        areaName?: string
+    ) => {
+        if (!isFirefoxExtensionRuntime()) return;
+        if (!this.isFeatureActiveOnCurrentPage()) return;
+        if (areaName && areaName !== 'local') return;
+
+        const host = this.lastStorageHost || this.lastReportedHost;
+        if (!host) return;
+
+        const stateKey = youTubeCdnStatusStorageStateKey(host);
+        const state = changes[stateKey]?.newValue;
+        if (!isRecord(state)) return;
+
+        const status = typeof state.status === 'string' ? state.status : 'unknown';
+        this.publishLoopbackStage(`state-storage:${status}`);
+        this.applyCdnState(state as YtCdnState);
+    };
+
+    private publishLoopbackStage(stage: string) {
+        if (!isLoopbackDebugYouTubePage() || typeof document === 'undefined') return;
+        const root = document.documentElement;
+        if (!root) return;
+        root.dataset.vbYtCdnStage = stage;
+    }
 
     private readonly handleNavigation = () => {
         this.scheduleSync(200);
     };
 
-    private readonly handleWindowMessage = (event: MessageEvent<unknown>) => {
-        if (event.source !== window) return;
-        if (!this.isFeatureActiveOnCurrentPage()) return;
-        if (!isRecord(event.data)) return;
+    private readonly handleDocumentReady = () => {
+        this.syncCurrentPage();
+        this.scheduleSync(250);
+    };
 
-        const data = event.data;
-        if (data.source !== YT_CDN_STATUS_PAGE_SOURCE) return;
-        if (data.channel !== YT_CDN_STATUS_BRIDGE_CHANNEL) return;
+    private readonly handlePageReport = (event: Event) => {
+        if (!this.isFeatureActiveOnCurrentPage()) return;
+        if (!(event instanceof CustomEvent)) return;
+        if (typeof event.detail !== 'string' || !event.detail.trim()) return;
+
+        let data: Record<string, unknown> | null = null;
+        try {
+            const parsed = JSON.parse(event.detail);
+            data = isRecord(parsed) ? parsed : null;
+        } catch {
+            data = null;
+        }
+
+        if (!data) return;
         if (data.type !== 'videoplayback-url') return;
         if (typeof data.url !== 'string') return;
 
@@ -155,15 +217,60 @@ export class YouTubeCdnStatus implements Feature {
 
         this.lastReportedHost = host;
         this.lastReportedAt = now;
+        this.lastStorageHost = host;
+        this.publishLoopbackStage('url-captured');
 
-        try {
-            void chrome.runtime.sendMessage({
-                type: 'VB_YT_CDN_CAPTURED_URL',
-                url: data.url
+        const refreshAfterCapture = () => {
+            void this.refreshCdnState();
+            window.setTimeout(() => {
+                void this.refreshCdnState();
+            }, 250);
+            window.setTimeout(() => {
+                void this.refreshCdnState();
+            }, 1200);
+        };
+
+        refreshAfterCapture();
+        this.publishLoopbackStage('url-forward-dispatched');
+        if (isFirefoxExtensionRuntime()) {
+            if (host.includes('.invalid') && isLoopbackDebugYouTubePage()) {
+                console.error('[VB_FF_YT_CDN] content storage request', host);
+            }
+            void storageLocalSet({
+                [youTubeCdnStatusStorageRequestKey(host)]: {
+                    host,
+                    url: data.url,
+                    ts: now
+                }
+            }).then(() => {
+                if (host.includes('.invalid') && isLoopbackDebugYouTubePage()) {
+                    console.error('[VB_FF_YT_CDN] content storage request resolved', host);
+                }
+                this.publishLoopbackStage('url-forwarded');
+                window.setTimeout(() => {
+                    void this.refreshCdnState();
+                }, 150);
+            }).catch(() => {
+                if (host.includes('.invalid') && isLoopbackDebugYouTubePage()) {
+                    console.error('[VB_FF_YT_CDN] content storage request failed', host);
+                }
+                this.publishLoopbackStage('url-forward-failed');
             });
-        } catch {
-            // ignore messaging errors
+            return;
         }
+
+        void runtimeSendMessage<{ ok?: boolean }>({
+            type: 'VB_YT_CDN_CAPTURED_URL',
+            url: data.url
+        }).then((response) => {
+            if (isRecord(response) && response.ok === true) {
+                this.publishLoopbackStage('url-forwarded');
+                return;
+            }
+            this.publishLoopbackStage('url-forward-no-response');
+        }).catch(() => {
+            this.publishLoopbackStage('url-forward-failed');
+        });
     };
 
     private readonly handleRuntimeMessage = (message: unknown) => {
@@ -171,18 +278,28 @@ export class YouTubeCdnStatus implements Feature {
         if (!isRecord(message)) return;
         if (message.type !== 'VB_YT_CDN_STATE') return;
 
+        const stateRecord = isRecord(message.state) ? message.state : null;
+        const status = typeof stateRecord?.status === 'string' ? stateRecord.status : 'unknown';
+        this.publishLoopbackStage(`state-received:${status}`);
         this.applyCdnState(message.state as YtCdnState | undefined);
     };
 
     mount() {
-        if (!isSiteHost('youtube')) return;
+        if (!isSiteHost('youtube')) {
+            this.publishLoopbackStage('mount-skipped-host');
+            return;
+        }
         if (this.enabled) return;
         this.enabled = true;
+        this.publishLoopbackStage('mounted');
 
         installYouTubeCdnStatusBridge();
-        window.addEventListener('message', this.handleWindowMessage as EventListener);
-        chrome.runtime.onMessage.addListener(this.handleRuntimeMessage);
+        document.addEventListener(YT_CDN_STATUS_REPORT_EVENT, this.handlePageReport as EventListener);
+        addRuntimeMessageListener(this.handleRuntimeMessage);
+        addStorageChangedListener(this.handleStorageChanged);
         window.addEventListener('popstate', this.handleNavigation);
+        window.addEventListener('load', this.handleDocumentReady, true);
+        document.addEventListener('readystatechange', this.handleDocumentReady, true);
         document.addEventListener('yt-navigate-finish', this.handleNavigation, true);
 
         this.lastRouteKey = this.getRouteKey();
@@ -198,7 +315,22 @@ export class YouTubeCdnStatus implements Feature {
             this.ensureWidgetMounted();
         }, WIDGET_REFRESH_MS);
 
-        this.scheduleSync(0);
+        this.mountPointObserver = new MutationObserver(() => {
+            if (!this.isFeatureActiveOnCurrentPage()) return;
+            if (document.getElementById(WIDGET_ID)) return;
+            const widget = this.ensureWidgetMounted();
+            if (widget) {
+                this.publishLoopbackStage('widget-mounted');
+                void this.refreshCdnState();
+            }
+        });
+        this.mountPointObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+
+        this.syncCurrentPage();
+        this.scheduleSync(250);
     }
 
     unmount() {
@@ -214,10 +346,15 @@ export class YouTubeCdnStatus implements Feature {
             window.clearInterval(this.widgetRefreshTimer);
             this.widgetRefreshTimer = null;
         }
+        this.mountPointObserver?.disconnect();
+        this.mountPointObserver = null;
 
-        window.removeEventListener('message', this.handleWindowMessage as EventListener);
-        chrome.runtime.onMessage.removeListener(this.handleRuntimeMessage);
+        document.removeEventListener(YT_CDN_STATUS_REPORT_EVENT, this.handlePageReport as EventListener);
+        removeRuntimeMessageListener(this.handleRuntimeMessage);
+        removeStorageChangedListener(this.handleStorageChanged);
         window.removeEventListener('popstate', this.handleNavigation);
+        window.removeEventListener('load', this.handleDocumentReady, true);
+        document.removeEventListener('readystatechange', this.handleDocumentReady, true);
         document.removeEventListener('yt-navigate-finish', this.handleNavigation, true);
 
         this.enabled = false;
@@ -225,6 +362,7 @@ export class YouTubeCdnStatus implements Feature {
         this.lastReportedHost = '';
         this.lastReportedAt = 0;
         this.lastOkCountryCode = '';
+        this.lastStorageHost = '';
         this.removeWidget();
 
         if (!isSiteHost('youtube')) return;
@@ -245,7 +383,8 @@ export class YouTubeCdnStatus implements Feature {
 
         if (this.enabled) {
             this.renderCurrentCountry();
-            this.scheduleSync(0);
+            this.syncCurrentPage();
+            this.scheduleSync(250);
         }
     }
 
@@ -267,16 +406,19 @@ export class YouTubeCdnStatus implements Feature {
         if (shouldCapture) {
             installYouTubeCdnStatusBridge();
             ensureYouTubeCdnStatusScriptInjected();
+            this.publishLoopbackStage('script-injected');
         }
 
         pushYouTubeCdnStatusConfig({ enabled: shouldCapture });
 
         if (!this.isFeatureActiveOnCurrentPage()) {
+            this.publishLoopbackStage('inactive-page');
             this.removeWidget();
             return;
         }
 
-        this.ensureWidgetMounted();
+        const widget = this.ensureWidgetMounted();
+        this.publishLoopbackStage(widget ? 'widget-mounted' : 'mount-point-missing');
         void this.refreshCdnState();
     }
 
@@ -317,6 +459,10 @@ export class YouTubeCdnStatus implements Feature {
 
         const player = this.playerRoot();
         if (player) return { el: player, mode: 'overlay' };
+
+        if (document.body) {
+            return { el: document.body, mode: 'overlay' };
+        }
 
         return null;
     }
@@ -421,6 +567,7 @@ export class YouTubeCdnStatus implements Feature {
 
         if (status === 'ok' && code) {
             this.lastOkCountryCode = code;
+            this.publishLoopbackStage('country-resolved');
             this.renderCurrentCountry();
             return;
         }
@@ -446,12 +593,43 @@ export class YouTubeCdnStatus implements Feature {
         if (!this.isFeatureActiveOnCurrentPage()) return;
 
         try {
-            const response = await chrome.runtime.sendMessage({
+            if (isFirefoxExtensionRuntime()) {
+                const host = this.lastStorageHost || this.lastReportedHost;
+                if (!host) {
+                    this.publishLoopbackStage('state-polled:none');
+                    this.applyCdnState(undefined);
+                    return;
+                }
+
+                const response = await storageLocalGet<Record<string, unknown>>(
+                    youTubeCdnStatusStorageStateKey(host)
+                );
+                const state = isRecord(response[youTubeCdnStatusStorageStateKey(host)])
+                    ? response[youTubeCdnStatusStorageStateKey(host)] as YtCdnState
+                    : undefined;
+                const status = typeof state?.status === 'string' ? state.status : '';
+                if (status) {
+                    this.publishLoopbackStage(`state-polled:${status}`);
+                } else {
+                    this.publishLoopbackStage('state-polled:none');
+                }
+                this.applyCdnState(state);
+                return;
+            }
+
+            const response = await runtimeSendMessage({
                 type: 'VB_YT_GET_CDN_STATE'
             });
             const state = isRecord(response) ? response.state as YtCdnState | undefined : undefined;
+            const status = typeof state?.status === 'string' ? state.status : '';
+            if (status) {
+                this.publishLoopbackStage(`state-polled:${status}`);
+            } else {
+                this.publishLoopbackStage('state-polled:none');
+            }
             this.applyCdnState(state);
         } catch {
+            this.publishLoopbackStage('state-polled:error');
             if (!this.lastOkCountryCode) {
                 this.setWidgetText('…', false, 'YouTube CDN country');
             }

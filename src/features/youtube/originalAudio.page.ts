@@ -4,6 +4,7 @@ import {
     YT_ORIGINAL_AUDIO_PAGE_SOURCE,
     type YouTubeOriginalAudioPageConfig
 } from './originalAudio.shared';
+import { isPageBridgeMessageEvent } from './bridge';
 
 type BridgeToPageMessage = {
     source: string;
@@ -87,7 +88,7 @@ const ORIGINAL_TRACK_MARKERS = [
     }, window.location.origin);
 
     function handleBridgeMessage(event: MessageEvent<unknown>) {
-        if (event.source !== window) return;
+        if (!isPageBridgeMessageEvent(event)) return;
         const data = event.data;
         if (!isRecord(data)) return;
 

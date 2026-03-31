@@ -1,10 +1,8 @@
 import type { Feature } from './Feature';
 import { isSiteHost } from '../lib/siteProfiles';
 import {
-    getSettings,
-    onSettingsChanged,
     DEFAULT_SETTINGS,
-    YT_MEMBER_BLOCK_SETTINGS_KEYS,
+    type Settings,
     type YTMemberBlockMode
 } from '../lib/settings-content';
 import { ObserverManager } from '../lib/ObserverManager';
@@ -55,42 +53,6 @@ export class YouTubeMemberBlocker implements Feature {
     private static readonly ALLOW_ATTR = 'data-vb-member-allow';
     private static readonly OBSERVER_SCOPE = 'spa';
     private static readonly PAGE_OBSERVER_NAME = 'dom';
-
-    constructor() {
-        // Load persisted settings
-        getSettings([...YT_MEMBER_BLOCK_SETTINGS_KEYS]).then((res) => {
-            this.mode = res.yt_member_block_mode ?? DEFAULT_SETTINGS.yt_member_block_mode;
-            this.setChannelList(this.blocklist, res.yt_member_blocklist ?? DEFAULT_SETTINGS.yt_member_blocklist);
-            this.setChannelList(this.allowlist, res.yt_member_allowlist ?? DEFAULT_SETTINGS.yt_member_allowlist);
-            if (this.enabled) {
-                this.syncMemberNetworkPrefilterConfig();
-                this.refreshFastHideStyle();
-                this.restoreAll();
-                this.scanPage();
-            }
-        });
-
-        // React to live setting changes
-        onSettingsChanged((changes) => {
-            if (changes.yt_member_block_mode !== undefined) {
-                this.mode = changes.yt_member_block_mode;
-                this.refreshFastHideStyle();
-            }
-            if (changes.yt_member_blocklist !== undefined) {
-                this.setChannelList(this.blocklist, changes.yt_member_blocklist);
-                this.refreshFastHideStyle();
-            }
-            if (changes.yt_member_allowlist !== undefined) {
-                this.setChannelList(this.allowlist, changes.yt_member_allowlist);
-            }
-            // Re-evaluate all cards when settings change
-            if (this.enabled) {
-                this.syncMemberNetworkPrefilterConfig();
-                this.restoreAll();
-                this.scanPage();
-            }
-        });
-    }
 
     // ─── Feature interface ───────────────────────────────────
 
@@ -149,7 +111,18 @@ export class YouTubeMemberBlocker implements Feature {
         this.removeFastHideStyle();
     }
 
-    updateSettings(_settings: unknown) { }
+    updateSettings(settings: unknown) {
+        const payload = settings as Partial<Settings> | null;
+        this.mode = payload?.yt_member_block_mode ?? DEFAULT_SETTINGS.yt_member_block_mode;
+        this.setChannelList(this.blocklist, payload?.yt_member_blocklist ?? DEFAULT_SETTINGS.yt_member_blocklist);
+        this.setChannelList(this.allowlist, payload?.yt_member_allowlist ?? DEFAULT_SETTINGS.yt_member_allowlist);
+        this.refreshFastHideStyle();
+
+        if (!this.enabled) return;
+        this.syncMemberNetworkPrefilterConfig();
+        this.restoreAll();
+        this.scanPage();
+    }
 
     // ─── Core Logic ──────────────────────────────────────────
 

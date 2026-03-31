@@ -2,7 +2,7 @@ import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
 import { getPlaybackRateConfigForHost, isSiteHost } from '../lib/siteProfiles';
-import { getSettings, onSettingsChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings-content';
 import {
     installDouyinPlaybackRateGuardBridge,
     pushDouyinPlaybackRateGuardConfig
@@ -48,20 +48,6 @@ export class H5Enhancer implements Feature {
         'h5-fullscreen', 'h5-seek-forward', 'h5-seek-back'
     ];
 
-    constructor() {
-        // Initial load
-        getSettings(['h5_config']).then((res) => {
-            if (res.h5_config) this.updateLocalConfig(res.h5_config);
-            else this.updateLocalConfig(DEFAULT_SETTINGS.h5_config);
-        });
-
-        onSettingsChanged((changes) => {
-            if (changes.h5_config) {
-                this.updateLocalConfig(changes.h5_config);
-            }
-        });
-    }
-
     mount() {
         this.enabled = true;
         this.installSitePlaybackBridge();
@@ -79,7 +65,10 @@ export class H5Enhancer implements Feature {
         this.resetSitePlaybackBridge();
     }
 
-    updateSettings(_settings: unknown) { }
+    updateSettings(settings: unknown) {
+        const payload = settings as Partial<Settings> | null;
+        this.updateLocalConfig(payload?.h5_config ?? DEFAULT_SETTINGS.h5_config);
+    }
 
     private updateLocalConfig(newConf: Partial<H5Config>) {
         this.config = { ...this.config, ...newConf };

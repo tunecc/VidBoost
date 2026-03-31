@@ -1,9 +1,22 @@
+import {
+    addRuntimeInstalledListener,
+    addRuntimeMessageListener,
+    addStorageChangedListener,
+    addTabRemovedListener,
+    storageLocalSet,
+    storageSessionSetAccessLevel,
+    tabsQuery,
+    tabsSendMessage
+} from '../lib/webext';
+import {
+    YT_CDN_STATUS_STORAGE_REQUEST_PREFIX,
+    youTubeCdnStatusStorageStateKey
+} from '../features/youtube/cdnStatus.shared';
+
 console.log('[VideoTools-Pro] Background script loaded');
 
 // Enable session storage access from content scripts
-chrome.storage.session.setAccessLevel({
-    accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
-});
+void storageSessionSetAccessLevel('TRUSTED_AND_UNTRUSTED_CONTEXTS').catch(() => {});
 
 // --- Lightweight playback state tracker ---
 // Foundation for centralized arbitration. Content scripts report state;
@@ -38,6 +51,13 @@ type CachedCountry = {
     ts: number;
 };
 
+type YtCdnTestOverride = {
+    status?: 'idle' | 'resolving' | 'ok' | 'doh_failed' | 'geo_failed';
+    host?: string;
+    lastIp?: string;
+    countryCode?: string;
+};
+
 const YT_CDN_HOST_CACHE_TTL_MS = 5 * 60 * 1000;
 const YT_CDN_GEO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const YT_CDN_RESOLVE_COOLDOWN_MS = 600;
@@ -47,6 +67,11 @@ const ytCdnLastResolve = new Map<number, { host: string; ts: number }>();
 const ytCdnTabState = new Map<number, YtCdnTabState>();
 const ytCdnHostCache = new Map<string, CachedIp>();
 const ytCdnGeoCache = new Map<string, CachedCountry>();
+let ytCdnTestOverride: YtCdnTestOverride | null = null;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object';
+}
 
 function parseDnsAnswer(data: unknown) {
     const answers = (data as { Answer?: unknown[] })?.Answer;
@@ -76,6 +101,31 @@ function hostFromUrl(url: string) {
         return new URL(url).hostname;
     } catch {
         return '';
+    }
+}
+
+function isYouTubeCdnStorageRequestKey(key: string) {
+    return key.startsWith(YT_CDN_STATUS_STORAGE_REQUEST_PREFIX);
+}
+
+function defaultYtCdnState(host = ''): YtCdnTabState {
+    return {
+        status: 'idle',
+        host,
+        lastIp: '',
+        countryCode: '',
+        ts: Date.now()
+    };
+}
+
+async function persistYtCdnStateByHost(host: string, state: YtCdnTabState) {
+    if (!host) return;
+    try {
+        await storageLocalSet({
+            [youTubeCdnStatusStorageStateKey(host)]: state
+        });
+    } catch {
+        // ignore persistence failures
     }
 }
 
@@ -210,13 +260,7 @@ async function lookupCountry(ip: string) {
 }
 
 function setYtCdnTabState(tabId: number, patch: Partial<YtCdnTabState>) {
-    const current = ytCdnTabState.get(tabId) ?? {
-        status: 'idle',
-        host: '',
-        lastIp: '',
-        countryCode: '',
-        ts: Date.now()
-    };
+    const current = ytCdnTabState.get(tabId) ?? defaultYtCdnState();
     const next = {
         ...current,
         ...patch,
@@ -226,9 +270,18 @@ function setYtCdnTabState(tabId: number, patch: Partial<YtCdnTabState>) {
     return next;
 }
 
+function makeStoredYtCdnState(host: string, patch: Partial<YtCdnTabState>) {
+    return {
+        ...defaultYtCdnState(host),
+        ...patch,
+        host,
+        ts: Date.now()
+    } satisfies YtCdnTabState;
+}
+
 async function notifyYtCdnState(tabId: number, state: YtCdnTabState) {
     try {
-        await chrome.tabs.sendMessage(tabId, {
+        await tabsSendMessage(tabId, {
             type: 'VB_YT_CDN_STATE',
             state
         });
@@ -252,12 +305,25 @@ async function resolveYtCdnState(tabId: number, url: string) {
     ytCdnInFlight.set(tabId, true);
 
     try {
+        if (ytCdnTestOverride) {
+            const overrideState = setYtCdnTabState(tabId, {
+                status: ytCdnTestOverride.status ?? 'ok',
+                host: ytCdnTestOverride.host || host,
+                lastIp: ytCdnTestOverride.lastIp || '203.0.113.7',
+                countryCode: normalizeCountryCode(ytCdnTestOverride.countryCode)
+            });
+            await persistYtCdnStateByHost(overrideState.host, overrideState);
+            await notifyYtCdnState(tabId, overrideState);
+            return;
+        }
+
         const resolvingState = setYtCdnTabState(tabId, {
             status: 'resolving',
             host,
             lastIp: '',
             countryCode: ''
         });
+        await persistYtCdnStateByHost(host, resolvingState);
         await notifyYtCdnState(tabId, resolvingState);
 
         const resolvedIp = await dohResolve(host);
@@ -268,6 +334,7 @@ async function resolveYtCdnState(tabId: number, url: string) {
                 lastIp: '',
                 countryCode: ''
             });
+            await persistYtCdnStateByHost(host, failedState);
             await notifyYtCdnState(tabId, failedState);
             return;
         }
@@ -280,6 +347,7 @@ async function resolveYtCdnState(tabId: number, url: string) {
                 lastIp: resolvedIp.ip,
                 countryCode: ''
             });
+            await persistYtCdnStateByHost(host, failedState);
             await notifyYtCdnState(tabId, failedState);
             return;
         }
@@ -290,17 +358,74 @@ async function resolveYtCdnState(tabId: number, url: string) {
             lastIp: resolvedIp.ip,
             countryCode: geo.countryCode
         });
+        await persistYtCdnStateByHost(host, successState);
         await notifyYtCdnState(tabId, successState);
     } finally {
         ytCdnInFlight.set(tabId, false);
     }
 }
 
+async function resolveYtCdnStateFromStorage(url: string) {
+    const host = hostFromUrl(url);
+    if (!host || !host.includes('googlevideo.com')) return;
+    if (host.includes('.invalid')) {
+        console.error('[VB_FF_YT_CDN] background storage resolve start', host);
+    }
+
+    if (ytCdnTestOverride) {
+        await persistYtCdnStateByHost(host, makeStoredYtCdnState(host, {
+            status: ytCdnTestOverride.status ?? 'ok',
+            host: ytCdnTestOverride.host || host,
+            lastIp: ytCdnTestOverride.lastIp || '203.0.113.7',
+            countryCode: normalizeCountryCode(ytCdnTestOverride.countryCode)
+        }));
+        if (host.includes('.invalid')) {
+            console.error('[VB_FF_YT_CDN] background storage resolve override', host);
+        }
+        return;
+    }
+
+    await persistYtCdnStateByHost(host, makeStoredYtCdnState(host, {
+        status: 'resolving',
+        lastIp: '',
+        countryCode: ''
+    }));
+
+    const resolvedIp = await dohResolve(host);
+    if (!resolvedIp?.ip) {
+        await persistYtCdnStateByHost(host, makeStoredYtCdnState(host, {
+            status: 'doh_failed',
+            lastIp: '',
+            countryCode: ''
+        }));
+        return;
+    }
+
+    const geo = await lookupCountry(resolvedIp.ip);
+    if (!geo?.countryCode) {
+        await persistYtCdnStateByHost(host, makeStoredYtCdnState(host, {
+            status: 'geo_failed',
+            lastIp: resolvedIp.ip,
+            countryCode: ''
+        }));
+        return;
+    }
+
+    await persistYtCdnStateByHost(host, makeStoredYtCdnState(host, {
+        status: 'ok',
+        lastIp: resolvedIp.ip,
+        countryCode: geo.countryCode
+    }));
+}
+
 // Relay for Cross-Tab Sync (Works across origins)
-chrome.runtime.onMessage.addListener((message, sender) => {
+addRuntimeMessageListener((message, sender) => {
+    if (!isRecord(message)) return;
+
     if (message.type === 'BROADCAST_SYNC') {
+        const payload = isRecord(message.payload) ? message.payload : null;
         // Track play signals in the arbitration state
-        if (message.payload?.type === 'PLAY_STARTED' && sender.tab?.id) {
+        if (payload?.type === 'PLAY_STARTED' && sender.tab?.id) {
             playbackTracker.activeTab = {
                 tabId: sender.tab.id,
                 timestamp: Date.now()
@@ -308,12 +433,14 @@ chrome.runtime.onMessage.addListener((message, sender) => {
         }
 
         // Relay to all tabs except the sender
-        chrome.tabs.query({}, (tabs) => {
-            for (const tab of tabs) {
+        void tabsQuery({}).then((tabs) => {
+            tabs.forEach((tab) => {
                 if (tab.id && tab.id !== sender.tab?.id) {
-                    chrome.tabs.sendMessage(tab.id, message.payload).catch(() => {});
+                    void tabsSendMessage(tab.id, payload).catch(() => {});
                 }
-            }
+            });
+        }).catch(() => {
+            // ignore query failures
         });
     } else if (message.type === 'VB_PLAYBACK_STATE') {
         if (sender.tab?.id && message.state === 'stopped') {
@@ -331,50 +458,93 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type !== 'VB_YT_CDN_CAPTURED_URL' && message?.type !== 'VB_YT_GET_CDN_STATE') {
+addRuntimeMessageListener((message, sender, sendResponse) => {
+    if (!isRecord(message)) return false;
+    if (
+        message.type !== 'VB_YT_CDN_CAPTURED_URL'
+        && message.type !== 'VB_YT_GET_CDN_STATE'
+        && message.type !== 'VB_TEST_SET_YT_CDN_OVERRIDE'
+        && message.type !== 'VB_TEST_CLEAR_YT_CDN_OVERRIDE'
+    ) {
         return false;
     }
 
-    (async () => {
-        if (message?.type === 'VB_YT_CDN_CAPTURED_URL') {
-            const tabId = sender.tab?.id;
-            if (typeof tabId !== 'number' || typeof message.url !== 'string') {
-                sendResponse({ ok: false });
-                return;
+    if (message.type === 'VB_TEST_SET_YT_CDN_OVERRIDE') {
+        ytCdnTestOverride = isRecord(message.override)
+            ? {
+                status: typeof message.override.status === 'string'
+                    ? message.override.status as YtCdnTestOverride['status']
+                    : undefined,
+                host: typeof message.override.host === 'string' ? message.override.host : undefined,
+                lastIp: typeof message.override.lastIp === 'string' ? message.override.lastIp : undefined,
+                countryCode: normalizeCountryCode(message.override.countryCode)
             }
+            : null;
+        sendResponse({ ok: true, override: ytCdnTestOverride });
+        return false;
+    }
 
-            await resolveYtCdnState(tabId, message.url);
-            sendResponse({ ok: true });
-            return;
+    if (message.type === 'VB_TEST_CLEAR_YT_CDN_OVERRIDE') {
+        ytCdnTestOverride = null;
+        sendResponse({ ok: true });
+        return false;
+    }
+
+    if (message.type === 'VB_YT_CDN_CAPTURED_URL') {
+        const tabId = sender.tab?.id;
+        if (typeof tabId !== 'number' || typeof message.url !== 'string') {
+            sendResponse({ ok: false });
+            return false;
         }
 
-        if (message?.type === 'VB_YT_GET_CDN_STATE') {
-            const tabId = sender.tab?.id;
-            if (typeof tabId !== 'number') {
-                sendResponse({ ok: false });
-                return;
-            }
+        sendResponse({ ok: true });
+        void resolveYtCdnState(tabId, message.url);
+        return false;
+    }
 
-            sendResponse({
-                ok: true,
-                state: ytCdnTabState.get(tabId) ?? {
-                    status: 'idle',
-                    host: '',
-                    lastIp: '',
-                    countryCode: '',
-                    ts: Date.now()
-                }
-            });
-            return;
+    if (message.type === 'VB_YT_GET_CDN_STATE') {
+        const tabId = sender.tab?.id;
+        if (typeof tabId !== 'number') {
+            sendResponse({ ok: false });
+            return false;
         }
-    })();
 
-    return true;
+        sendResponse({
+            ok: true,
+            state: ytCdnTabState.get(tabId) ?? {
+                status: 'idle',
+                host: '',
+                lastIp: '',
+                countryCode: '',
+                ts: Date.now()
+            }
+        });
+    }
+
+    return false;
+});
+
+addStorageChangedListener((changes, areaName) => {
+    if (areaName && areaName !== 'local') return;
+
+    Object.keys(changes).forEach((key) => {
+        if (!isYouTubeCdnStorageRequestKey(key)) return;
+
+        const request = changes[key]?.newValue;
+        if (!isRecord(request)) return;
+
+        const url = typeof request.url === 'string' ? request.url : '';
+        if (!url) return;
+        if (url.includes('.invalid')) {
+            console.error('[VB_FF_YT_CDN] background storage request seen', key);
+        }
+
+        void resolveYtCdnStateFromStorage(url);
+    });
 });
 
 // Clean up tracker when tabs are removed
-chrome.tabs.onRemoved.addListener((tabId) => {
+addTabRemovedListener((tabId) => {
     if (playbackTracker.activeTab?.tabId === tabId) {
         playbackTracker.activeTab = null;
     }
@@ -388,6 +558,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // Listen for installation
-chrome.runtime.onInstalled.addListener(() => {
+addRuntimeInstalledListener(() => {
     console.log('Extension installed');
 });

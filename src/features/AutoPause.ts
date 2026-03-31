@@ -4,6 +4,12 @@ import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS 
 import { normalizeDomain, normalizeDomainList } from '../lib/domain';
 import { getAutoPauseContainerSelectorsForHost } from '../lib/siteProfiles';
 import { ObserverManager } from '../lib/ObserverManager';
+import {
+    runtimeSendMessage,
+    storageSessionGet,
+    storageSessionRemove,
+    storageSessionSet
+} from '../lib/webext';
 
 type LastFocusedState = {
     id: string;
@@ -112,7 +118,7 @@ export class AutoPause implements Feature {
                         this.lastFocused &&
                         this.lastFocused.id !== this.sync.myId
                     ) {
-                        this.handleRemotePlay();
+                        this.handleRemotePlay(this.lastFocused.id);
                     }
                 }
                 if (Object.prototype.hasOwnProperty.call(changes, this.USER_FOCUS_KEY)) {
@@ -127,7 +133,7 @@ export class AutoPause implements Feature {
         );
 
         // Initial fetch (session storage — cleared on browser restart)
-        chrome.storage.session.get([this.STORAGE_KEY, this.PLAY_KEY, this.USER_FOCUS_KEY], (res) => {
+        void storageSessionGet<Record<string, unknown>>([this.STORAGE_KEY, this.PLAY_KEY, this.USER_FOCUS_KEY]).then((res) => {
             this.lastFocused = this.parseSyncState(res[this.STORAGE_KEY]);
             this.lastUserFocused = this.parseSyncState(res[this.USER_FOCUS_KEY]);
             const lastPlay = this.parseSyncState(res[this.PLAY_KEY]);
@@ -251,8 +257,8 @@ export class AutoPause implements Feature {
             timestamp: now
         };
         this.lastUserFocused = newState;
-        chrome.storage.session.set({ [this.USER_FOCUS_KEY]: newState });
-        chrome.runtime.sendMessage({ type: 'VB_USER_FOCUSED' }).catch(() => {});
+        void storageSessionSet({ [this.USER_FOCUS_KEY]: newState });
+        void runtimeSendMessage({ type: 'VB_USER_FOCUSED' }).catch(() => {});
     }
 
     private isLastUserFocusedTab(): boolean {
@@ -659,9 +665,10 @@ export class AutoPause implements Feature {
         this.currentVideo.pause();
     }
 
-    private handleRemotePlay() {
+    private handleRemotePlay(remoteOwnerId?: string) {
         if (!this.enabled) return;
         if (this.isCurrentVideoPiP()) return;
+        const remoteOwnsPlayback = typeof remoteOwnerId === 'string' && remoteOwnerId !== this.sync.myId;
 
         // Foreground has priority: focused + visible tab keeps control.
         if (document.visibilityState === 'visible' && document.hasFocus()) {
@@ -673,6 +680,7 @@ export class AutoPause implements Feature {
 
         if (
             this.allowBackgroundPlayback &&
+            !remoteOwnsPlayback &&
             this.isLastFocusedWindow(true) &&
             this.currentVideo &&
             !this.currentVideo.paused
@@ -694,7 +702,7 @@ export class AutoPause implements Feature {
         const signalKey = `${payload.id}:${payload.timestamp}`;
         if (this.isDuplicatePlaySignal(signalKey)) return;
 
-        this.handleRemotePlay();
+        this.handleRemotePlay(payload.id);
     }
 
     private handleCurrentVideoVolumeChange() {
@@ -709,7 +717,7 @@ export class AutoPause implements Feature {
         if (this.isActivelyPlaying(this.currentVideo)) return;
         this.releaseFocusOwnershipIfOwned();
         this.clearPlaySignalIfOwned();
-        chrome.runtime.sendMessage({ type: 'VB_PLAYBACK_STATE', state: 'stopped' }).catch(() => {});
+        void runtimeSendMessage({ type: 'VB_PLAYBACK_STATE', state: 'stopped' }).catch(() => {});
     }
 
     // --- Helpers ---
@@ -732,21 +740,21 @@ export class AutoPause implements Feature {
 
         this.lastFocusClaimAt = now;
         this.lastFocused = newState;
-        chrome.storage.session.set({ [this.STORAGE_KEY]: newState });
+        void storageSessionSet({ [this.STORAGE_KEY]: newState });
     }
 
     private releaseFocusOwnershipIfOwned() {
         if (!this.lastFocused) return;
         if (this.lastFocused.id !== this.sync.myId) return;
         this.lastFocused = null;
-        chrome.storage.session.remove(this.STORAGE_KEY);
+        void storageSessionRemove(this.STORAGE_KEY);
     }
 
     private clearPlaySignalIfOwned(): void {
-        chrome.storage.session.get(this.PLAY_KEY, (res) => {
+        void storageSessionGet<Record<string, unknown>>(this.PLAY_KEY).then((res) => {
             const state = this.parseSyncState(res[this.PLAY_KEY]);
             if (state && state.id === this.sync.myId) {
-                chrome.storage.session.remove(this.PLAY_KEY);
+                void storageSessionRemove(this.PLAY_KEY);
             }
         });
     }
@@ -795,7 +803,7 @@ export class AutoPause implements Feature {
             timestamp: Date.now()
         });
         // Storage fallback: ensures cross-tab sync even if runtime message is missed
-        chrome.storage.session.set({
+        void storageSessionSet({
             [this.PLAY_KEY]: {
                 id: this.sync.myId,
                 timestamp: Date.now()

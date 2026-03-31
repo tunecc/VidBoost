@@ -102,6 +102,23 @@ function normalizeHost(host: string): string {
     return normalizeDomain(host) || host.trim().toLowerCase();
 }
 
+function getDebugSiteAlias(host: string): SiteKey | null {
+    if (typeof document === 'undefined') return null;
+
+    const normalizedHost = normalizeHost(host);
+    const isLoopbackHost =
+        normalizedHost === '127.0.0.1'
+        || normalizedHost === 'localhost'
+        || normalizedHost === '[::1]'
+        || normalizedHost.endsWith('.localhost');
+    if (!isLoopbackHost) return null;
+
+    const alias = document.documentElement?.dataset?.vbSite?.trim().toLowerCase();
+    if (!alias) return null;
+    if (!(alias in SITE_PROFILES)) return null;
+    return alias as SiteKey;
+}
+
 function hostMatchesDomain(host: string, domain: string): boolean {
     const normalizedHost = normalizeHost(host);
     const normalizedDomain = normalizeDomain(domain) || domain.toLowerCase();
@@ -110,6 +127,9 @@ function hostMatchesDomain(host: string, domain: string): boolean {
 }
 
 function findProfileByHost(host: string): SiteProfile | null {
+    const debugAlias = getDebugSiteAlias(host);
+    if (debugAlias) return SITE_PROFILES[debugAlias];
+
     const entries = Object.values(SITE_PROFILES);
     for (const profile of entries) {
         if (profile.domains.some((domain) => hostMatchesDomain(host, domain))) {
@@ -125,6 +145,9 @@ function getCurrentHost(): string {
 }
 
 export function isSiteHost(site: SiteKey, host: string = getCurrentHost()): boolean {
+    const debugAlias = getDebugSiteAlias(host);
+    if (debugAlias) return debugAlias === site;
+
     const profile = SITE_PROFILES[site];
     return profile.domains.some((domain) => hostMatchesDomain(host, domain));
 }

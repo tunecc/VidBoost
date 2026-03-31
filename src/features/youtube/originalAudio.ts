@@ -8,6 +8,8 @@ import {
     cloneYouTubeOriginalAudioPageConfig,
     type YouTubeOriginalAudioPageConfig
 } from './originalAudio.shared';
+import { isPageBridgeMessageEvent } from './bridge';
+import { getRuntimeUrl, isFirefoxExtensionRuntime } from '../../lib/webext';
 
 let bridgeListenerInstalled = false;
 let scriptInjected = false;
@@ -28,7 +30,7 @@ function postConfigToPage(type: 'initial' | 'change') {
 }
 
 function handlePageMessage(event: MessageEvent<unknown>) {
-    if (event.source !== window) return;
+    if (!isPageBridgeMessageEvent(event)) return;
     if (!isRecord(event.data)) return;
     const data = event.data as Record<string, unknown>;
     if (data.source !== YT_ORIGINAL_AUDIO_PAGE_SOURCE) return;
@@ -46,9 +48,7 @@ function ensureBridgeListener() {
 }
 
 function resolvePageScriptUrl(): string | null {
-    if (typeof chrome === 'undefined') return null;
-    if (!chrome.runtime || typeof chrome.runtime.getURL !== 'function') return null;
-    return chrome.runtime.getURL(YT_ORIGINAL_AUDIO_PAGE_SCRIPT_PATH);
+    return getRuntimeUrl(YT_ORIGINAL_AUDIO_PAGE_SCRIPT_PATH);
 }
 
 export function installYouTubeOriginalAudioBridge() {
@@ -59,6 +59,11 @@ export function ensureYouTubeOriginalAudioScriptInjected() {
     if (typeof document === 'undefined') return;
     ensureBridgeListener();
     if (scriptInjected) return;
+
+    if (isFirefoxExtensionRuntime()) {
+        scriptInjected = true;
+        return;
+    }
 
     if (document.getElementById(YT_ORIGINAL_AUDIO_INJECTED_SCRIPT_ID)) {
         scriptInjected = true;

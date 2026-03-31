@@ -23,9 +23,16 @@
     sanitizeBilibiliCdnSpeedTestOptions,
     type BilibiliCdnSpeedTestOptions,
   } from "../features/bilibili/bilibiliCdn.shared";
+  import {
+    getManifestVersion,
+    hasStorageApi,
+    storageLocalGet,
+    storageLocalRemove,
+    tabsQuery,
+    tabsSendMessage,
+  } from "../lib/webext";
 
-  const manifestVersion =
-    globalThis.chrome?.runtime?.getManifest?.().version ?? "1.4.0";
+  const manifestVersion = getManifestVersion("1.4.0");
   const GITHUB_REPO_URL = "https://github.com/tunecc/VidBoost";
   const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
@@ -150,11 +157,7 @@
   }
 
   async function addCurrentBilibiliUploaderToAllowlist() {
-    if (
-      bbSubtitleAddCurrentPending ||
-      !globalThis.chrome?.tabs?.query ||
-      !globalThis.chrome?.tabs?.sendMessage
-    ) {
+    if (bbSubtitleAddCurrentPending) {
       return;
     }
 
@@ -162,7 +165,7 @@
     showBilibiliSubtitleStatus("", "neutral", 0);
 
     try {
-      const tabs = await globalThis.chrome.tabs.query({
+      const tabs = await tabsQuery({
         active: true,
         currentWindow: true,
       });
@@ -172,7 +175,9 @@
         return;
       }
 
-      const response = await globalThis.chrome.tabs.sendMessage(tabId, {
+      const response = await tabsSendMessage<{
+        uploader?: { uid?: string | null; name?: string | null; profileUrl?: string | null } | null;
+      }>(tabId, {
         type: "VB_BB_SUBTITLE_CURRENT_UPLOADER",
       }).catch(() => null);
 
@@ -361,7 +366,7 @@
   }
 
   function cleanupBilibiliSpeedTestResults() {
-    globalThis.chrome?.storage?.local?.remove?.([BB_CDN_SPEED_RESULT_KEY]);
+    void storageLocalRemove([BB_CDN_SPEED_RESULT_KEY]);
   }
 
   function finishBilibiliSpeedTest(
@@ -384,50 +389,44 @@
     cleanupBilibiliSpeedTestResults();
   }
 
-  function pollBilibiliSpeedTest(
+  async function pollBilibiliSpeedTest(
     runId: number,
     testedNodes: CdnNode[],
     expectedCount: number,
   ) {
-    if (
-      runId !== bbCdnSpeedTestRunId ||
-      !bbCdnTesting ||
-      !globalThis.chrome?.storage?.local
-    ) {
+    if (runId !== bbCdnSpeedTestRunId || !bbCdnTesting || !hasStorageApi("local")) {
       return;
     }
 
     const expectedIds = new Set(testedNodes.map((node) => node.id));
+    const res = await storageLocalGet<Record<string, unknown>>([BB_CDN_SPEED_RESULT_KEY]);
+    if (runId !== bbCdnSpeedTestRunId || !bbCdnTesting) return;
 
-    globalThis.chrome.storage.local.get([BB_CDN_SPEED_RESULT_KEY], (res) => {
-      if (runId !== bbCdnSpeedTestRunId || !bbCdnTesting) return;
+    const storedResults =
+      (res[BB_CDN_SPEED_RESULT_KEY] as Record<
+        string,
+        { speed: string; error: boolean }
+      > | null) ?? null;
 
-      const storedResults =
-        (res[BB_CDN_SPEED_RESULT_KEY] as Record<
-          string,
-          { speed: string; error: boolean }
-        > | null) ?? null;
+    if (storedResults) {
+      const results = Object.fromEntries(
+        Object.entries(storedResults).filter(([nodeId]) => expectedIds.has(nodeId)),
+      ) as Record<string, { speed: string; error: boolean }>;
 
-      if (storedResults) {
-        const results = Object.fromEntries(
-          Object.entries(storedResults).filter(([nodeId]) => expectedIds.has(nodeId)),
-        ) as Record<string, { speed: string; error: boolean }>;
-
-        bbCdnSpeedResults = { ...results };
-        if (Object.keys(results).length >= expectedCount) {
-          finishBilibiliSpeedTest(runId, testedNodes, results);
-          return;
-        }
+      bbCdnSpeedResults = { ...results };
+      if (Object.keys(results).length >= expectedCount) {
+        finishBilibiliSpeedTest(runId, testedNodes, results);
+        return;
       }
+    }
 
-      window.setTimeout(
-        () => pollBilibiliSpeedTest(runId, testedNodes, expectedCount),
-        800,
-      );
-    });
+    window.setTimeout(
+      () => void pollBilibiliSpeedTest(runId, testedNodes, expectedCount),
+      800,
+    );
   }
 
-  function startBilibiliSpeedTest() {
+  async function startBilibiliSpeedTest() {
     if (bbCdnTesting) return;
 
     const testedNodes = getBilibiliSpeedTestNodes();
@@ -439,76 +438,51 @@
 
     const runId = ++bbCdnSpeedTestRunId;
 
-    if (
-      !globalThis.chrome?.tabs?.query ||
-      !globalThis.chrome?.tabs?.sendMessage ||
-      !globalThis.chrome?.storage?.local
-    ) {
+    if (!hasStorageApi("local")) {
       bbCdnTesting = false;
       return;
     }
 
     cleanupBilibiliSpeedTestResults();
+    const tabs = await tabsQuery({ active: true, currentWindow: true });
+    if (runId !== bbCdnSpeedTestRunId) return;
 
-    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tabId = tabs[0]?.id;
+    if (!tabId) {
+      bbCdnTesting = false;
+      return;
+    }
+
+    try {
+      const response = await tabsSendMessage<{ started?: boolean }>(tabId, {
+        type: "VB_CDN_SPEED_TEST",
+        nodes: testedNodes.map((node) => ({ id: node.id, host: node.host })),
+        options: speedTestOptions,
+      });
+
       if (runId !== bbCdnSpeedTestRunId) return;
-
-      const tabId = tabs[0]?.id;
-      if (!tabId) {
+      if (!response?.started) {
         bbCdnTesting = false;
         return;
       }
 
-      globalThis.chrome.tabs.sendMessage(
-        tabId,
-        {
-          type: "VB_CDN_SPEED_TEST",
-          nodes: testedNodes.map((node) => ({ id: node.id, host: node.host })),
-          options: speedTestOptions,
-        },
-        (response) => {
-          if (runId !== bbCdnSpeedTestRunId) return;
-
-          if (globalThis.chrome.runtime.lastError) {
-            console.warn(
-              "Speed test failed: Content script not found on this tab.",
-              globalThis.chrome.runtime.lastError.message,
-            );
-            bbCdnTesting = false;
-            return;
-          }
-
-          if (!response?.started) {
-            bbCdnTesting = false;
-            return;
-          }
-
-          window.setTimeout(() => {
-            pollBilibiliSpeedTest(runId, testedNodes, testedNodes.length);
-          }, 1500);
-        },
-      );
-    });
+      window.setTimeout(() => {
+        void pollBilibiliSpeedTest(runId, testedNodes, testedNodes.length);
+      }, 1500);
+    } catch (error) {
+      console.warn("Speed test failed: Content script not found on this tab.", error);
+      bbCdnTesting = false;
+    }
   }
 
-  function abortBilibiliSpeedTest() {
+  async function abortBilibiliSpeedTest() {
     bbCdnTesting = false;
     bbCdnSpeedTestRunId += 1;
     cleanupBilibiliSpeedTestResults();
-
-    if (!globalThis.chrome?.tabs?.query || !globalThis.chrome?.tabs?.sendMessage) {
-      return;
-    }
-
-    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
-      if (!tabId) return;
-      globalThis.chrome.tabs.sendMessage(
-        tabId,
-        { type: "VB_CDN_ABORT_SPEED_TEST" },
-        () => {},
-      );
-    });
+    const tabs = await tabsQuery({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    if (!tabId) return;
+    void tabsSendMessage(tabId, { type: "VB_CDN_ABORT_SPEED_TEST" }).catch(() => {});
   }
 
   function handleBilibiliCdnNodeUpdate(
@@ -638,7 +612,7 @@
   $: t = (key: I18nKey) => i18n(key, language);
 
   function flushSettingsSave() {
-    if (!pendingSettings || typeof chrome === "undefined" || !chrome.storage) {
+    if (!pendingSettings || !hasStorageApi("local")) {
       return;
     }
     const payload = pendingSettings;
@@ -655,24 +629,20 @@
     }, SAVE_DEBOUNCE_MS);
   }
 
-  function notifyPopupFocusOverride(active: boolean) {
-    if (!globalThis.chrome?.tabs?.query || !globalThis.chrome?.tabs?.sendMessage) return;
-    globalThis.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
-      if (!tabId) return;
-      globalThis.chrome.tabs
-        .sendMessage(tabId, {
-          type: "VB_POPUP_FOCUS_OVERRIDE",
-          active,
-        })
-        .catch(() => {
-          // Ignore tabs without content script injection.
-        });
+  async function notifyPopupFocusOverride(active: boolean) {
+    const tabs = await tabsQuery({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    if (!tabId) return;
+    void tabsSendMessage(tabId, {
+      type: "VB_POPUP_FOCUS_OVERRIDE",
+      active,
+    }).catch(() => {
+      // Ignore tabs without content script injection.
     });
   }
 
   onMount(() => {
-    notifyPopupFocusOverride(true);
+    void notifyPopupFocusOverride(true);
     getSettings([...POPUP_SETTINGS_KEYS]).then((res) => {
       globalEnabled = res.enabled;
       h5Enabled = res.h5_enabled;
@@ -741,7 +711,7 @@
   });
 
   $: {
-    if (loaded && typeof chrome !== "undefined" && chrome.storage) {
+    if (loaded && hasStorageApi("local")) {
       scheduleSettingsSave({
         ...(() => {
           const speedTestOptions = getBilibiliSpeedTestOptions();

@@ -1,8 +1,14 @@
 node_modules/
 dist/
+dist-firefox/
 .DS_Store
 .env
 .svelte-kit/
 dist.zip
+releases/
 todo.md
 forum-post.md
+VidBoost.zip
+docs
+outputs
+.serena

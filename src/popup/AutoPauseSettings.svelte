@@ -8,6 +8,7 @@
         type Settings,
     } from "../lib/settings";
     import { normalizeDomainList } from "../lib/domain";
+    import { hasStorageApi } from "../lib/webext";
 
     export let language: I18nLang = "auto";
     const dispatch = createEventDispatcher();
@@ -43,7 +44,7 @@
     });
 
     $: {
-        if (loaded && typeof chrome !== "undefined" && chrome.storage) {
+        if (loaded && hasStorageApi("local")) {
             const customSites = normalizeDomainList(
                 customSitesText
                     .split(/\s+/)
@@ -75,7 +76,7 @@
             clearTimeout(saveTimer);
             saveTimer = null;
         }
-        if (pendingSettings && typeof chrome !== "undefined" && chrome.storage) {
+        if (pendingSettings && hasStorageApi("local")) {
             setSettings(pendingSettings);
             pendingSettings = null;
         }

@@ -1,3 +1,5 @@
+import { addRuntimeMessageListener, runtimeSendMessage } from './webext';
+
 /**
  * Cross-Tab Synchronization
  * Uses runtime relay via background service worker.
@@ -28,8 +30,8 @@ export class CrossTabSync {
     constructor() {
         this.id = this.getOrCreateId();
 
-        // Use chrome.runtime.onMessage for cross-origin sync
-        chrome.runtime.onMessage.addListener((msg) => {
+        // Use runtime relay for cross-origin sync.
+        addRuntimeMessageListener((msg) => {
             if (!isSyncMessage(msg)) return;
             if (msg.senderId === this.id) return; // Ignore self
             this.listeners.forEach(cb => cb(msg));
@@ -43,7 +45,7 @@ export class CrossTabSync {
     public send(msg: Omit<SyncMessage, 'senderId'>) {
         const payload = { ...msg, senderId: this.id };
         // Send to background for relay
-        chrome.runtime.sendMessage({
+        void runtimeSendMessage({
             type: 'BROADCAST_SYNC',
             payload
         }).catch(() => {

@@ -1,54 +1,47 @@
 import {
     DEFAULT_YT_CDN_STATUS_PAGE_CONFIG,
-    YT_CDN_STATUS_BRIDGE_CHANNEL,
-    YT_CDN_STATUS_CONTENT_SOURCE,
+    YT_CDN_STATUS_CONFIG_ATTRIBUTE,
+    YT_CDN_STATUS_CONFIG_EVENT,
     YT_CDN_STATUS_INJECTED_SCRIPT_ID,
     YT_CDN_STATUS_PAGE_SCRIPT_PATH,
-    YT_CDN_STATUS_PAGE_SOURCE,
     cloneYouTubeCdnStatusPageConfig,
     type YouTubeCdnStatusPageConfig
 } from './cdnStatus.shared';
+import { getRuntimeUrl, isFirefoxExtensionRuntime } from '../../lib/webext';
 
-let bridgeListenerInstalled = false;
 let scriptInjected = false;
 let latestConfig: YouTubeCdnStatusPageConfig = { ...DEFAULT_YT_CDN_STATUS_PAGE_CONFIG };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object';
+function publishLoopbackInjectState(key: string, value: string) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const host = window.location.hostname.trim().toLowerCase();
+    const isLoopbackHost = host === '127.0.0.1'
+        || host === 'localhost'
+        || host === '[::1]'
+        || host.endsWith('.localhost');
+    if (!isLoopbackHost) return;
+    if (document.documentElement?.dataset?.vbSite?.trim().toLowerCase() !== 'youtube') return;
+
+    const root = document.documentElement;
+    if (!root) return;
+    root.dataset[key] = value;
 }
 
-function postConfigToPage(type: 'initial' | 'change') {
-    if (typeof window === 'undefined') return;
-    window.postMessage({
-        source: YT_CDN_STATUS_CONTENT_SOURCE,
-        channel: YT_CDN_STATUS_BRIDGE_CHANNEL,
-        type,
-        config: cloneYouTubeCdnStatusPageConfig(latestConfig)
-    }, window.location.origin);
-}
-
-function handlePageMessage(event: MessageEvent<unknown>) {
-    if (event.source !== window) return;
-    if (!isRecord(event.data)) return;
-    const data = event.data as Record<string, unknown>;
-    if (data.source !== YT_CDN_STATUS_PAGE_SOURCE) return;
-    if (data.channel !== YT_CDN_STATUS_BRIDGE_CHANNEL) return;
-    if (data.type !== 'init') return;
-
-    postConfigToPage('initial');
+function syncConfigToDocument() {
+    if (typeof document === 'undefined') return;
+    const payload = JSON.stringify(cloneYouTubeCdnStatusPageConfig(latestConfig));
+    document.documentElement?.setAttribute(YT_CDN_STATUS_CONFIG_ATTRIBUTE, payload);
+    document.dispatchEvent(new CustomEvent(YT_CDN_STATUS_CONFIG_EVENT, {
+        detail: payload
+    }));
 }
 
 function ensureBridgeListener() {
-    if (typeof window === 'undefined') return;
-    if (bridgeListenerInstalled) return;
-    window.addEventListener('message', handlePageMessage as EventListener);
-    bridgeListenerInstalled = true;
+    // CDN status bridge now uses DOM attributes + CustomEvent detail strings.
 }
 
 function resolvePageScriptUrl(): string | null {
-    if (typeof chrome === 'undefined') return null;
-    if (!chrome.runtime || typeof chrome.runtime.getURL !== 'function') return null;
-    return chrome.runtime.getURL(YT_CDN_STATUS_PAGE_SCRIPT_PATH);
+    return getRuntimeUrl(YT_CDN_STATUS_PAGE_SCRIPT_PATH);
 }
 
 export function installYouTubeCdnStatusBridge() {
@@ -59,6 +52,12 @@ export function ensureYouTubeCdnStatusScriptInjected() {
     if (typeof document === 'undefined') return;
     ensureBridgeListener();
     if (scriptInjected) return;
+
+    if (isFirefoxExtensionRuntime()) {
+        scriptInjected = true;
+        publishLoopbackInjectState('vbYtCdnInjectLoaded', 'main-world');
+        return;
+    }
 
     if (document.getElementById(YT_CDN_STATUS_INJECTED_SCRIPT_ID)) {
         scriptInjected = true;
@@ -75,11 +74,14 @@ export function ensureYouTubeCdnStatusScriptInjected() {
     script.id = YT_CDN_STATUS_INJECTED_SCRIPT_ID;
     script.src = scriptUrl;
     script.async = false;
+    publishLoopbackInjectState('vbYtCdnInjectAttempt', '1');
     script.addEventListener('load', () => {
+        publishLoopbackInjectState('vbYtCdnInjectLoaded', '1');
         script.remove();
     }, { once: true });
     script.addEventListener('error', () => {
         scriptInjected = false;
+        publishLoopbackInjectState('vbYtCdnInjectError', '1');
         script.remove();
     }, { once: true });
 
@@ -89,5 +91,5 @@ export function ensureYouTubeCdnStatusScriptInjected() {
 
 export function pushYouTubeCdnStatusConfig(config: YouTubeCdnStatusPageConfig) {
     latestConfig = cloneYouTubeCdnStatusPageConfig(config);
-    postConfigToPage('change');
+    syncConfigToDocument();
 }

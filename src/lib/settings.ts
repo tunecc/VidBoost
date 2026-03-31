@@ -1,3 +1,11 @@
+import {
+    addStorageChangedListener,
+    hasStorageApi,
+    removeStorageChangedListener,
+    storageLocalGet,
+    storageLocalSet
+} from './webext';
+
 export type H5Config = {
     speedStep?: number;
     maxSpeed?: number;
@@ -187,24 +195,30 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
 }
 
 export function getSettings<K extends SettingsKey>(keys: K[]): Promise<Pick<Settings, K>> {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(keys, (res) => {
-            const out = {} as Pick<Settings, K>;
-            keys.forEach((k) => {
-                const value = res[k] as Settings[K] | undefined;
-                out[k] = value !== undefined ? value : DEFAULT_SETTINGS[k];
-            });
-            resolve(out);
+    if (!hasStorageApi('local')) {
+        const out = {} as Pick<Settings, K>;
+        keys.forEach((k) => {
+            out[k] = DEFAULT_SETTINGS[k];
         });
+        return Promise.resolve(out);
+    }
+
+    return storageLocalGet<Record<string, unknown>>(keys).then((res) => {
+        const out = {} as Pick<Settings, K>;
+        keys.forEach((k) => {
+            const value = res[k] as Settings[K] | undefined;
+            out[k] = value !== undefined ? value : DEFAULT_SETTINGS[k];
+        });
+        return out;
     });
 }
 
 export function setSettings(values: Partial<Settings>) {
-    chrome.storage.local.set(values);
+    void storageLocalSet(values as Record<string, unknown>);
 }
 
 export function onSettingsChanged(cb: (changes: Partial<Settings>) => void) {
-    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+    const listener = (changes: Record<string, { newValue?: unknown }>) => {
         const out: Partial<Settings> = {};
         const outMap = out as Record<SettingsKey, Settings[SettingsKey] | undefined>;
         (Object.keys(changes) as SettingsKey[]).forEach((k) => {
@@ -213,8 +227,8 @@ export function onSettingsChanged(cb: (changes: Partial<Settings>) => void) {
         });
         if (Object.keys(out).length > 0) cb(out);
     };
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
+    addStorageChangedListener(listener);
+    return () => removeStorageChangedListener(listener);
 }
 
 export function onStorageKeysChanged<T extends Record<string, unknown>>(
@@ -222,7 +236,7 @@ export function onStorageKeysChanged<T extends Record<string, unknown>>(
     cb: (changes: Partial<T>) => void
 ) {
     const keySet = new Set(keys);
-    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+    const listener = (changes: Record<string, { newValue?: unknown }>) => {
         const out: Partial<T> = {};
         Object.keys(changes).forEach((k) => {
             if (!keySet.has(k)) return;
@@ -230,6 +244,6 @@ export function onStorageKeysChanged<T extends Record<string, unknown>>(
         });
         if (Object.keys(out).length > 0) cb(out);
     };
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
+    addStorageChangedListener(listener);
+    return () => removeStorageChangedListener(listener);
 }

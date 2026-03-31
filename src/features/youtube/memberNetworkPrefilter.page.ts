@@ -1,4 +1,5 @@
 import type { YTMemberBlockMode } from '../../lib/settings';
+import { isPageBridgeMessageEvent } from './bridge';
 import {
     MEMBER_NETWORK_PREFILTER_BRIDGE_CHANNEL,
     MEMBER_NETWORK_PREFILTER_CONTENT_SOURCE,
@@ -78,7 +79,7 @@ type BridgeToPageMessage = {
     }
 
     window.addEventListener('message', (event: MessageEvent<unknown>) => {
-        if (event.source !== window) return;
+        if (!isPageBridgeMessageEvent(event)) return;
         if (!isRecord(event.data)) return;
         const data = event.data as BridgeToPageMessage;
         if (data.source !== MEMBER_NETWORK_PREFILTER_CONTENT_SOURCE) return;

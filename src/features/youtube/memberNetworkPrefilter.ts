@@ -8,6 +8,8 @@ import {
     cloneMemberNetworkPrefilterConfig,
     type MemberNetworkPrefilterConfig
 } from './memberNetworkPrefilter.shared';
+import { isPageBridgeMessageEvent } from './bridge';
+import { getRuntimeUrl, isFirefoxExtensionRuntime } from '../../lib/webext';
 
 let bridgeInstalled = false;
 let bridgeListenerInstalled = false;
@@ -36,7 +38,7 @@ function postConfigToPage(type: 'initial' | 'change') {
 }
 
 function handleInitRequest(event: MessageEvent<unknown>) {
-    if (event.source !== window) return;
+    if (!isPageBridgeMessageEvent(event)) return;
     if (!isRecord(event.data)) return;
     if (event.data.source !== MEMBER_NETWORK_PREFILTER_PAGE_SOURCE) return;
     if (event.data.channel !== MEMBER_NETWORK_PREFILTER_BRIDGE_CHANNEL) return;
@@ -52,15 +54,18 @@ function ensureBridgeListener() {
 }
 
 function resolvePageScriptUrl(): string | null {
-    if (typeof chrome === 'undefined') return null;
-    if (!chrome.runtime || typeof chrome.runtime.getURL !== 'function') return null;
-    return chrome.runtime.getURL(MEMBER_NETWORK_PREFILTER_PAGE_SCRIPT_PATH);
+    return getRuntimeUrl(MEMBER_NETWORK_PREFILTER_PAGE_SCRIPT_PATH);
 }
 
 export function installMemberNetworkPrefilterBridge() {
     if (typeof document === 'undefined') return;
     ensureBridgeListener();
     if (bridgeInstalled) return;
+
+    if (isFirefoxExtensionRuntime()) {
+        bridgeInstalled = true;
+        return;
+    }
 
     if (document.getElementById(MEMBER_NETWORK_PREFILTER_INJECTED_SCRIPT_ID)) {
         bridgeInstalled = true;
