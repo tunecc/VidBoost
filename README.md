@@ -4,6 +4,9 @@
   <a href="https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN">
     <img alt="Chrome Extension" src="https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat&logo=googlechrome&logoColor=white" />
   </a>
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/">
+    <img alt="Firefox Extension" src="https://img.shields.io/badge/Firefox-Extension-FF7139?style=flat&logo=firefoxbrowser&logoColor=white" />
+  </a>
   <a href="https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3">
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-MV3-FFB300?style=flat&logo=googlechrome&logoColor=white" />
   </a>
@@ -18,26 +21,12 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN">
-    <img alt="Chrome Web Store Version" src="https://img.shields.io/chrome-web-store/v/bjehghokgbfmceggcbpjgmahgjgpgbia?label=Chrome&logo=googlechrome&style=flat" />
-  </a>
-  <a href="https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN">
-    <img alt="Chrome Web Store Users" src="https://img.shields.io/chrome-web-store/users/bjehghokgbfmceggcbpjgmahgjgpgbia?label=Chrome%20Users&style=flat" />
-  </a>
-  <a href="https://github.com/tunecc/VidBoost/releases">
-    <img alt="GitHub Release Version" src="https://img.shields.io/github/v/release/tunecc/VidBoost?label=GitHub&logo=github&style=flat" />
-  </a>
-  <a href="https://github.com/tunecc/VidBoost/releases">
-    <img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/tunecc/VidBoost/total?label=Downloads&style=flat" />
-  </a>
-</p>
-
-VidBoost 是一个面向 Chrome / Edge 的视频增强扩展，用来把我自己长期在用的几类高频功能整合到一个稳定、统一、低打扰的入口里。
+VidBoost 是一个面向 Chrome / Edge / Firefox 的视频增强扩展，用来把我自己长期在用的几类高频功能整合到一个稳定、统一、低打扰的入口里。
 
 如果你平时会同时装好几个油猴脚本来处理倍速、后台暂停、误触全屏、YouTube / B 站专项优化，VidBoost 想做的就是把这些零散能力收拢成一个更省心的 Manifest V3 扩展。
 
 - Chrome Web Store: [安装 VidBoost](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN)
+- Firefox Add-ons: [安装 VidBoost for Firefox](https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/)
 
 <p align="center">
   <img src="./assets/light_mode.png" width="48%" alt="VidBoost 主界面（浅色）" />
@@ -263,6 +252,7 @@ VidBoost 比较在意常驻时的开销，实现上会尽量收着来：
 | 渠道 | 下载链接 | 当前版本 | 用户数 / 下载量 |
 |------|----------|----------|----------------|
 | Chrome 商店 | [Chrome Web Store - VidBoost](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN) | [![Chrome version](https://img.shields.io/chrome-web-store/v/bjehghokgbfmceggcbpjgmahgjgpgbia?label=Chrome&logo=googlechrome&style=flat)](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN) | [![Chrome users](https://img.shields.io/chrome-web-store/users/bjehghokgbfmceggcbpjgmahgjgpgbia?label=Chrome%20Users&style=flat)](https://chromewebstore.google.com/detail/vidboost/bjehghokgbfmceggcbpjgmahgjgpgbia?authuser=0&hl=zh-CN) |
+| Firefox 附加组件 | [Firefox Browser Add-ons - VidBoost Video Toolkit](https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/) | [![Firefox version](https://img.shields.io/amo/v/vidboost-video-toolkit?label=Firefox&logo=firefoxbrowser&style=flat)](https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/) | [![Firefox users](https://img.shields.io/amo/users/vidboost-video-toolkit?label=Firefox%20Users&style=flat)](https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/) [![Firefox weekly downloads](https://img.shields.io/amo/dw/vidboost-video-toolkit?label=Downloads%2FWeek&style=flat)](https://addons.mozilla.org/en-US/firefox/addon/vidboost-video-toolkit/) |
 | GitHub Release | [GitHub Releases](https://github.com/tunecc/VidBoost/releases) | [![GitHub version](https://img.shields.io/github/v/release/tunecc/VidBoost?label=GitHub&logo=github&style=flat)](https://github.com/tunecc/VidBoost/releases) | [![GitHub downloads](https://img.shields.io/github/downloads/tunecc/VidBoost/total?label=Downloads&style=flat)](https://github.com/tunecc/VidBoost/releases) |
 
 ### 源码安装步骤
@@ -271,10 +261,20 @@ VidBoost 比较在意常驻时的开销，实现上会尽量收着来：
 git clone https://github.com/tunecc/VidBoost.git
 cd VidBoost
 npm install
+
+# Chrome / Edge
 npm run build
+
+# Firefox
+npm run build:firefox
 ```
 
-构建完成后，在 Chrome / Edge 的扩展管理页面加载 `dist` 目录即可。
+构建完成后：
+
+- Chrome / Edge：在扩展管理页面加载 `dist` 目录
+- Firefox：在 `about:debugging` 页面临时加载 `dist-firefox/manifest.json`
+
+如果只是日常使用，Firefox 更建议直接从上面的 AMO 页面安装；README 里展示的 Firefox 统计数据也会随 AMO 徽章自动更新。
 
 ## 开发
 

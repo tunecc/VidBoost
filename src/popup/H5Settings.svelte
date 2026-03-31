@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import ToggleItem from "../components/ToggleItem.svelte";
     import { i18n, type I18nKey, type I18nLang } from "../lib/i18n";
     import {
         getSettings,
@@ -23,6 +24,7 @@
     let restoreSpeed = 1.0;
     let seekForward = 5;
     let seekRewind = 3;
+    let zxcControlsEnabled = true;
     let loaded = false;
     const SAVE_DEBOUNCE_MS = 180;
     let saveTimer: number | null = null;
@@ -40,6 +42,9 @@
                 conf.seekForward ?? DEFAULT_SETTINGS.h5_config.seekForward!;
             seekRewind =
                 conf.seekRewind ?? DEFAULT_SETTINGS.h5_config.seekRewind!;
+            zxcControlsEnabled =
+                conf.zxcControlsEnabled ??
+                DEFAULT_SETTINGS.h5_config.zxcControlsEnabled!;
             loaded = true;
         });
     });
@@ -53,6 +58,7 @@
                     restoreSpeed,
                     seekForward,
                     seekRewind,
+                    zxcControlsEnabled,
                 },
             };
             if (saveTimer) clearTimeout(saveTimer);
@@ -487,6 +493,14 @@
                 </h3>
             </div>
             <div class="glass-panel rounded-xl overflow-hidden p-3 space-y-2">
+                <ToggleItem
+                    title={t("h5_zxc_toggle")}
+                    desc={t("h5_zxc_toggle_desc")}
+                    checked={zxcControlsEnabled}
+                    iconColor="blue"
+                    compact={true}
+                    onClick={() => (zxcControlsEnabled = !zxcControlsEnabled)}
+                />
                 <p class="text-[11px] text-gray-600 dark:text-white/60">
                     {t("h5_shortcuts_desc")}
                 </p>
@@ -500,21 +514,30 @@
                         >
                         <span>{t("h5_key_speed_numeric")}</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div
+                        class="flex items-center gap-2"
+                        class:opacity-50={!zxcControlsEnabled}
+                    >
                         <span
                             class="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-[10px]"
                             >C</span
                         >
                         <span>{t("h5_key_speed_up")}</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div
+                        class="flex items-center gap-2"
+                        class:opacity-50={!zxcControlsEnabled}
+                    >
                         <span
                             class="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-[10px]"
                             >X</span
                         >
                         <span>{t("h5_key_speed_down")}</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div
+                        class="flex items-center gap-2"
+                        class:opacity-50={!zxcControlsEnabled}
+                    >
                         <span
                             class="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-[10px]"
                             >Z</span

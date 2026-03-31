@@ -15,6 +15,7 @@ type H5Config = {
     restoreSpeed: number;
     seekForward: number;
     seekRewind: number;
+    zxcControlsEnabled: boolean;
 };
 
 export class H5Enhancer implements Feature {
@@ -30,7 +31,8 @@ export class H5Enhancer implements Feature {
         maxSpeed: 16.0,
         restoreSpeed: 1.0,
         seekForward: 5,
-        seekRewind: 3
+        seekRewind: 3,
+        zxcControlsEnabled: true
     };
 
     // State for Number Key Accumulation
@@ -175,6 +177,7 @@ export class H5Enhancer implements Feature {
 
             const ke = e as KeyboardEvent;
             if (ke.ctrlKey || ke.altKey || ke.metaKey) return false;
+            if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'c') {
                 const v = this.videoCtrl.video;
@@ -200,6 +203,7 @@ export class H5Enhancer implements Feature {
 
             const ke = e as KeyboardEvent;
             if (ke.ctrlKey || ke.altKey || ke.metaKey) return false;
+            if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'x') {
                 const v = this.videoCtrl.video;
@@ -225,6 +229,7 @@ export class H5Enhancer implements Feature {
 
             const ke = e as KeyboardEvent;
             if (ke.ctrlKey || ke.altKey || ke.metaKey) return false;
+            if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'z') {
                 const v = this.videoCtrl.video;

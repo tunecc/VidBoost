@@ -12,6 +12,7 @@ export type H5Config = {
     restoreSpeed?: number;
     seekForward?: number;
     seekRewind?: number;
+    zxcControlsEnabled?: boolean;
     blockNumKeys?: boolean;
 };
 
@@ -153,7 +154,8 @@ export const DEFAULT_SETTINGS: Settings = {
         maxSpeed: 16.0,
         restoreSpeed: 1.0,
         seekForward: 5,
-        seekRewind: 3
+        seekRewind: 3,
+        zxcControlsEnabled: true
     },
     ui_state: { general: true, youtube: true, bilibili: true },
     ap_scope: 'all',
