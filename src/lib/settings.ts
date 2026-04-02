@@ -5,6 +5,11 @@ import {
     storageLocalGet,
     storageLocalSet
 } from './webext';
+import {
+    DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY,
+    DEFAULT_BILIBILI_TARGET_QUALITY,
+    normalizeBilibiliQualityValue
+} from './bilibiliQuality';
 
 export type H5Config = {
     speedStep?: number;
@@ -34,6 +39,13 @@ export type BilibiliSubtitleConfig = {
     enabled: boolean;
     targetMode: BilibiliSubtitleTargetMode;
     targets: string[];
+};
+
+export type BilibiliQualityConfig = {
+    enabled: boolean;
+    targets: string[];
+    targetQn: string;
+    defaultQn: string;
 };
 
 export type BilibiliCdnConfig = {
@@ -69,6 +81,7 @@ export type Settings = {
     fast_pause_master: boolean;
     bb_block_space: boolean;
     bb_subtitle: BilibiliSubtitleConfig;
+    bb_quality: BilibiliQualityConfig;
     bb_cdn: BilibiliCdnConfig;
     bb_cdn_test: BilibiliCdnTestConfig;
     language: 'auto' | 'en' | 'zh';
@@ -96,6 +109,7 @@ export const CONTENT_SETTINGS_KEYS = [
     'fast_pause_master',
     'bb_block_space',
     'bb_subtitle',
+    'bb_quality',
     'bb_cdn',
     'language',
     'yt_config',
@@ -134,6 +148,12 @@ export const DEFAULT_SETTINGS: Settings = {
         enabled: false,
         targetMode: 'all',
         targets: []
+    },
+    bb_quality: {
+        enabled: false,
+        targets: [],
+        targetQn: DEFAULT_BILIBILI_TARGET_QUALITY,
+        defaultQn: DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY
     },
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
     bb_cdn_test: {
@@ -180,6 +200,21 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
             targets: Array.isArray(source.bb_subtitle?.targets)
                 ? [...source.bb_subtitle.targets]
                 : [...DEFAULT_SETTINGS.bb_subtitle.targets]
+        },
+        bb_quality: {
+            ...DEFAULT_SETTINGS.bb_quality,
+            ...(source.bb_quality ?? {}),
+            targetQn: normalizeBilibiliQualityValue(
+                source.bb_quality?.targetQn,
+                DEFAULT_SETTINGS.bb_quality.targetQn
+            ),
+            defaultQn: normalizeBilibiliQualityValue(
+                source.bb_quality?.defaultQn,
+                DEFAULT_SETTINGS.bb_quality.defaultQn
+            ),
+            targets: Array.isArray(source.bb_quality?.targets)
+                ? [...source.bb_quality.targets]
+                : [...DEFAULT_SETTINGS.bb_quality.targets]
         },
         bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
         bb_cdn_test: { ...DEFAULT_SETTINGS.bb_cdn_test, ...(source.bb_cdn_test ?? {}) },

@@ -12,6 +12,7 @@ const EXPECTED_DEFERRED_MAPPINGS = new Map([
     ['h5Enhancer', 'firefox-feature-h5-enhancer'],
     ['autoPauseFeature', 'firefox-feature-auto-pause'],
     ['bilibiliAutoSubtitle', 'firefox-feature-bilibili-auto-subtitle'],
+    ['bilibiliAutoQuality', 'firefox-feature-bilibili-auto-quality'],
     ['bilibiliFastPause', 'firefox-feature-bilibili-fast-pause'],
     ['bilibiliCdn', 'firefox-feature-bilibili-cdn'],
     ['statsSpeedConverter', 'firefox-feature-stats-speed-converter'],

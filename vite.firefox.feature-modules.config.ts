@@ -19,6 +19,7 @@ export default defineConfig({
             entry: {
                 'firefox-feature-auto-pause': path.resolve(__dirname, 'src/features/AutoPause.ts'),
                 'firefox-feature-bilibili-auto-subtitle': path.resolve(__dirname, 'src/features/BilibiliAutoSubtitle.ts'),
+                'firefox-feature-bilibili-auto-quality': path.resolve(__dirname, 'src/features/BilibiliAutoQuality.ts'),
                 'firefox-feature-bilibili-cdn': path.resolve(__dirname, 'src/features/BilibiliCDN.ts'),
                 'firefox-feature-h5-enhancer': path.resolve(__dirname, 'src/features/H5Enhancer.ts'),
                 'firefox-feature-bilibili-fast-pause': path.resolve(__dirname, 'src/features/BilibiliFastPause.ts'),

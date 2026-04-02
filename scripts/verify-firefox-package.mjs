@@ -15,6 +15,7 @@ const REQUIRED_FILES = [
     'assets/douyin-playback-rate.page.js',
     'assets/firefox-feature-auto-pause.js',
     'assets/firefox-feature-bilibili-auto-subtitle.js',
+    'assets/firefox-feature-bilibili-auto-quality.js',
     'assets/firefox-feature-bilibili-fast-pause.js',
     'assets/firefox-feature-bilibili-cdn.js',
     'assets/firefox-feature-bilibili-space-blocker.js',

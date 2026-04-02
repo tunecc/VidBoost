@@ -15,6 +15,9 @@
     type BilibiliSubtitleTargetMode,
     type YTMemberBlockMode,
   } from "../lib/settings";
+  import {
+    BILIBILI_QUALITY_OPTIONS,
+  } from "../lib/bilibiliQuality";
   import SectionCard from "../components/SectionCard.svelte";
   import ToggleItem from "../components/ToggleItem.svelte";
   import AccordionItem from "../components/AccordionItem.svelte";
@@ -32,7 +35,7 @@
     tabsSendMessage,
   } from "../lib/webext";
 
-  const manifestVersion = getManifestVersion("1.4.1");
+  const manifestVersion = getManifestVersion("1.5.0");
   const GITHUB_REPO_URL = "https://github.com/tunecc/VidBoost";
   const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
@@ -63,6 +66,18 @@
   let bbSubtitleAddCurrentStatus = "";
   let bbSubtitleAddCurrentTone: "neutral" | "success" | "error" = "neutral";
   let bbSubtitleAddCurrentStatusTimer: number | null = null;
+  let bbQualityEnabled = DEFAULT_SETTINGS.bb_quality.enabled;
+  let bbQualityTargetsList: string[] = [...DEFAULT_SETTINGS.bb_quality.targets];
+  let bbQualityDraftText = "";
+  let bbQualityDraftInputRef: HTMLInputElement | null = null;
+  let bbQualityOpen = false;
+  let bbQualityTargetsTooltipOpen = false;
+  let bbQualityAddCurrentPending = false;
+  let bbQualityAddCurrentStatus = "";
+  let bbQualityAddCurrentTone: "neutral" | "success" | "error" = "neutral";
+  let bbQualityAddCurrentStatusTimer: number | null = null;
+  let bbQualityTargetQn = DEFAULT_SETTINGS.bb_quality.targetQn;
+  let bbQualityDefaultQn = DEFAULT_SETTINGS.bb_quality.defaultQn;
   let bbBlockSpace = DEFAULT_SETTINGS.bb_block_space;
 
   // YouTube Member Block Config
@@ -111,15 +126,15 @@
     });
   }
 
-  function normalizeBilibiliSubtitleSeparators(input: string): string {
+  function normalizeBilibiliTargetSeparators(input: string): string {
     return input
       .replace(/\r\n?/g, "\n")
       .replace(/[｜￨]/g, "|")
       .replace(/[，、]/g, ",");
   }
 
-  function normalizeBilibiliSubtitleEntry(input: string): string {
-    const normalized = normalizeBilibiliSubtitleSeparators(input).trim();
+  function normalizeBilibiliTargetEntry(input: string): string {
+    const normalized = normalizeBilibiliTargetSeparators(input).trim();
     if (!normalized) return "";
 
     const [rawBase, ...rawNotes] = normalized.split("|");
@@ -130,17 +145,17 @@
     return note ? `${base} | ${note}` : base;
   }
 
-  function parseBilibiliSubtitleTargets(input: string): string[] {
+  function parseBilibiliTargets(input: string): string[] {
     return [...new Set(
-      normalizeBilibiliSubtitleSeparators(input)
+      normalizeBilibiliTargetSeparators(input)
         .split(/[\n,]+/)
-        .map((item) => normalizeBilibiliSubtitleEntry(item))
+        .map((item) => normalizeBilibiliTargetEntry(item))
         .filter((item) => item.length > 0),
     )];
   }
 
-  function normalizeBilibiliSubtitleTarget(input: string): string {
-    const trimmed = normalizeBilibiliSubtitleEntry(input)
+  function normalizeBilibiliTargetKey(input: string): string {
+    const trimmed = normalizeBilibiliTargetEntry(input)
       .split("|", 1)[0]?.trim() ?? input.trim();
     if (!trimmed) return "";
 
@@ -156,6 +171,46 @@
       .toLowerCase();
   }
 
+  async function requestCurrentBilibiliUploader() {
+    const tabs = await tabsQuery({
+      active: true,
+      currentWindow: true,
+    });
+    const tabId = tabs[0]?.id;
+    if (!tabId) return null;
+
+    const response = await tabsSendMessage<{
+      uploader?: { uid?: string | null; name?: string | null; profileUrl?: string | null } | null;
+    }>(tabId, {
+      type: "VB_BB_SUBTITLE_CURRENT_UPLOADER",
+    }).catch(() => null);
+
+    return response?.uploader as
+      | { uid?: string | null; name?: string | null; profileUrl?: string | null }
+      | null
+      | undefined;
+  }
+
+  function buildBilibiliTargetValueFromUploader(
+    uploader: { uid?: string | null; name?: string | null; profileUrl?: string | null } | null | undefined,
+  ) {
+    if (!uploader?.uid && !uploader?.name && !uploader?.profileUrl) {
+      return "";
+    }
+
+    const baseValue =
+      uploader.uid?.trim() ||
+      uploader.profileUrl?.trim() ||
+      uploader.name?.trim() ||
+      "";
+    const note = uploader.name?.trim().replace(/\s+/g, " ").replace(/\|/g, "/") || "";
+    return normalizeBilibiliTargetEntry(baseValue
+      ? note && note !== baseValue
+        ? `${baseValue} | ${note}`
+        : baseValue
+      : "");
+  }
+
   async function addCurrentBilibiliUploaderToAllowlist() {
     if (bbSubtitleAddCurrentPending) {
       return;
@@ -165,43 +220,14 @@
     showBilibiliSubtitleStatus("", "neutral", 0);
 
     try {
-      const tabs = await tabsQuery({
-        active: true,
-        currentWindow: true,
-      });
-      const tabId = tabs[0]?.id;
-      if (!tabId) {
-        showBilibiliSubtitleStatus(t("bb_subtitle_add_current_failed"), "error");
-        return;
-      }
-
-      const response = await tabsSendMessage<{
-        uploader?: { uid?: string | null; name?: string | null; profileUrl?: string | null } | null;
-      }>(tabId, {
-        type: "VB_BB_SUBTITLE_CURRENT_UPLOADER",
-      }).catch(() => null);
-
-      const uploader = response?.uploader as
-        | { uid?: string | null; name?: string | null; profileUrl?: string | null }
-        | null
-        | undefined;
+      const uploader = await requestCurrentBilibiliUploader();
 
       if (!uploader?.uid && !uploader?.name && !uploader?.profileUrl) {
         showBilibiliSubtitleStatus(t("bb_subtitle_add_current_failed"), "error");
         return;
       }
 
-      const baseValue =
-        uploader.uid?.trim() ||
-        uploader.profileUrl?.trim() ||
-        uploader.name?.trim() ||
-        "";
-      const note = uploader.name?.trim().replace(/\s+/g, " ").replace(/\|/g, "/") || "";
-      const nextValue = normalizeBilibiliSubtitleEntry(baseValue
-        ? note && note !== baseValue
-          ? `${baseValue} | ${note}`
-          : baseValue
-        : "");
+      const nextValue = buildBilibiliTargetValueFromUploader(uploader);
       if (!nextValue) {
         showBilibiliSubtitleStatus(t("bb_subtitle_add_current_failed"), "error");
         return;
@@ -209,9 +235,9 @@
 
       const existingValues = bbSubtitleTargetsList;
       const existingKeySet = new Set(
-        existingValues.map((item) => normalizeBilibiliSubtitleTarget(item)),
+        existingValues.map((item) => normalizeBilibiliTargetKey(item)),
       );
-      const nextKey = normalizeBilibiliSubtitleTarget(nextValue);
+      const nextKey = normalizeBilibiliTargetKey(nextValue);
 
       if (!nextKey || existingKeySet.has(nextKey)) {
         showBilibiliSubtitleStatus(
@@ -272,12 +298,12 @@
     if (!values.length) return;
 
     const existingKeySet = new Set(
-      bbSubtitleTargetsList.map((item) => normalizeBilibiliSubtitleTarget(item)),
+      bbSubtitleTargetsList.map((item) => normalizeBilibiliTargetKey(item)),
     );
     const nextItems: string[] = [];
 
     values.forEach((item) => {
-      const normalized = normalizeBilibiliSubtitleTarget(item);
+      const normalized = normalizeBilibiliTargetKey(item);
       if (!normalized || existingKeySet.has(normalized)) return;
       existingKeySet.add(normalized);
       nextItems.push(item);
@@ -288,7 +314,7 @@
   }
 
   function commitBilibiliSubtitleDraft() {
-    const parsed = parseBilibiliSubtitleTargets(bbSubtitleDraftText);
+    const parsed = parseBilibiliTargets(bbSubtitleDraftText);
     bbSubtitleDraftText = "";
     appendBilibiliSubtitleTargets(parsed);
   }
@@ -322,7 +348,7 @@
     }
 
     event.preventDefault();
-    appendBilibiliSubtitleTargets(parseBilibiliSubtitleTargets(pastedText));
+    appendBilibiliSubtitleTargets(parseBilibiliTargets(pastedText));
     bbSubtitleDraftText = "";
   }
 
@@ -332,11 +358,153 @@
   }
 
   function removeBilibiliSubtitleTarget(target: string) {
-    const targetKey = normalizeBilibiliSubtitleTarget(target);
+    const targetKey = normalizeBilibiliTargetKey(target);
     if (!targetKey) return;
 
     bbSubtitleTargetsList = bbSubtitleTargetsList
-      .filter((item) => normalizeBilibiliSubtitleTarget(item) !== targetKey)
+      .filter((item) => normalizeBilibiliTargetKey(item) !== targetKey)
+      .slice();
+  }
+
+  async function addCurrentBilibiliUploaderToQualityTargets() {
+    if (bbQualityAddCurrentPending) {
+      return;
+    }
+
+    bbQualityAddCurrentPending = true;
+    showBilibiliQualityStatus("", "neutral", 0);
+
+    try {
+      const uploader = await requestCurrentBilibiliUploader();
+      if (!uploader?.uid && !uploader?.name && !uploader?.profileUrl) {
+        showBilibiliQualityStatus(t("bb_quality_add_current_failed"), "error");
+        return;
+      }
+
+      const nextValue = buildBilibiliTargetValueFromUploader(uploader);
+      if (!nextValue) {
+        showBilibiliQualityStatus(t("bb_quality_add_current_failed"), "error");
+        return;
+      }
+
+      const existingValues = bbQualityTargetsList;
+      const existingKeySet = new Set(
+        existingValues.map((item) => normalizeBilibiliTargetKey(item)),
+      );
+      const nextKey = normalizeBilibiliTargetKey(nextValue);
+
+      if (!nextKey || existingKeySet.has(nextKey)) {
+        showBilibiliQualityStatus(
+          uploader.name
+            ? `${t("bb_quality_add_current_exists")}: ${uploader.name}`
+            : t("bb_quality_add_current_exists"),
+          "neutral",
+        );
+        return;
+      }
+
+      bbQualityTargetsList = [...existingValues, nextValue];
+      showBilibiliQualityStatus(
+        uploader.name
+          ? `${t("bb_quality_add_current_added")}: ${uploader.name}`
+          : t("bb_quality_add_current_added"),
+        "success",
+      );
+    } finally {
+      bbQualityAddCurrentPending = false;
+    }
+  }
+
+  function showBilibiliQualityStatus(
+    message: string,
+    tone: "neutral" | "success" | "error",
+    autoHideMs = 2200,
+  ) {
+    bbQualityAddCurrentStatus = message;
+    bbQualityAddCurrentTone = tone;
+
+    if (bbQualityAddCurrentStatusTimer) {
+      clearTimeout(bbQualityAddCurrentStatusTimer);
+      bbQualityAddCurrentStatusTimer = null;
+    }
+
+    if (!message || autoHideMs <= 0) return;
+
+    bbQualityAddCurrentStatusTimer = window.setTimeout(() => {
+      bbQualityAddCurrentStatus = "";
+      bbQualityAddCurrentStatusTimer = null;
+    }, autoHideMs);
+  }
+
+  function appendBilibiliQualityTargets(values: string[]) {
+    if (!values.length) return;
+
+    const existingKeySet = new Set(
+      bbQualityTargetsList.map((item) => normalizeBilibiliTargetKey(item)),
+    );
+    const nextItems: string[] = [];
+
+    values.forEach((item) => {
+      const normalized = normalizeBilibiliTargetKey(item);
+      if (!normalized || existingKeySet.has(normalized)) return;
+      existingKeySet.add(normalized);
+      nextItems.push(item);
+    });
+
+    if (!nextItems.length) return;
+    bbQualityTargetsList = [...bbQualityTargetsList, ...nextItems];
+  }
+
+  function commitBilibiliQualityDraft() {
+    const parsed = parseBilibiliTargets(bbQualityDraftText);
+    bbQualityDraftText = "";
+    appendBilibiliQualityTargets(parsed);
+  }
+
+  function handleBilibiliQualityDraftKeyDown(event: KeyboardEvent) {
+    if (event.isComposing) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      commitBilibiliQualityDraft();
+      return;
+    }
+
+    if (event.key === "Backspace" && bbQualityDraftText === "") {
+      event.preventDefault();
+      bbQualityTargetsList = bbQualityTargetsList.slice(0, -1);
+    }
+  }
+
+  function handleBilibiliQualityDraftPaste(event: ClipboardEvent) {
+    if (!event.clipboardData) return;
+
+    const pastedText = event.clipboardData.getData("text").trim();
+    if (!pastedText) return;
+
+    const hasStructuredSeparators = /[\n,，、]/.test(pastedText);
+    if (!hasStructuredSeparators && bbQualityDraftText.trim()) {
+      return;
+    }
+
+    event.preventDefault();
+    appendBilibiliQualityTargets(parseBilibiliTargets(pastedText));
+    bbQualityDraftText = "";
+  }
+
+  function focusBilibiliQualityDraftInput() {
+    if (!globalEnabled || !bbQualityEnabled) return;
+    bbQualityDraftInputRef?.focus();
+  }
+
+  function removeBilibiliQualityTarget(target: string) {
+    const targetKey = normalizeBilibiliTargetKey(target);
+    if (!targetKey) return;
+
+    bbQualityTargetsList = bbQualityTargetsList
+      .filter((item) => normalizeBilibiliTargetKey(item) !== targetKey)
       .slice();
   }
 
@@ -660,6 +828,15 @@
           : [];
         bbSubtitleDraftText = "";
       }
+      if (res.bb_quality) {
+        bbQualityEnabled = res.bb_quality.enabled ?? false;
+        bbQualityTargetsList = Array.isArray(res.bb_quality.targets)
+          ? [...res.bb_quality.targets]
+          : [];
+        bbQualityTargetQn = res.bb_quality.targetQn ?? DEFAULT_SETTINGS.bb_quality.targetQn;
+        bbQualityDefaultQn = res.bb_quality.defaultQn ?? DEFAULT_SETTINGS.bb_quality.defaultQn;
+        bbQualityDraftText = "";
+      }
       bbBlockSpace = res.bb_block_space;
 
       ytMemberBlock = res.yt_member_block;
@@ -737,6 +914,12 @@
           targetMode: bbSubtitleTargetMode,
           targets: bbSubtitleTargetsList,
         },
+        bb_quality: {
+          enabled: bbQualityEnabled,
+          targets: bbQualityTargetsList,
+          targetQn: bbQualityTargetQn,
+          defaultQn: bbQualityDefaultQn,
+        },
         bb_block_space: bbBlockSpace,
         language: language,
         yt_config: {
@@ -764,6 +947,10 @@
       clearTimeout(bbSubtitleAddCurrentStatusTimer);
       bbSubtitleAddCurrentStatusTimer = null;
     }
+    if (bbQualityAddCurrentStatusTimer) {
+      clearTimeout(bbQualityAddCurrentStatusTimer);
+      bbQualityAddCurrentStatusTimer = null;
+    }
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -773,12 +960,14 @@
 
   function navigate(view: string) {
     bbSubtitleTargetsTooltipOpen = false;
+    bbQualityTargetsTooltipOpen = false;
     if (!globalEnabled) return;
     currentView = view;
   }
 
   function toggleSection(section: "general" | "youtube" | "bilibili") {
     bbSubtitleTargetsTooltipOpen = false;
+    bbQualityTargetsTooltipOpen = false;
     sectionOpen[section] = !sectionOpen[section];
   }
 
@@ -790,9 +979,18 @@
     bbSubtitleTargetsTooltipOpen = false;
   }
 
+  function toggleBilibiliQualityTargetsTooltip() {
+    bbQualityTargetsTooltipOpen = !bbQualityTargetsTooltipOpen;
+  }
+
+  function closeBilibiliQualityTargetsTooltip() {
+    bbQualityTargetsTooltipOpen = false;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       closeBilibiliSubtitleTargetsTooltip();
+      closeBilibiliQualityTargetsTooltip();
     }
   }
 
@@ -1649,6 +1847,173 @@
                   </div>
                 </div>
               {/if}
+            </div>
+          </AccordionItem>
+
+          <AccordionItem
+            title={t("bb_quality")}
+            desc={t("bb_quality_desc")}
+            iconColor="cyan"
+            isOpen={bbQualityOpen}
+            masterChecked={bbQualityEnabled}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (bbQualityOpen = !bbQualityOpen)}
+            onToggleMaster={() =>
+              globalEnabled && (bbQualityEnabled = !bbQualityEnabled)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 7h16M4 12h10M4 17h7"
+                />
+              </svg>
+            </div>
+            <div slot="content" class="space-y-3 px-1">
+              <div class="space-y-2 rounded-xl border border-black/5 bg-black/[0.03] px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <div class="grid grid-cols-[auto,1fr] items-center gap-3">
+                  <span class="text-[11px] font-medium text-gray-500 dark:text-white/50">
+                    {t("bb_quality_default_quality")}
+                  </span>
+                  <select
+                    class="w-full rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/40 dark:border-white/10 dark:bg-[#2A2D35] dark:text-white/85"
+                    disabled={!globalEnabled || !bbQualityEnabled}
+                    bind:value={bbQualityDefaultQn}
+                  >
+                    {#each BILIBILI_QUALITY_OPTIONS as option}
+                      <option value={option.value}>{option.label}</option>
+                    {/each}
+                  </select>
+                </div>
+              </div>
+
+              <div class="pt-1">
+                <div class="flex items-center justify-between mb-1.5 px-0.5 relative z-20">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide">
+                      {t("bb_quality_targets")}
+                    </span>
+
+                    <div class="relative flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        aria-controls="bb-quality-targets-tooltip"
+                        aria-expanded={bbQualityTargetsTooltipOpen}
+                        class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
+                        on:click|stopPropagation={toggleBilibiliQualityTargetsTooltip}
+                      >
+                        ?
+                      </button>
+
+                      {#if bbQualityTargetsTooltipOpen}
+                        <div
+                          id="bb-quality-targets-tooltip"
+                          role="tooltip"
+                          class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                          in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                          out:fade|local={{ duration: 120 }}
+                        >
+                          {t("bb_quality_targets_desc")}
+                        </div>
+
+                        <button
+                          type="button"
+                          class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                          aria-label={t("bb_quality_targets_desc")}
+                          on:click={closeBilibiliQualityTargetsTooltip}
+                        ></button>
+                      {/if}
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium">
+                    {bbQualityTargetsList.length}
+                  </span>
+                </div>
+
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-cyan-400/50 focus-within:border-cyan-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {bbQualityTargetsList.length === 0 ? 'items-start' : 'items-center'}"
+                  on:click={(event) => {
+                    if (event.target === event.currentTarget) {
+                      focusBilibiliQualityDraftInput();
+                    }
+                  }}
+                >
+                  {#each bbQualityTargetsList as item}
+                    <div class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] cursor-default max-w-full flex-shrink-0 group hover:bg-white hover:border-cyan-400/30 dark:hover:bg-black/40 transition-all">
+                      <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors">{item}</span>
+                      <button
+                        type="button"
+                        class="text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 dark:text-white/30 dark:hover:text-rose-400 transition-colors ml-0.5 p-0.5 rounded-full inline-flex items-center justify-center h-5 w-5"
+                        on:click={() => removeBilibiliQualityTarget(item)}
+                        title={t("remove_tag")}
+                      >
+                        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  {/each}
+
+                  <input
+                    id="bb-quality-targets-input"
+                    bind:this={bbQualityDraftInputRef}
+                    class="flex-1 min-w-[96px] bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                    placeholder={t("bb_quality_targets_placeholder")}
+                    disabled={!globalEnabled || !bbQualityEnabled}
+                    bind:value={bbQualityDraftText}
+                    on:keydown={handleBilibiliQualityDraftKeyDown}
+                    on:paste={handleBilibiliQualityDraftPaste}
+                    on:blur={commitBilibiliQualityDraft}
+                    spellcheck="false"
+                  />
+                </div>
+
+                <div class="flex items-center justify-between mt-2.5 px-0.5 gap-2">
+                  <button
+                    type="button"
+                    class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-1.5 text-[11px] font-medium text-cyan-700 shadow-[0_2px_8px_rgba(8,145,178,0.08)] transition-all hover:bg-cyan-500/[0.12] active:scale-[0.98] dark:border-cyan-400/18 dark:bg-cyan-500/[0.12] dark:text-cyan-300 dark:hover:bg-cyan-500/[0.18] disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!globalEnabled || !bbQualityEnabled || bbQualityAddCurrentPending}
+                    on:click={addCurrentBilibiliUploaderToQualityTargets}
+                  >
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    {bbQualityAddCurrentPending ? t("bb_quality_add_current_loading") : t("bb_quality_add_current")}
+                  </button>
+
+                  {#if bbQualityAddCurrentStatus}
+                    <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full border truncate ${bbQualityAddCurrentTone === 'success' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/20' : bbQualityAddCurrentTone === 'error' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/20' : 'bg-black/5 text-gray-500 border-black/5 dark:bg-white/10 dark:text-gray-300 dark:border-white/10'}`}>
+                      {bbQualityAddCurrentStatus}
+                    </span>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="grid grid-cols-[auto,1fr] items-center gap-3 rounded-xl border border-black/5 bg-black/[0.03] px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                <span class="text-[11px] font-medium text-gray-500 dark:text-white/50">
+                  {t("bb_quality_target")}
+                </span>
+                <select
+                  class="w-full rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/40 dark:border-white/10 dark:bg-[#2A2D35] dark:text-white/85"
+                  disabled={!globalEnabled || !bbQualityEnabled}
+                  bind:value={bbQualityTargetQn}
+                >
+                  {#each BILIBILI_QUALITY_OPTIONS as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              </div>
             </div>
           </AccordionItem>
 

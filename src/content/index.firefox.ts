@@ -1,5 +1,5 @@
 import type { Feature } from '../features/Feature';
-import type { BilibiliUploaderProfile } from '../features/BilibiliAutoSubtitle';
+import type { BilibiliUploaderProfile } from '../features/bilibili/uploaderProfile';
 import type { BilibiliCdnSpeedTestOptions, SpeedTestResult } from '../features/bilibili/bilibiliCdn.shared';
 import type { CdnNode } from '../lib/bilibiliCdnData';
 import {
@@ -19,6 +19,7 @@ import {
 type FirefoxFeatureModuleMap = {
     'firefox-feature-auto-pause': { AutoPause: new () => Feature };
     'firefox-feature-bilibili-auto-subtitle': { BilibiliAutoSubtitle: new () => Feature };
+    'firefox-feature-bilibili-auto-quality': { BilibiliAutoQuality: new () => Feature };
     'firefox-feature-bilibili-cdn': { BilibiliCDN: new () => Feature };
     'firefox-feature-h5-enhancer': { H5Enhancer: new () => Feature };
     'firefox-feature-bilibili-fast-pause': { BilibiliFastPause: new () => Feature };
@@ -195,6 +196,12 @@ const bilibiliAutoSubtitle = {
         return instance.getCurrentUploaderProfile();
     }
 };
+const bilibiliAutoQuality = createDeferredFeature(
+    'BilibiliAutoQuality',
+    async () => new (
+        await loadFirefoxFeatureModule('firefox-feature-bilibili-auto-quality')
+    ).BilibiliAutoQuality()
+);
 const bilibiliCdnController = createDeferredFeatureController(
     'BilibiliCDN',
     async () => new (
@@ -238,7 +245,8 @@ const features = [
     bilibiliAutoSubtitle,
     bilibiliCdn,
     youtubeCdnStatus,
-    statsSpeedConverter
+    statsSpeedConverter,
+    bilibiliAutoQuality
 ];
 
 const mountedState = new Array(features.length).fill(false);
@@ -378,12 +386,14 @@ function applyFromSettings(res: Partial<Settings>) {
     const ytMemberBlockOn = settings.yt_member_block === true;
     const bbSubtitleOn = settings.bb_subtitle.enabled === true;
     const bbCdnOn = settings.bb_cdn.enabled === true;
+    const bbQualityOn = settings.bb_quality.enabled === true;
 
     h5Enhancer.updateSettings(settings);
     youtubeSeekBlocker.updateSettings(settings);
     youtubeOriginalAudio.updateSettings(settings);
     youtubeMemberBlocker.updateSettings(settings);
     bilibiliAutoSubtitle.updateSettings(settings);
+    bilibiliAutoQuality.updateSettings(settings);
     youtubeCdnStatus.updateSettings(settings);
     statsSpeedConverter.updateSettings(settings);
 
@@ -399,6 +409,7 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(9, bbCdnOn);
     setFeatureEnabled(10, ytCdnStatusOn);
     setFeatureEnabled(11, statsSpeedConverterOn);
+    setFeatureEnabled(12, bbQualityOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);
