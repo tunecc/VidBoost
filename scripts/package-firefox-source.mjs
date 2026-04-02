@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -6,6 +7,7 @@ import { spawn } from 'node:child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const firefoxDistDir = path.join(repoRoot, 'dist-firefox');
 const manifestPath = path.join(repoRoot, 'dist-firefox', 'manifest.json');
 const releaseDir = path.join(repoRoot, 'releases', 'firefox');
 
@@ -73,11 +75,34 @@ async function main() {
 
     await mkdir(releaseDir, { recursive: true });
     await rm(outputPath, { force: true });
+    const stagingRoot = await mkdtemp(path.join(os.tmpdir(), 'vidboost-firefox-source-'));
 
-    await runZip(
-        ['-q', '-r', '-X', outputPath, ...sourceEntries, '-x', '*.DS_Store', '__MACOSX/*'],
-        repoRoot
-    );
+    try {
+        // AMO 会在源码包根目录查找 manifest.json，因此先把 Firefox 构建产物平铺到根目录。
+        const firefoxDistEntries = await readdir(firefoxDistDir);
+        await Promise.all(
+            firefoxDistEntries.map((entry) =>
+                cp(path.join(firefoxDistDir, entry), path.join(stagingRoot, entry), {
+                    recursive: true
+                })
+            )
+        );
+
+        await Promise.all(
+            sourceEntries.map((entry) =>
+                cp(path.join(repoRoot, entry), path.join(stagingRoot, entry), {
+                    recursive: true
+                })
+            )
+        );
+
+        await runZip(
+            ['-q', '-r', '-X', outputPath, '.', '-x', '*.DS_Store', '__MACOSX/*'],
+            stagingRoot
+        );
+    } finally {
+        await rm(stagingRoot, { recursive: true, force: true });
+    }
 
     console.log(`[package-firefox-source] Wrote ${path.relative(repoRoot, outputPath)}`);
 }
