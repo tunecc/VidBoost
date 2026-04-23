@@ -3,11 +3,11 @@ import { InputManager } from '../lib/InputManager';
 import { VideoController } from '../lib/VideoController';
 import { getFastPauseConfig, isSiteHost } from '../lib/siteProfiles';
 import {
+    eventHitsVideoSurface,
     eventMatchesSelectors,
     eventTargetsProtectedCursor,
     eventTargetsGenericInteractive,
     eventTargetsSelectableText,
-    getEventElements
 } from '../lib/pointerTargets';
 
 /**
@@ -42,11 +42,10 @@ export class YouTubeFastPause implements Feature {
     }
 
     private isInVideoArea(e: Event): boolean {
-        const elements = getEventElements(e);
-        if (elements.some((element) => element.tagName === 'VIDEO')) return true;
-        return (this.config?.videoAreaSelectors || []).some((selector) =>
-            elements.some((element) => element.closest(selector) !== null)
-        );
+        // YouTube uses a strict "video surface only" hit test.
+        // Reason: custom overlays and extension UIs are common on top of the
+        // player, and container-level matching causes false play/pause toggles.
+        return eventHitsVideoSurface(e, this.videoCtrl.video);
     }
 
     mount() {

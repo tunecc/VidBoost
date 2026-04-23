@@ -44,7 +44,8 @@ const SITE_PROFILES: Record<SiteKey, SiteProfile> = {
                 '.ytp-panel',
                 '.html5-video-info-panel',
                 '.html5-video-info-panel-content',
-                // Custom in-player overlays should not trigger fast pause.
+                // Legacy compatibility until custom overlays migrate to the
+                // shared interaction-root helper.
                 '[data-slot="subtitles-settings-panel"]',
                 '.ytp-sfn-content',
                 '.ytp-ce-element',

@@ -9,22 +9,42 @@ const EDITABLE_SELECTORS = [
     '[role="searchbox"]'
 ].join(',');
 
-const GENERIC_INTERACTIVE_SELECTORS = [
+const HTML_INTERACTIVE_SELECTORS = [
     'button',
     'a[href]',
-    '[role="button"]',
-    '[role="switch"]',
-    '[role="checkbox"]',
-    '[role="radio"]',
-    '[role="menuitem"]',
-    '[role="link"]',
-    'input',
+    'input:not([type="hidden"])',
     'textarea',
     'select',
     'label',
     'summary',
-    'details'
+    'details',
+    'audio[controls]',
+    'video[controls]',
+    '[contenteditable]:not([contenteditable="false"])'
 ].join(',');
+
+const INTERACTIVE_ROLE_VALUES = new Set([
+    'button',
+    'link',
+    'menu',
+    'menuitem',
+    'menuitemcheckbox',
+    'menuitemradio',
+    'checkbox',
+    'radio',
+    'switch',
+    'option',
+    'tab',
+    'tablist',
+    'textbox',
+    'searchbox',
+    'combobox',
+    'listbox',
+    'slider',
+    'spinbutton',
+    'dialog',
+    'toolbar'
+]);
 
 const PROTECTED_CURSOR_VALUES = new Set([
     'text',
@@ -34,6 +54,8 @@ const PROTECTED_CURSOR_VALUES = new Set([
     'move',
     'all-scroll'
 ]);
+
+export const INTERACTION_ROOT_ATTRIBUTE = 'data-vb-interaction-root';
 
 type CaretPositionLike = {
     offsetNode: Node | null;
@@ -53,6 +75,12 @@ function normalizeCursorValue(value: string | null | undefined): string {
     if (!normalized) return '';
     const segments = normalized.split(',');
     return segments[segments.length - 1].trim();
+}
+
+function getRoleTokens(element: Element): string[] {
+    const role = normalizeCssValue(element.getAttribute('role'));
+    if (!role) return [];
+    return role.split(/\s+/).filter(Boolean);
 }
 
 function isEditableElement(element: Element): boolean {
@@ -106,6 +134,27 @@ function hasProtectedCursor(element: Element): boolean {
     }
 
     return false;
+}
+
+function isManagedInteractionRoot(element: Element): boolean {
+    return element.closest(`[${INTERACTION_ROOT_ATTRIBUTE}]`) !== null;
+}
+
+function hasInteractiveRole(element: Element): boolean {
+    return getRoleTokens(element).some((role) => INTERACTIVE_ROLE_VALUES.has(role));
+}
+
+function hasInteractiveAriaState(element: Element): boolean {
+    return element.hasAttribute('aria-haspopup')
+        || element.hasAttribute('aria-controls')
+        || element.hasAttribute('aria-expanded');
+}
+
+function isGenericInteractiveElement(element: Element): boolean {
+    if (isManagedInteractionRoot(element)) return true;
+    if (element.matches(HTML_INTERACTIVE_SELECTORS)) return true;
+    if (hasInteractiveRole(element)) return true;
+    return hasInteractiveAriaState(element);
 }
 
 function isSelectableTextContainer(element: Element): boolean {
@@ -166,8 +215,32 @@ export function eventMatchesSelectors(e: Event, selectors: string[]): boolean {
     return elements.some((element) => selectors.some((selector) => element.closest(selector) !== null));
 }
 
+export function markInteractionRoot(element: HTMLElement) {
+    element.setAttribute(INTERACTION_ROOT_ATTRIBUTE, '');
+}
+
+export function installInteractionRootIsolation(element: HTMLElement): () => void {
+    markInteractionRoot(element);
+
+    const stopPropagation = (event: Event) => {
+        event.stopPropagation();
+    };
+
+    const eventTypes = ['mousedown', 'click', 'dblclick'] as const;
+    eventTypes.forEach((eventType) => {
+        element.addEventListener(eventType, stopPropagation, true);
+    });
+
+    return () => {
+        eventTypes.forEach((eventType) => {
+            element.removeEventListener(eventType, stopPropagation, true);
+        });
+    };
+}
+
 export function eventTargetsGenericInteractive(e: Event): boolean {
-    return eventMatchesSelectors(e, [GENERIC_INTERACTIVE_SELECTORS]);
+    const elements = getEventElements(e);
+    return elements.some((element) => isGenericInteractiveElement(element));
 }
 
 export function eventTargetsSelectableText(e: Event): boolean {
@@ -196,4 +269,16 @@ export function eventTargetsProtectedCursor(e: Event): boolean {
     if (!pointerElement) return false;
 
     return hasProtectedCursor(pointerElement);
+}
+
+export function eventHitsVideoSurface(
+    e: Event,
+    video: HTMLVideoElement | null | undefined
+): boolean {
+    if (!(e instanceof MouseEvent) || !video) return false;
+
+    const pointerElement = getPointerElement(e);
+    if (!pointerElement) return false;
+
+    return pointerElement === video || pointerElement.closest('video') === video;
 }

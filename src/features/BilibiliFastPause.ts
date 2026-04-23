@@ -30,6 +30,11 @@ export class BilibiliFastPause implements Feature {
     }
 
     private isInVideoArea(e: Event): boolean {
+        // Bilibili intentionally keeps the broader container-based strategy.
+        // Reason: the native player interaction model relies more heavily on
+        // wrapper layers, so switching to YouTube's strict video-surface rule
+        // may change existing click behavior. Revisit only if real regressions
+        // show up on Bilibili.
         const elements = getEventElements(e);
         if (elements.some((element) => element.tagName === 'VIDEO')) return true;
         return (this.config?.videoAreaSelectors || []).some((selector) =>
