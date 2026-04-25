@@ -41,6 +41,14 @@ export type YTSubtitleEdgeStyle =
     | 'depressed'
     | 'outline';
 
+export type YTSubtitleEffectType = Exclude<YTSubtitleEdgeStyle, 'none'>;
+
+export type YTSubtitleEffect = {
+    type: YTSubtitleEffectType;
+    size: number;
+    strength: number;
+};
+
 export type YTSubtitleFontFamilyPreset =
     | 'default'
     | 'system-sans'
@@ -61,9 +69,7 @@ export type YTSubtitleStyle = {
     textOpacity: number;
     backgroundColor: string;
     backgroundOpacity: number;
-    edgeStyle: YTSubtitleEdgeStyle;
-    outlineWidth: number;
-    shadowStrength: number;
+    effects: YTSubtitleEffect[];
     borderRadius: number;
     fontFamilyPreset: YTSubtitleFontFamilyPreset;
     importedFontId: string;
@@ -185,6 +191,12 @@ export const YT_MEMBER_BLOCK_SETTINGS_KEYS = [
     'yt_member_allowlist'
 ] as const satisfies SettingsKey[];
 
+const DEFAULT_YT_SUBTITLE_EFFECT: YTSubtitleEffect = {
+    type: 'drop-shadow',
+    size: 2,
+    strength: 70
+};
+
 export const DEFAULT_SETTINGS: Settings = {
     enabled: true,
     h5_enabled: true,
@@ -233,9 +245,7 @@ export const DEFAULT_SETTINGS: Settings = {
             textOpacity: 100,
             backgroundColor: '#000000',
             backgroundOpacity: 75,
-            edgeStyle: 'drop-shadow',
-            outlineWidth: 2,
-            shadowStrength: 70,
+            effects: [{ ...DEFAULT_YT_SUBTITLE_EFFECT }],
             borderRadius: 10,
             fontFamilyPreset: 'default',
             importedFontId: '',
@@ -277,7 +287,21 @@ function normalizeYTSubtitleEdgeStyle(
         case 'outline':
             return edgeStyle;
         default:
-            return DEFAULT_SETTINGS.yt_subtitle.style.edgeStyle;
+            return DEFAULT_YT_SUBTITLE_EFFECT.type;
+    }
+}
+
+function normalizeYTSubtitleEffectType(
+    effectType: YTSubtitleEffectType | YTSubtitleEdgeStyle | null | undefined
+): YTSubtitleEffectType | null {
+    switch (effectType) {
+        case 'drop-shadow':
+        case 'raised':
+        case 'depressed':
+        case 'outline':
+            return effectType;
+        default:
+            return null;
     }
 }
 
@@ -323,6 +347,76 @@ function normalizeYTSubtitleFontWeight(weight: number | null | undefined): numbe
     return Math.min(900, Math.max(100, Math.round(weight / 100) * 100));
 }
 
+function normalizeYTSubtitleEffectSize(size: number | null | undefined, fallback: number): number {
+    if (typeof size !== 'number' || !Number.isFinite(size)) {
+        return fallback;
+    }
+
+    return Math.min(6, Math.max(0, Math.round(size * 2) / 2));
+}
+
+function normalizeYTSubtitleEffectStrength(
+    strength: number | null | undefined,
+    fallback: number
+): number {
+    if (typeof strength !== 'number' || !Number.isFinite(strength)) {
+        return fallback;
+    }
+
+    return Math.min(100, Math.max(0, Math.round(strength)));
+}
+
+function cloneYTSubtitleEffect(
+    effect: Partial<YTSubtitleEffect> | null | undefined
+): YTSubtitleEffect {
+    const fallback = DEFAULT_YT_SUBTITLE_EFFECT;
+    return {
+        type: normalizeYTSubtitleEffectType(effect?.type) ?? fallback.type,
+        size: normalizeYTSubtitleEffectSize(effect?.size, fallback.size),
+        strength: normalizeYTSubtitleEffectStrength(effect?.strength, fallback.strength)
+    };
+}
+
+type LegacyYTSubtitleStyle = Partial<YTSubtitleStyle> & {
+    edgeStyle?: YTSubtitleEdgeStyle | null;
+    outlineWidth?: number | null;
+    shadowStrength?: number | null;
+    effects?: Array<Partial<YTSubtitleEffect>> | null;
+};
+
+function normalizeYTSubtitleEffects(
+    style: LegacyYTSubtitleStyle | null | undefined
+): YTSubtitleEffect[] {
+    if (Array.isArray(style?.effects)) {
+        const usedTypes = new Set<YTSubtitleEffectType>();
+        return style.effects
+            .map((effect) => cloneYTSubtitleEffect(effect))
+            .filter((effect) => {
+                if (usedTypes.has(effect.type)) {
+                    return false;
+                }
+                usedTypes.add(effect.type);
+                return true;
+            });
+    }
+
+    const legacyEdgeStyle = normalizeYTSubtitleEdgeStyle(style?.edgeStyle ?? null);
+    if (legacyEdgeStyle === 'none') {
+        return [];
+    }
+
+    const legacyEffectType = normalizeYTSubtitleEffectType(legacyEdgeStyle);
+    if (legacyEffectType) {
+        return [cloneYTSubtitleEffect({
+            type: legacyEffectType,
+            size: style?.outlineWidth ?? DEFAULT_YT_SUBTITLE_EFFECT.size,
+            strength: style?.shadowStrength ?? DEFAULT_YT_SUBTITLE_EFFECT.strength
+        })];
+    }
+
+    return DEFAULT_SETTINGS.yt_subtitle.style.effects.map((effect) => cloneYTSubtitleEffect(effect));
+}
+
 export function cloneYTSubtitlePosition(
     position: Partial<YTSubtitlePosition> | null | undefined
 ): YTSubtitlePosition {
@@ -334,7 +428,7 @@ export function cloneYTSubtitlePosition(
 }
 
 export function cloneYTSubtitleStyle(
-    style: Partial<YTSubtitleStyle> | null | undefined
+    style: LegacyYTSubtitleStyle | null | undefined
 ): YTSubtitleStyle {
     const fallback = DEFAULT_SETTINGS.yt_subtitle.style;
     return {
@@ -346,11 +440,7 @@ export function cloneYTSubtitleStyle(
         backgroundOpacity: typeof style?.backgroundOpacity === 'number'
             ? style.backgroundOpacity
             : fallback.backgroundOpacity,
-        edgeStyle: normalizeYTSubtitleEdgeStyle(style?.edgeStyle ?? fallback.edgeStyle),
-        outlineWidth: typeof style?.outlineWidth === 'number' ? style.outlineWidth : fallback.outlineWidth,
-        shadowStrength: typeof style?.shadowStrength === 'number'
-            ? style.shadowStrength
-            : fallback.shadowStrength,
+        effects: normalizeYTSubtitleEffects(style),
         borderRadius: typeof style?.borderRadius === 'number' ? style.borderRadius : fallback.borderRadius,
         fontFamilyPreset: normalizeYTSubtitleFontFamilyPreset(
             style?.fontFamilyPreset ?? fallback.fontFamilyPreset

@@ -15,7 +15,8 @@
     type Settings,
     type BilibiliSubtitleTargetMode,
     type YTSubtitleConfig,
-    type YTSubtitleEdgeStyle,
+    type YTSubtitleEffect,
+    type YTSubtitleEffectType,
     type YTSubtitleStyle,
     type YTMemberBlockMode,
   } from "../lib/settings";
@@ -82,6 +83,13 @@
   const ytSubtitleFontStoreSupported = canUseSubtitleFontAssetStore();
   let ytSubtitleSelectedImportedFontAsset: SubtitleFontAssetSummary | null = null;
   let ytSubtitleCurrentFontCapabilities: SubtitleFontAssetCapabilities | null = null;
+
+  const YT_SUBTITLE_EFFECT_TYPES: YTSubtitleEffectType[] = [
+    "outline",
+    "drop-shadow",
+    "raised",
+    "depressed",
+  ];
 
   // Bilibili Config
   let bbSubtitleEnabled = DEFAULT_SETTINGS.bb_subtitle.enabled;
@@ -976,15 +984,32 @@
     ytSubtitleManagedImportedFontId = importedFontId;
   }
 
-  function updateYtSubtitleEdgeStyle(value: string) {
-    const edgeStyle = value as YTSubtitleEdgeStyle;
-    updateYtSubtitleStyle({
-      edgeStyle,
-    });
+  function createYtSubtitleEffect(type: YTSubtitleEffectType): YTSubtitleEffect {
+    return {
+      type,
+      size: 2,
+      strength: 70,
+    };
   }
 
-  function getYtSubtitleEdgeWidthLabel(edgeStyle: YTSubtitleEdgeStyle): I18nKey {
-    switch (edgeStyle) {
+  function getYtSubtitleEffectTypeNameKey(effectType: YTSubtitleEffectType): I18nKey {
+    switch (effectType) {
+      case "drop-shadow":
+        return "yt_subtitle_edge_drop_shadow";
+      case "raised":
+        return "yt_subtitle_edge_raised";
+      case "depressed":
+        return "yt_subtitle_edge_depressed";
+      case "outline":
+      default:
+        return "yt_subtitle_edge_outline";
+    }
+  }
+
+  function getYtSubtitleEffectSizeLabel(effectType: YTSubtitleEffectType): I18nKey {
+    switch (effectType) {
+      case "drop-shadow":
+        return "yt_subtitle_drop_shadow_size";
       case "raised":
         return "yt_subtitle_raised_depth";
       case "depressed":
@@ -995,8 +1020,8 @@
     }
   }
 
-  function getYtSubtitleEdgeStrengthLabel(edgeStyle: YTSubtitleEdgeStyle): I18nKey {
-    switch (edgeStyle) {
+  function getYtSubtitleEffectStrengthLabel(effectType: YTSubtitleEffectType): I18nKey {
+    switch (effectType) {
       case "drop-shadow":
         return "yt_subtitle_drop_shadow_strength";
       case "outline":
@@ -1008,6 +1033,55 @@
       default:
         return "yt_subtitle_shadow_strength";
     }
+  }
+
+  function getUsedYtSubtitleEffectTypes(excludeIndex = -1): Set<YTSubtitleEffectType> {
+    return new Set(
+      ytSubtitleConfig.style.effects
+        .filter((_, index) => index !== excludeIndex)
+        .map((effect) => effect.type),
+    );
+  }
+
+  function getAvailableYtSubtitleEffectTypes(currentIndex: number): YTSubtitleEffectType[] {
+    const usedTypes = getUsedYtSubtitleEffectTypes(currentIndex);
+    return YT_SUBTITLE_EFFECT_TYPES.filter((effectType) =>
+      !usedTypes.has(effectType) || ytSubtitleConfig.style.effects[currentIndex]?.type === effectType
+    );
+  }
+
+  function canAddYtSubtitleEffect() {
+    return ytSubtitleConfig.style.effects.length < YT_SUBTITLE_EFFECT_TYPES.length;
+  }
+
+  function updateYtSubtitleEffect(index: number, patch: Partial<YTSubtitleEffect>) {
+    updateYtSubtitleStyle({
+      effects: ytSubtitleConfig.style.effects.map((effect, effectIndex) =>
+        effectIndex === index ? { ...effect, ...patch } : effect
+      ),
+    });
+  }
+
+  function updateYtSubtitleEffectType(index: number, value: string) {
+    const nextType = value as YTSubtitleEffectType;
+    if (getUsedYtSubtitleEffectTypes(index).has(nextType)) return;
+    updateYtSubtitleEffect(index, { type: nextType });
+  }
+
+  function addYtSubtitleEffect() {
+    const usedTypes = getUsedYtSubtitleEffectTypes();
+    const nextType = YT_SUBTITLE_EFFECT_TYPES.find((effectType) => !usedTypes.has(effectType));
+    if (!nextType) return;
+
+    updateYtSubtitleStyle({
+      effects: [...ytSubtitleConfig.style.effects, createYtSubtitleEffect(nextType)],
+    });
+  }
+
+  function removeYtSubtitleEffect(index: number) {
+    updateYtSubtitleStyle({
+      effects: ytSubtitleConfig.style.effects.filter((_, effectIndex) => effectIndex !== index),
+    });
   }
 
   function formatSliderNumber(value: number): string {
@@ -1700,68 +1774,6 @@
                 <label class="block space-y-2">
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_size")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.fontScale}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="220"
-                    step="5"
-                    value={ytSubtitleConfig.style.fontScale}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        fontScale: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.fontScale),
-                          40,
-                          220,
-                        ),
-                      })}
-                  />
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_weight")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.fontWeight}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="100"
-                    max="900"
-                    step="100"
-                    value={ytSubtitleConfig.style.fontWeight}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        fontWeight: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.fontWeight),
-                          100,
-                          900,
-                        ),
-                      })}
-                  />
-
-                  {#if ytSubtitleCurrentFontCapabilities?.supportsCjk === false}
-                    <div class="text-[11px] text-amber-600 dark:text-amber-300">
-                      {t("yt_subtitle_font_cjk_fallback_hint")}
-                    </div>
-                  {/if}
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
                       {t("yt_subtitle_font_family")}
                     </span>
                   </div>
@@ -1793,6 +1805,12 @@
                       </optgroup>
                     {/if}
                   </select>
+
+                  {#if ytSubtitleCurrentFontCapabilities?.supportsCjk === false}
+                    <div class="text-[11px] text-amber-600 dark:text-amber-300">
+                      {t("yt_subtitle_font_cjk_fallback_hint")}
+                    </div>
+                  {/if}
                 </label>
 
                 <input
@@ -1884,6 +1902,62 @@
                     </button>
                   </div>
                 </div>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_size")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.fontScale}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="40"
+                    max="220"
+                    step="5"
+                    value={ytSubtitleConfig.style.fontScale}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        fontScale: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.fontScale),
+                          40,
+                          220,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_weight")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.fontWeight}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="900"
+                    step="100"
+                    value={ytSubtitleConfig.style.fontWeight}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        fontWeight: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.fontWeight),
+                          100,
+                          900,
+                        ),
+                      })}
+                  />
+                </label>
               </div>
 
               <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
@@ -2039,90 +2113,132 @@
                   {t("yt_subtitle_effects")}
                 </div>
 
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_edge_style")}
-                    </span>
+                {#if ytSubtitleConfig.style.effects.length === 0}
+                  <div class="space-y-3 rounded-xl border border-dashed border-black/8 bg-white/40 px-3 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <div class="text-[11px] text-gray-500 dark:text-white/55">
+                      {t("yt_subtitle_effect_empty")}
+                    </div>
+                    <button
+                      type="button"
+                      class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled || !canAddYtSubtitleEffect()}
+                      on:click={addYtSubtitleEffect}
+                    >
+                      {t("yt_subtitle_add_effect")}
+                    </button>
                   </div>
-                  <select
-                    class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
-                    value={ytSubtitleConfig.style.edgeStyle}
-                    disabled={ytSubtitleStyleDisabled}
-                    on:change={(event) =>
-                      updateYtSubtitleEdgeStyle(
-                        readTextValue(event),
-                      )}
-                  >
-                    <option value="none">{t("yt_subtitle_edge_none")}</option>
-                    <option value="drop-shadow">{t("yt_subtitle_edge_drop_shadow")}</option>
-                    <option value="outline">{t("yt_subtitle_edge_outline")}</option>
-                    <option value="raised">{t("yt_subtitle_edge_raised")}</option>
-                    <option value="depressed">{t("yt_subtitle_edge_depressed")}</option>
-                  </select>
-                </label>
-
-                {#if ytSubtitleConfig.style.edgeStyle === "outline" ||
-                  ytSubtitleConfig.style.edgeStyle === "raised" ||
-                  ytSubtitleConfig.style.edgeStyle === "depressed"}
-                  <label class="block space-y-2">
-                    <div class="flex items-center justify-between gap-3">
-                      <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                        {t(getYtSubtitleEdgeWidthLabel(ytSubtitleConfig.style.edgeStyle))}
-                      </span>
-                      <span class="text-[11px] text-gray-500 dark:text-white/55">
-                        {formatSliderNumber(ytSubtitleConfig.style.outlineWidth)}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="6"
-                      step="0.5"
-                      value={ytSubtitleConfig.style.outlineWidth}
-                      class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={ytSubtitleStyleDisabled}
-                      on:input={(event) =>
-                        updateYtSubtitleStyle({
-                          outlineWidth: clampNumber(
-                            readInputNumber(event, ytSubtitleConfig.style.outlineWidth),
-                            0,
-                            6,
-                          ),
-                        })}
-                    />
-                  </label>
                 {/if}
 
-                {#if ytSubtitleConfig.style.edgeStyle !== "none"}
-                  <label class="block space-y-2">
+                {#each ytSubtitleConfig.style.effects as effect, effectIndex (effect.type)}
+                  <div class="space-y-3 rounded-xl border border-black/8 bg-white/40 px-3 py-3 dark:border-white/10 dark:bg-white/[0.03]">
                     <div class="flex items-center justify-between gap-3">
-                      <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                        {t(getYtSubtitleEdgeStrengthLabel(ytSubtitleConfig.style.edgeStyle))}
-                      </span>
-                      <span class="text-[11px] text-gray-500 dark:text-white/55">
-                        {ytSubtitleConfig.style.shadowStrength}%
-                      </span>
+                      <div class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                        {effectIndex + 1}. {t(getYtSubtitleEffectTypeNameKey(effect.type))}
+                      </div>
+                      <button
+                        type="button"
+                        class="inline-flex items-center justify-center rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={ytSubtitleStyleDisabled}
+                        on:click={() => removeYtSubtitleEffect(effectIndex)}
+                      >
+                        {t("remove_tag")}
+                      </button>
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={ytSubtitleConfig.style.shadowStrength}
-                      class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={ytSubtitleStyleDisabled}
-                      on:input={(event) =>
-                        updateYtSubtitleStyle({
-                          shadowStrength: clampNumber(
-                            readInputNumber(event, ytSubtitleConfig.style.shadowStrength),
-                            0,
-                            100,
-                          ),
-                        })}
-                    />
-                  </label>
-                {/if}
+
+                    <label class="block space-y-2">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                          {t("yt_subtitle_effect_type")}
+                        </span>
+                      </div>
+                      <select
+                        class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
+                        value={effect.type}
+                        disabled={ytSubtitleStyleDisabled}
+                        on:change={(event) =>
+                          updateYtSubtitleEffectType(
+                            effectIndex,
+                            readTextValue(event),
+                          )}
+                      >
+                        {#each getAvailableYtSubtitleEffectTypes(effectIndex) as effectType}
+                          <option value={effectType}>
+                            {t(getYtSubtitleEffectTypeNameKey(effectType))}
+                          </option>
+                        {/each}
+                      </select>
+                    </label>
+
+                    <label class="block space-y-2">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                          {t(getYtSubtitleEffectSizeLabel(effect.type))}
+                        </span>
+                        <span class="text-[11px] text-gray-500 dark:text-white/55">
+                          {formatSliderNumber(effect.size)}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="6"
+                        step="0.5"
+                        value={effect.size}
+                        class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={ytSubtitleStyleDisabled}
+                        on:input={(event) =>
+                          updateYtSubtitleEffect(effectIndex, {
+                            size: clampNumber(
+                              readInputNumber(event, effect.size),
+                              0,
+                              6,
+                            ),
+                          })}
+                      />
+                    </label>
+
+                    <label class="block space-y-2">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                          {t(getYtSubtitleEffectStrengthLabel(effect.type))}
+                        </span>
+                        <span class="text-[11px] text-gray-500 dark:text-white/55">
+                          {effect.strength}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={effect.strength}
+                        class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={ytSubtitleStyleDisabled}
+                        on:input={(event) =>
+                          updateYtSubtitleEffect(effectIndex, {
+                            strength: clampNumber(
+                              readInputNumber(event, effect.strength),
+                              0,
+                              100,
+                            ),
+                          })}
+                      />
+                    </label>
+
+                    {#if effectIndex === ytSubtitleConfig.style.effects.length - 1}
+                      <div class="flex justify-end">
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={ytSubtitleStyleDisabled || !canAddYtSubtitleEffect()}
+                          on:click={addYtSubtitleEffect}
+                        >
+                          {t("yt_subtitle_add_effect")}
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
 
               </div>
             </div>

@@ -7,6 +7,7 @@ import {
     setSettings,
     type Settings,
     type YTSubtitleConfig,
+    type YTSubtitleEffect,
     type YTSubtitleStyle
 } from '../lib/settings';
 import { runtimeSendMessage } from '../lib/webext';
@@ -120,9 +121,9 @@ function toRgbaColor(value: string | null | undefined, alpha: number, fallback: 
     return `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp(alpha, 0, 1).toFixed(2)})`;
 }
 
-function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRenderStyle {
-    const shadowStrength = clamp(style.shadowStrength, 0, 100) / 100;
-    const outlineWidth = clamp(style.outlineWidth, 0, 6);
+function buildSubtitleSingleEffectRenderStyle(effect: YTSubtitleEffect): SubtitleEdgeRenderStyle {
+    const shadowStrength = clamp(effect.strength, 0, 100) / 100;
+    const effectSize = clamp(effect.size, 0, 6);
     const noEdge: SubtitleEdgeRenderStyle = {
         textShadow: 'none',
         textStrokeWidth: '0px',
@@ -130,24 +131,22 @@ function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRende
         paintOrder: 'normal'
     };
 
-    switch (style.edgeStyle) {
-        case 'none':
-            return noEdge;
+    switch (effect.type) {
         case 'outline': {
-            if (outlineWidth <= 0) return noEdge;
+            if (effectSize <= 0) return noEdge;
             const strokeColor = toRgbaColor('#000000', 0.5 + shadowStrength * 0.45, '#000000');
             const haloColor = toRgbaColor('#000000', 0.12 + shadowStrength * 0.18, '#000000');
-            const haloBlur = Math.max(1, outlineWidth * 0.9).toFixed(1);
+            const haloBlur = Math.max(1, effectSize * 0.9).toFixed(1);
             return {
                 textShadow: `0 0 ${haloBlur}px ${haloColor}`,
-                textStrokeWidth: `${outlineWidth}px`,
+                textStrokeWidth: `${effectSize}px`,
                 textStrokeColor: strokeColor,
                 paintOrder: 'stroke fill'
             };
         }
         case 'raised': {
             if (shadowStrength <= 0) return noEdge;
-            const distance = Math.max(1, outlineWidth || 1);
+            const distance = Math.max(1, effectSize || 1);
             const softBlur = Math.max(1, distance * 1.35).toFixed(1);
             const light = `rgba(255, 255, 255, ${(0.18 + shadowStrength * 0.24).toFixed(2)})`;
             const lightSoft = `rgba(255, 255, 255, ${(0.08 + shadowStrength * 0.12).toFixed(2)})`;
@@ -167,7 +166,7 @@ function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRende
         }
         case 'depressed': {
             if (shadowStrength <= 0) return noEdge;
-            const distance = Math.max(1, outlineWidth || 1);
+            const distance = Math.max(1, effectSize || 1);
             const softBlur = Math.max(1, distance * 1.35).toFixed(1);
             const light = `rgba(255, 255, 255, ${(0.14 + shadowStrength * 0.18).toFixed(2)})`;
             const lightSoft = `rgba(255, 255, 255, ${(0.06 + shadowStrength * 0.1).toFixed(2)})`;
@@ -188,10 +187,11 @@ function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRende
         case 'drop-shadow':
         default: {
             if (shadowStrength <= 0) return noEdge;
-            const offsetX = (0.4 + shadowStrength * 1.2).toFixed(1);
-            const offsetY = (0.8 + shadowStrength * 2).toFixed(1);
-            const liftBlur = (1.4 + shadowStrength * 2.6).toFixed(1);
-            const spreadBlur = (2.4 + shadowStrength * 5.8).toFixed(1);
+            const depth = Math.max(0.5, effectSize);
+            const offsetX = (depth * (0.16 + shadowStrength * 0.22)).toFixed(1);
+            const offsetY = (depth * (0.5 + shadowStrength * 0.42)).toFixed(1);
+            const liftBlur = (Math.max(1, depth * (0.85 + shadowStrength * 0.7))).toFixed(1);
+            const spreadBlur = (Math.max(1.4, depth * (1.3 + shadowStrength * 1.1))).toFixed(1);
             const primary = `rgba(0, 0, 0, ${(0.48 + shadowStrength * 0.34).toFixed(2)})`;
             const secondary = `rgba(0, 0, 0, ${(0.22 + shadowStrength * 0.32).toFixed(2)})`;
             return {
@@ -202,6 +202,32 @@ function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRende
             };
         }
     }
+}
+
+function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRenderStyle {
+    const textShadowParts: string[] = [];
+    let textStrokeWidth = '0px';
+    let textStrokeColor = 'transparent';
+    let paintOrder = 'normal';
+
+    for (const effect of style.effects) {
+        const render = buildSubtitleSingleEffectRenderStyle(effect);
+        if (render.textShadow !== 'none') {
+            textShadowParts.push(render.textShadow);
+        }
+        if (render.textStrokeWidth !== '0px') {
+            textStrokeWidth = render.textStrokeWidth;
+            textStrokeColor = render.textStrokeColor;
+            paintOrder = render.paintOrder;
+        }
+    }
+
+    return {
+        textShadow: textShadowParts.length > 0 ? textShadowParts.join(', ') : 'none',
+        textStrokeWidth,
+        textStrokeColor,
+        paintOrder
+    };
 }
 
 function isAbortError(error: unknown) {
