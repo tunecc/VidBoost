@@ -67,6 +67,7 @@ const ROUTE_POLL_MS = 400;
 const TRACK_POLL_MS = 1200;
 const FETCH_RETRY_DELAY_MS = 250;
 const FETCH_RETRY_ATTEMPTS = 6;
+const DRAG_HANDLE_HIDE_DELAY_MS = 300;
 const MIN_POSITION_PERCENT = 4;
 const MAX_POSITION_PERCENT = 72;
 const BASE_FONT_SIZE_PX = 22;
@@ -423,6 +424,8 @@ export class YouTubeSubtitleOverlay implements Feature {
     private nativeHidden = false;
 
     private dragState: DragState | null = null;
+    private dragHandleHovered = false;
+    private dragHandleHideTimer: number | null = null;
     private readonly importedFontLoadCache = new Map<string, Promise<boolean>>();
     private readonly importedFontFailureCache = new Set<string>();
     private readonly importedFontCapabilities = new Map<string, SubtitleFontAssetCapabilities | null>();
@@ -483,9 +486,55 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.dragState = null;
         window.removeEventListener('mousemove', this.handleDragMove, true);
         window.removeEventListener('mouseup', this.handleDragEnd, true);
+        if (this.dragHandleHovered) {
+            this.syncDragHandleVisibility();
+        } else {
+            this.scheduleDragHandleHide();
+        }
         void setSettings({
             yt_subtitle: cloneYTSubtitleConfig(this.config)
         });
+    };
+
+    private clearDragHandleHideTimer() {
+        if (this.dragHandleHideTimer === null) return;
+
+        window.clearTimeout(this.dragHandleHideTimer);
+        this.dragHandleHideTimer = null;
+    }
+
+    private scheduleDragHandleHide() {
+        if (this.dragState) return;
+
+        this.clearDragHandleHideTimer();
+        this.dragHandleHideTimer = window.setTimeout(() => {
+            this.dragHandleHideTimer = null;
+            this.dragHandleHovered = false;
+            this.syncDragHandleVisibility();
+        }, DRAG_HANDLE_HIDE_DELAY_MS);
+    }
+
+    private readonly handleDragHandleHoverEnter = () => {
+        this.clearDragHandleHideTimer();
+        this.dragHandleHovered = true;
+        this.syncDragHandleVisibility();
+    };
+
+    private readonly handleDragHandleHoverLeave = (event: MouseEvent) => {
+        const nextTarget = event.relatedTarget;
+        if (
+            nextTarget instanceof Node
+            && (this.overlayBox?.contains(nextTarget) || this.dragHandle?.contains(nextTarget))
+        ) {
+            return;
+        }
+
+        this.dragHandleHovered = false;
+        if (this.dragState) {
+            this.syncDragHandleVisibility();
+            return;
+        }
+        this.scheduleDragHandleHide();
     };
 
     mount() {
@@ -854,10 +903,27 @@ export class YouTubeSubtitleOverlay implements Feature {
         const shouldShow = Boolean(text.trim());
         this.overlayBox.style.display = shouldShow ? 'block' : 'none';
         this.dragHandle.style.display = shouldShow ? 'inline-flex' : 'none';
+        if (!shouldShow) {
+            this.clearDragHandleHideTimer();
+            this.dragHandleHovered = false;
+        }
+        this.syncDragHandleVisibility();
 
         if (this.overlayText.textContent !== text) {
             this.overlayText.textContent = text;
         }
+    }
+
+    private syncDragHandleVisibility() {
+        if (!this.dragHandle || !this.overlayBox) return;
+
+        const subtitleVisible = this.overlayBox.style.display !== 'none';
+        const shouldShowHandle = subtitleVisible && (this.dragHandleHovered || Boolean(this.dragState));
+
+        this.dragHandle.style.opacity = shouldShowHandle ? '1' : '0';
+        this.dragHandle.style.visibility = shouldShowHandle ? 'visible' : 'hidden';
+        this.dragHandle.style.pointerEvents = shouldShowHandle ? 'auto' : 'none';
+        this.dragHandle.style.transform = shouldShowHandle ? 'translateY(0)' : 'translateY(2px)';
     }
 
     private ensureOverlayMounted() {
@@ -890,12 +956,24 @@ export class YouTubeSubtitleOverlay implements Feature {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
+            width: min(86%, 960px);
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+        `;
+
+        const hoverZone = document.createElement('div');
+        hoverZone.style.cssText = `
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: min(86%, 960px);
-            pointer-events: none;
+            width: fit-content;
+            max-width: 100%;
+            row-gap: 4px;
+            pointer-events: auto;
         `;
+        hoverZone.addEventListener('mouseenter', this.handleDragHandleHoverEnter);
+        hoverZone.addEventListener('mouseleave', this.handleDragHandleHoverLeave);
 
         const handle = document.createElement('button');
         handle.type = 'button';
@@ -908,7 +986,6 @@ export class YouTubeSubtitleOverlay implements Feature {
             justify-content: center;
             width: 36px;
             height: 20px;
-            margin-bottom: 4px;
             border: 0;
             border-radius: 999px;
             background: rgba(0, 0, 0, 0.72);
@@ -916,9 +993,14 @@ export class YouTubeSubtitleOverlay implements Feature {
             font-size: 14px;
             line-height: 1;
             cursor: grab;
-            pointer-events: auto;
+            pointer-events: none;
             user-select: none;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(2px);
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s step-end;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+            z-index: 1;
         `;
         handle.addEventListener('mousedown', (event) => this.handleDragStart(event));
 
@@ -945,12 +1027,13 @@ export class YouTubeSubtitleOverlay implements Feature {
         `;
 
         box.appendChild(text);
-        positioner.appendChild(handle);
-        positioner.appendChild(box);
+        hoverZone.appendChild(handle);
+        hoverZone.appendChild(box);
+        positioner.appendChild(hoverZone);
         root.appendChild(positioner);
         player.appendChild(root);
 
-        markInteractionRoot(positioner);
+        markInteractionRoot(hoverZone);
         this.overlayRoot = root;
         this.overlayPositioner = positioner;
         this.overlayBox = box;
@@ -967,6 +1050,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.handleDragEnd();
         }
 
+        this.clearDragHandleHideTimer();
         this.overlayRoot?.remove();
         this.overlayRoot = null;
         this.overlayPositioner = null;
@@ -1124,6 +1208,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!player) return;
 
         event.preventDefault();
+        this.clearDragHandleHideTimer();
         const rect = player.getBoundingClientRect();
         this.dragState = {
             startClientY: event.clientY,
@@ -1131,6 +1216,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             height: rect.height,
             anchor: this.config.position.anchor
         };
+        this.syncDragHandleVisibility();
 
         window.addEventListener('mousemove', this.handleDragMove, true);
         window.addEventListener('mouseup', this.handleDragEnd, true);

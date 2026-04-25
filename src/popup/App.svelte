@@ -51,7 +51,7 @@
     type SubtitleFontAssetSummary,
   } from "../lib/subtitleFontAssets";
 
-  const manifestVersion = getManifestVersion("1.6.0");
+  const manifestVersion = getManifestVersion("1.6.1");
   const GITHUB_REPO_URL = "https://github.com/tunecc/VidBoost";
   const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
