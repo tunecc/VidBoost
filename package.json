@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "vite",
         "build": "npm run build:chrome",
-        "build:chrome": "vite build && vite build --config vite.content.config.ts && vite build --config vite.page.config.ts && vite build --config vite.bbcdn.config.ts && vite build --config vite.ytoriginalaudio.config.ts && vite build --config vite.ytcdnstatus.config.ts && vite build --config vite.douyinplayback.config.ts && node scripts/cleanup-package-dir.mjs dist",
+        "build:chrome": "vite build && vite build --config vite.content.config.ts && vite build --config vite.page.config.ts && vite build --config vite.bbcdn.config.ts && vite build --config vite.ytoriginalaudio.config.ts && vite build --config vite.ytsubtitleoverlay.config.ts && vite build --config vite.ytcdnstatus.config.ts && vite build --config vite.douyinplayback.config.ts && node scripts/cleanup-package-dir.mjs dist",
         "build:firefox": "npm run build:chrome && node scripts/build-firefox-dist.mjs prepare && vite build --config vite.content.firefox.config.ts && vite build --config vite.firefox.feature-modules.config.ts && node scripts/build-firefox-dist.mjs finalize",
         "verify:chrome-package": "node scripts/verify-chrome-package.mjs",
         "verify:firefox-package": "node scripts/verify-firefox-package.mjs",

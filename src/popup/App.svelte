@@ -7,12 +7,14 @@
   import AutoPauseSettings from "./AutoPauseSettings.svelte";
   import CdnSettings from "./CdnSettings.svelte";
   import {
+    cloneYTSubtitleConfig,
     getSettings,
     setSettings,
     DEFAULT_SETTINGS,
     POPUP_SETTINGS_KEYS,
     type Settings,
     type BilibiliSubtitleTargetMode,
+    type YTSubtitleConfig,
     type YTMemberBlockMode,
   } from "../lib/settings";
   import {
@@ -52,6 +54,10 @@
   let ytAlwaysUseOriginalAudio =
     DEFAULT_SETTINGS.yt_config.alwaysUseOriginalAudio ?? false;
   let ytShowCdnCountry = DEFAULT_SETTINGS.yt_config.showCdnCountry ?? false;
+  let ytSubtitleConfig: YTSubtitleConfig = cloneYTSubtitleConfig(
+    DEFAULT_SETTINGS.yt_subtitle,
+  );
+  let ytSubtitleEnabled = ytSubtitleConfig.enabled;
 
   // Bilibili Config
   let bbSubtitleEnabled = DEFAULT_SETTINGS.bb_subtitle.enabled;
@@ -876,6 +882,11 @@
         ytBlockNative = res.h5_config.blockNumKeys ?? true;
       }
 
+      if (res.yt_subtitle) {
+        ytSubtitleConfig = cloneYTSubtitleConfig(res.yt_subtitle);
+        ytSubtitleEnabled = ytSubtitleConfig.enabled;
+      }
+
       loaded = true;
     });
 
@@ -926,6 +937,10 @@
           blockNativeSeek: ytBlockNative,
           alwaysUseOriginalAudio: ytAlwaysUseOriginalAudio,
           showCdnCountry: ytShowCdnCountry,
+        },
+        yt_subtitle: {
+          ...cloneYTSubtitleConfig(ytSubtitleConfig),
+          enabled: ytSubtitleEnabled,
         },
         ui_state: sectionOpen,
         yt_member_block: ytMemberBlock,
@@ -1335,6 +1350,40 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"
+                />
+              </svg>
+            </div>
+          </ToggleItem>
+
+          <ToggleItem
+            title={t("yt_subtitle_overlay")}
+            desc={t("yt_subtitle_overlay_desc")}
+            checked={ytSubtitleEnabled}
+            iconColor="red"
+            disabled={!globalEnabled}
+            onClick={() => globalEnabled && (ytSubtitleEnabled = !ytSubtitleEnabled)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16v9a2 2 0 0 1-2 2H9l-5 4V8a2 2 0 0 1 2-2Z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 10h8M8 13h5"
                 />
               </svg>
             </div>

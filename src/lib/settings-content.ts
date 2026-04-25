@@ -1,4 +1,7 @@
 export {
+    cloneYTSubtitleConfig,
+    cloneYTSubtitlePosition,
+    cloneYTSubtitleStyle,
     DEFAULT_SETTINGS,
     CONTENT_SETTINGS_KEYS,
     POPUP_SETTINGS_KEYS,
@@ -15,6 +18,9 @@ export type {
     SettingsKey,
     H5Config,
     YTConfig,
+    YTSubtitleConfig,
+    YTSubtitlePosition,
+    YTSubtitleStyle,
     BilibiliQualityConfig,
     BilibiliSubtitleConfig,
     BilibiliSubtitleTargetMode,

@@ -47,6 +47,8 @@ const SITE_PROFILES: Record<SiteKey, SiteProfile> = {
                 // Legacy compatibility until custom overlays migrate to the
                 // shared interaction-root helper.
                 '[data-slot="subtitles-settings-panel"]',
+                '[data-vb-yt-subtitle-overlay]',
+                '[data-vb-yt-subtitle-drag-handle]',
                 '.ytp-sfn-content',
                 '.ytp-ce-element',
                 '.ytp-iv-player-content',

@@ -25,9 +25,11 @@ const REQUIRED_FILES = [
     'assets/firefox-feature-youtube-fast-pause.js',
     'assets/firefox-feature-youtube-member-blocker.js',
     'assets/firefox-feature-youtube-original-audio.js',
+    'assets/firefox-feature-youtube-subtitle-overlay.js',
     'assets/firefox-feature-youtube-seek-blocker.js',
     'assets/yt-cdn-status.page.js',
     'assets/yt-original-audio.page.js',
+    'assets/yt-subtitle-overlay.page.js',
     'assets/yt-member-prefilter.page.js'
 ];
 
@@ -63,6 +65,16 @@ const REQUIRED_MAIN_WORLD_ENTRIES = [
     },
     {
         scriptPath: 'assets/yt-original-audio.page.js',
+        matches: [
+            'http://127.0.0.1/*',
+            'http://localhost/*',
+            '*://youtu.be/*',
+            '*://youtube.com/*',
+            '*://*.youtube.com/*'
+        ]
+    },
+    {
+        scriptPath: 'assets/yt-subtitle-overlay.page.js',
         matches: [
             'http://127.0.0.1/*',
             'http://localhost/*',

@@ -19,6 +19,7 @@ const EXPECTED_DEFERRED_MAPPINGS = new Map([
     ['youtubeSeekBlocker', 'firefox-feature-youtube-seek-blocker'],
     ['youtubeFastPause', 'firefox-feature-youtube-fast-pause'],
     ['youtubeOriginalAudio', 'firefox-feature-youtube-original-audio'],
+    ['youtubeSubtitleOverlay', 'firefox-feature-youtube-subtitle-overlay'],
     ['youtubeCdnStatus', 'firefox-feature-youtube-cdn-status'],
     ['bilibiliSpaceBlocker', 'firefox-feature-bilibili-space-blocker'],
     ['youtubeMemberBlocker', 'firefox-feature-youtube-member-blocker']

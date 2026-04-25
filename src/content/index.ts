@@ -11,6 +11,7 @@ import { BilibiliAutoSubtitle } from '../features/BilibiliAutoSubtitle';
 import { BilibiliAutoQuality } from '../features/BilibiliAutoQuality';
 import { YouTubeCdnStatus } from '../features/YouTubeCdnStatus';
 import { StatsSpeedConverter } from '../features/StatsSpeedConverter';
+import { YouTubeSubtitleOverlay } from '../features/YouTubeSubtitleOverlay';
 import type { Feature } from '../features/Feature';
 import {
     getSettings,
@@ -71,6 +72,7 @@ const bilibiliAutoSubtitle = new BilibiliAutoSubtitle();
 const bilibiliAutoQuality = new BilibiliAutoQuality();
 const youtubeCdnStatus = new YouTubeCdnStatus();
 const statsSpeedConverter = new StatsSpeedConverter();
+const youtubeSubtitleOverlay = new YouTubeSubtitleOverlay();
 
 const autoPauseFeature = {
     mount() {
@@ -94,6 +96,7 @@ const features = [
     youtubeSeekBlocker,
     youtubeFastPause,
     youtubeOriginalAudio,
+    youtubeSubtitleOverlay,
     bilibiliSpaceBlocker,
     youtubeMemberBlocker,
     bilibiliAutoSubtitle,
@@ -104,7 +107,7 @@ const features = [
 ];
 
 const mountedState = new Array(features.length).fill(false);
-const YT_CDN_STATUS_FEATURE_INDEX = 10;
+const YT_CDN_STATUS_FEATURE_INDEX = 11;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
@@ -411,6 +414,7 @@ function applyFromSettings(res: Partial<Settings>) {
     const statsSpeedConverterOn = settings.stats_speed_converter === true;
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
+    const ytSubtitleOn = settings.yt_subtitle.enabled === true;
     const ytCdnStatusOn = settings.yt_config.showCdnCountry === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
@@ -421,6 +425,7 @@ function applyFromSettings(res: Partial<Settings>) {
     h5Enhancer.updateSettings(settings);
     youtubeSeekBlocker.updateSettings(settings);
     youtubeOriginalAudio.updateSettings(settings);
+    youtubeSubtitleOverlay.updateSettings(settings);
     youtubeMemberBlocker.updateSettings(settings);
     bilibiliAutoSubtitle.updateSettings(settings);
     bilibiliAutoQuality.updateSettings(settings);
@@ -433,13 +438,14 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(3, ytBlockNativeOn);
     setFeatureEnabled(4, ytFastPauseOn);
     setFeatureEnabled(5, ytOriginalAudioOn);
-    setFeatureEnabled(6, bbBlockSpaceOn);
-    setFeatureEnabled(7, ytMemberBlockOn);
-    setFeatureEnabled(8, bbSubtitleOn);
-    setFeatureEnabled(9, bbCdnOn);
-    setFeatureEnabled(10, ytCdnStatusOn);
-    setFeatureEnabled(11, statsSpeedConverterOn);
-    setFeatureEnabled(12, bbQualityOn);
+    setFeatureEnabled(6, ytSubtitleOn);
+    setFeatureEnabled(7, bbBlockSpaceOn);
+    setFeatureEnabled(8, ytMemberBlockOn);
+    setFeatureEnabled(9, bbSubtitleOn);
+    setFeatureEnabled(10, bbCdnOn);
+    setFeatureEnabled(11, ytCdnStatusOn);
+    setFeatureEnabled(12, statsSpeedConverterOn);
+    setFeatureEnabled(13, bbQualityOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);

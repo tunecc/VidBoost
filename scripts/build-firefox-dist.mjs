@@ -30,6 +30,7 @@ const FIREFOX_YOUTUBE_MAIN_WORLD_MATCHES = [
 const FIREFOX_YOUTUBE_MAIN_WORLD_SCRIPTS = [
     'assets/yt-member-prefilter.page.js',
     'assets/yt-original-audio.page.js',
+    'assets/yt-subtitle-overlay.page.js',
     'assets/yt-cdn-status.page.js'
 ];
 const FIREFOX_UNEXPECTED_FILES = [

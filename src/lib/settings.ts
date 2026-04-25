@@ -27,6 +27,26 @@ export type YTConfig = {
     showCdnCountry?: boolean;
 };
 
+export type YTSubtitlePositionAnchor = 'bottom' | 'top';
+
+export type YTSubtitlePosition = {
+    percent: number;
+    anchor: YTSubtitlePositionAnchor;
+};
+
+export type YTSubtitleStyle = {
+    fontScale: number;
+    fontWeight: number;
+    color: string;
+    backgroundOpacity: number;
+};
+
+export type YTSubtitleConfig = {
+    enabled: boolean;
+    position: YTSubtitlePosition;
+    style: YTSubtitleStyle;
+};
+
 export type UIState = {
     general?: boolean;
     youtube?: boolean;
@@ -86,6 +106,7 @@ export type Settings = {
     bb_cdn_test: BilibiliCdnTestConfig;
     language: 'auto' | 'en' | 'zh';
     yt_config: YTConfig;
+    yt_subtitle: YTSubtitleConfig;
     h5_config: H5Config;
     ui_state: UIState;
     ap_scope: 'all' | 'selected';
@@ -113,6 +134,7 @@ export const CONTENT_SETTINGS_KEYS = [
     'bb_cdn',
     'language',
     'yt_config',
+    'yt_subtitle',
     'yt_member_block'
 ] as const satisfies SettingsKey[];
 
@@ -169,6 +191,19 @@ export const DEFAULT_SETTINGS: Settings = {
         alwaysUseOriginalAudio: false,
         showCdnCountry: false
     },
+    yt_subtitle: {
+        enabled: false,
+        position: {
+            percent: 10,
+            anchor: 'bottom'
+        },
+        style: {
+            fontScale: 100,
+            fontWeight: 400,
+            color: '#FFFFFF',
+            backgroundOpacity: 75
+        }
+    },
     h5_config: {
         speedStep: 0.1,
         maxSpeed: 16.0,
@@ -187,11 +222,48 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_member_allowlist: []
 };
 
+export function cloneYTSubtitlePosition(position: YTSubtitlePosition): YTSubtitlePosition {
+    return {
+        percent: position.percent,
+        anchor: position.anchor
+    };
+}
+
+export function cloneYTSubtitleStyle(style: YTSubtitleStyle): YTSubtitleStyle {
+    return {
+        fontScale: style.fontScale,
+        fontWeight: style.fontWeight,
+        color: style.color,
+        backgroundOpacity: style.backgroundOpacity
+    };
+}
+
+export function cloneYTSubtitleConfig(config: YTSubtitleConfig): YTSubtitleConfig {
+    return {
+        enabled: config.enabled,
+        position: cloneYTSubtitlePosition(config.position),
+        style: cloneYTSubtitleStyle(config.style)
+    };
+}
+
 export function resolveSettings(source: Partial<Settings> = {}): Settings {
+    const subtitleSource = (source.yt_subtitle ?? {}) as Partial<YTSubtitleConfig>;
     return {
         ...DEFAULT_SETTINGS,
         ...source,
         yt_config: { ...DEFAULT_SETTINGS.yt_config, ...(source.yt_config ?? {}) },
+        yt_subtitle: cloneYTSubtitleConfig({
+            ...DEFAULT_SETTINGS.yt_subtitle,
+            ...subtitleSource,
+            position: {
+                ...DEFAULT_SETTINGS.yt_subtitle.position,
+                ...(subtitleSource.position ?? {})
+            },
+            style: {
+                ...DEFAULT_SETTINGS.yt_subtitle.style,
+                ...(subtitleSource.style ?? {})
+            }
+        }),
         h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
         ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
         bb_subtitle: {

@@ -59,6 +59,7 @@
             "resources": [
                 "assets/yt-member-prefilter.page.js",
                 "assets/yt-original-audio.page.js",
+                "assets/yt-subtitle-overlay.page.js",
                 "assets/yt-cdn-status.page.js"
             ],
             "matches": [

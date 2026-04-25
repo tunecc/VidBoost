@@ -27,6 +27,7 @@ type FirefoxFeatureModuleMap = {
     'firefox-feature-youtube-seek-blocker': { YouTubeSeekBlocker: new () => Feature };
     'firefox-feature-youtube-fast-pause': { YouTubeFastPause: new () => Feature };
     'firefox-feature-youtube-original-audio': { YouTubeOriginalAudio: new () => Feature };
+    'firefox-feature-youtube-subtitle-overlay': { YouTubeSubtitleOverlay: new () => Feature };
     'firefox-feature-youtube-cdn-status': { YouTubeCdnStatus: new () => Feature };
     'firefox-feature-bilibili-space-blocker': { BilibiliSpaceBlocker: new () => Feature };
     'firefox-feature-youtube-member-blocker': { YouTubeMemberBlocker: new () => Feature };
@@ -162,6 +163,12 @@ const youtubeOriginalAudio = createDeferredFeature(
         await loadFirefoxFeatureModule('firefox-feature-youtube-original-audio')
     ).YouTubeOriginalAudio()
 );
+const youtubeSubtitleOverlay = createDeferredFeature(
+    'YouTubeSubtitleOverlay',
+    async () => new (
+        await loadFirefoxFeatureModule('firefox-feature-youtube-subtitle-overlay')
+    ).YouTubeSubtitleOverlay()
+);
 const youtubeCdnStatus = createDeferredFeature(
     'YouTubeCdnStatus',
     async () => new (
@@ -240,6 +247,7 @@ const features = [
     youtubeSeekBlocker,
     youtubeFastPause,
     youtubeOriginalAudio,
+    youtubeSubtitleOverlay,
     bilibiliSpaceBlocker,
     youtubeMemberBlocker,
     bilibiliAutoSubtitle,
@@ -250,7 +258,7 @@ const features = [
 ];
 
 const mountedState = new Array(features.length).fill(false);
-const YT_CDN_STATUS_FEATURE_INDEX = 10;
+const YT_CDN_STATUS_FEATURE_INDEX = 11;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
@@ -381,6 +389,7 @@ function applyFromSettings(res: Partial<Settings>) {
     const statsSpeedConverterOn = settings.stats_speed_converter === true;
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
+    const ytSubtitleOn = settings.yt_subtitle.enabled === true;
     const ytCdnStatusOn = settings.yt_config.showCdnCountry === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
@@ -391,6 +400,7 @@ function applyFromSettings(res: Partial<Settings>) {
     h5Enhancer.updateSettings(settings);
     youtubeSeekBlocker.updateSettings(settings);
     youtubeOriginalAudio.updateSettings(settings);
+    youtubeSubtitleOverlay.updateSettings(settings);
     youtubeMemberBlocker.updateSettings(settings);
     bilibiliAutoSubtitle.updateSettings(settings);
     bilibiliAutoQuality.updateSettings(settings);
@@ -403,13 +413,14 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(3, ytBlockNativeOn);
     setFeatureEnabled(4, ytFastPauseOn);
     setFeatureEnabled(5, ytOriginalAudioOn);
-    setFeatureEnabled(6, bbBlockSpaceOn);
-    setFeatureEnabled(7, ytMemberBlockOn);
-    setFeatureEnabled(8, bbSubtitleOn);
-    setFeatureEnabled(9, bbCdnOn);
-    setFeatureEnabled(10, ytCdnStatusOn);
-    setFeatureEnabled(11, statsSpeedConverterOn);
-    setFeatureEnabled(12, bbQualityOn);
+    setFeatureEnabled(6, ytSubtitleOn);
+    setFeatureEnabled(7, bbBlockSpaceOn);
+    setFeatureEnabled(8, ytMemberBlockOn);
+    setFeatureEnabled(9, bbSubtitleOn);
+    setFeatureEnabled(10, bbCdnOn);
+    setFeatureEnabled(11, ytCdnStatusOn);
+    setFeatureEnabled(12, statsSpeedConverterOn);
+    setFeatureEnabled(13, bbQualityOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);

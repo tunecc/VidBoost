@@ -15,6 +15,7 @@ const REQUIRED_FILES = [
     'assets/douyin-playback-rate.page.js',
     'assets/yt-cdn-status.page.js',
     'assets/yt-member-prefilter.page.js',
+    'assets/yt-subtitle-overlay.page.js',
     'assets/yt-original-audio.page.js'
 ];
 
