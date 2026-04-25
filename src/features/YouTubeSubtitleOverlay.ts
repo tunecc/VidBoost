@@ -10,7 +10,7 @@ import {
 } from '../lib/settings';
 import { OSD } from '../lib/OSD';
 import { VideoController } from '../lib/VideoController';
-import { installInteractionRootIsolation } from '../lib/pointerTargets';
+import { markInteractionRoot } from '../lib/pointerTargets';
 import {
     ensureYouTubeSubtitleOverlayScriptInjected,
     installYouTubeSubtitleOverlayBridge,
@@ -272,7 +272,6 @@ export class YouTubeSubtitleOverlay implements Feature {
     private overlayBox: HTMLDivElement | null = null;
     private overlayText: HTMLDivElement | null = null;
     private dragHandle: HTMLButtonElement | null = null;
-    private cleanupInteractionRoot: (() => void) | null = null;
     private nativeHidden = false;
 
     private dragState: DragState | null = null;
@@ -757,7 +756,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             align-items: center;
             justify-content: center;
             width: 36px;
-            height: 16px;
+            height: 20px;
             margin-bottom: 4px;
             border: 0;
             border-radius: 999px;
@@ -800,7 +799,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         root.appendChild(positioner);
         player.appendChild(root);
 
-        this.cleanupInteractionRoot = installInteractionRootIsolation(positioner);
+        markInteractionRoot(positioner);
         this.overlayRoot = root;
         this.overlayPositioner = positioner;
         this.overlayBox = box;
@@ -813,9 +812,6 @@ export class YouTubeSubtitleOverlay implements Feature {
     }
 
     private destroyOverlay() {
-        this.cleanupInteractionRoot?.();
-        this.cleanupInteractionRoot = null;
-
         if (this.dragState) {
             this.handleDragEnd();
         }
