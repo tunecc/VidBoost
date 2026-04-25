@@ -15,6 +15,8 @@
     type Settings,
     type BilibiliSubtitleTargetMode,
     type YTSubtitleConfig,
+    type YTSubtitleEdgeStyle,
+    type YTSubtitleStyle,
     type YTMemberBlockMode,
   } from "../lib/settings";
   import {
@@ -36,8 +38,17 @@
     tabsQuery,
     tabsSendMessage,
   } from "../lib/webext";
+  import {
+    SUBTITLE_FONT_FILE_ACCEPT,
+    canUseSubtitleFontAssetStore,
+    createSubtitleFontAssetFromFile,
+    deleteSubtitleFontAsset,
+    listSubtitleFontAssetSummaries,
+    putSubtitleFontAsset,
+    type SubtitleFontAssetSummary,
+  } from "../lib/subtitleFontAssets";
 
-  const manifestVersion = getManifestVersion("1.5.0");
+  const manifestVersion = getManifestVersion("1.6.0");
   const GITHUB_REPO_URL = "https://github.com/tunecc/VidBoost";
   const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
@@ -58,6 +69,15 @@
     DEFAULT_SETTINGS.yt_subtitle,
   );
   let ytSubtitleEnabled = ytSubtitleConfig.enabled;
+  let ytSubtitleOpen = false;
+  let ytSubtitleStyleDisabled = !globalEnabled || !ytSubtitleEnabled;
+  let ytSubtitleFontAssets: SubtitleFontAssetSummary[] = [];
+  let ytSubtitleManagedImportedFontId = "";
+  let ytSubtitleFontInputRef: HTMLInputElement | null = null;
+  let ytSubtitleFontImporting = false;
+  let ytSubtitleFontStatus = "";
+  let ytSubtitleFontStatusTone: "neutral" | "success" | "error" = "neutral";
+  const ytSubtitleFontStoreSupported = canUseSubtitleFontAssetStore();
 
   // Bilibili Config
   let bbSubtitleEnabled = DEFAULT_SETTINGS.bb_subtitle.enabled;
@@ -784,6 +804,7 @@
 
   // Helper
   $: t = (key: I18nKey) => i18n(key, language);
+  $: ytSubtitleStyleDisabled = !globalEnabled || !ytSubtitleEnabled;
 
   function flushSettingsSave() {
     if (!pendingSettings || !hasStorageApi("local")) {
@@ -801,6 +822,212 @@
       saveTimer = null;
       flushSettingsSave();
     }, SAVE_DEBOUNCE_MS);
+  }
+
+  function clampNumber(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function readInputNumber(event: Event, fallback: number) {
+    const nextValue = Number((event.currentTarget as HTMLInputElement | HTMLSelectElement)?.value);
+    return Number.isFinite(nextValue) ? nextValue : fallback;
+  }
+
+  function readTextValue(event: Event) {
+    return (event.currentTarget as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+  }
+
+  function normalizeHexColor(value: string, fallback: string) {
+    const trimmed = value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+      return trimmed.toUpperCase();
+    }
+    if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+      const [, r = "0", g = "0", b = "0"] = trimmed;
+      return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+    }
+    return fallback;
+  }
+
+  function formatFileSize(size: number) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function resolveNextImportedFontId(preferredId = "") {
+    if (preferredId && ytSubtitleFontAssets.some((asset) => asset.id === preferredId)) {
+      return preferredId;
+    }
+
+    return ytSubtitleFontAssets[0]?.id ?? "";
+  }
+
+  function syncManagedImportedFontId(preferredId = "") {
+    ytSubtitleManagedImportedFontId = resolveNextImportedFontId(
+      preferredId || ytSubtitleManagedImportedFontId,
+    );
+  }
+
+  function getYtSubtitleFontSelectValue(config: YTSubtitleConfig) {
+    if (config.style.fontFamilyPreset === "imported" && config.style.importedFontId) {
+      return `imported:${config.style.importedFontId}`;
+    }
+
+    if (config.style.fontFamilyPreset === "custom") {
+      return "default";
+    }
+
+    return config.style.fontFamilyPreset;
+  }
+
+  async function loadYtSubtitleFontAssets() {
+    if (!ytSubtitleFontStoreSupported) {
+      ytSubtitleFontAssets = [];
+      return;
+    }
+
+    try {
+      ytSubtitleFontAssets = await listSubtitleFontAssetSummaries();
+      syncManagedImportedFontId(ytSubtitleConfig.style.importedFontId);
+      if (ytSubtitleConfig.style.fontFamilyPreset === "imported") {
+        const nextFontId = resolveNextImportedFontId(
+          ytSubtitleConfig.style.importedFontId,
+        );
+        if (!nextFontId) {
+          updateYtSubtitleStyle({
+            fontFamilyPreset: "default",
+            importedFontId: "",
+          });
+        } else if (nextFontId !== ytSubtitleConfig.style.importedFontId) {
+          updateYtSubtitleStyle({
+            importedFontId: nextFontId,
+          });
+        }
+      }
+    } catch {
+      ytSubtitleFontAssets = [];
+      ytSubtitleFontStatus = t("yt_subtitle_font_storage_unavailable");
+      ytSubtitleFontStatusTone = "error";
+    }
+  }
+
+  function updateYtSubtitleStyle(patch: Partial<YTSubtitleStyle>) {
+    ytSubtitleConfig = cloneYTSubtitleConfig({
+      ...ytSubtitleConfig,
+      enabled: ytSubtitleEnabled,
+      style: {
+        ...ytSubtitleConfig.style,
+        ...patch,
+      },
+    });
+  }
+
+  function updateYtSubtitleFontSelection(value: string) {
+    if (value.startsWith("imported:")) {
+      const importedFontId = value.slice("imported:".length).trim();
+      syncManagedImportedFontId(importedFontId);
+      updateYtSubtitleStyle({
+        fontFamilyPreset: "imported",
+        importedFontId,
+      });
+      return;
+    }
+
+    updateYtSubtitleStyle({
+      fontFamilyPreset: value === "custom" ? "default" : value as YTSubtitleConfig["style"]["fontFamilyPreset"],
+    });
+  }
+
+  function updateYtSubtitleManagedImportedFont(value: string) {
+    const importedFontId = value.trim();
+    ytSubtitleManagedImportedFontId = importedFontId;
+  }
+
+  function updateYtSubtitleEdgeStyle(value: string) {
+    const edgeStyle = value as YTSubtitleEdgeStyle;
+    updateYtSubtitleStyle({
+      edgeStyle,
+    });
+  }
+
+  function openYtSubtitleFontPicker() {
+    ytSubtitleFontInputRef?.click();
+  }
+
+  async function handleYtSubtitleFontFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement | null;
+    const file = input?.files?.[0] ?? null;
+    if (input) {
+      input.value = "";
+    }
+    if (!file) return;
+
+    ytSubtitleFontImporting = true;
+    ytSubtitleFontStatus = t("yt_subtitle_font_importing");
+    ytSubtitleFontStatusTone = "neutral";
+
+    try {
+      const record = await createSubtitleFontAssetFromFile(file);
+      const summary = await putSubtitleFontAsset(record);
+      await loadYtSubtitleFontAssets();
+      ytSubtitleManagedImportedFontId = summary.id;
+      updateYtSubtitleStyle({
+        fontFamilyPreset: "imported",
+        importedFontId: summary.id,
+      });
+      ytSubtitleFontStatus = `${t("yt_subtitle_font_imported")}：${summary.displayName}`;
+      ytSubtitleFontStatusTone = "success";
+    } catch (error) {
+      ytSubtitleFontStatus =
+        error instanceof Error && error.message === "unsupported_font_file"
+          ? t("yt_subtitle_font_invalid_file")
+          : t("yt_subtitle_font_import_failed");
+      ytSubtitleFontStatusTone = "error";
+    } finally {
+      ytSubtitleFontImporting = false;
+    }
+  }
+
+  async function removeSelectedYtSubtitleFont() {
+    const targetId = ytSubtitleManagedImportedFontId.trim();
+    if (!targetId) return;
+
+    try {
+      await deleteSubtitleFontAsset(targetId);
+      await loadYtSubtitleFontAssets();
+
+      const nextFontId = resolveNextImportedFontId(targetId);
+      if (nextFontId) {
+        ytSubtitleManagedImportedFontId = nextFontId;
+        if (
+          ytSubtitleConfig.style.fontFamilyPreset === "imported" &&
+          ytSubtitleConfig.style.importedFontId === targetId
+        ) {
+          updateYtSubtitleStyle({
+            fontFamilyPreset: "imported",
+            importedFontId: nextFontId,
+          });
+        }
+      } else {
+        ytSubtitleManagedImportedFontId = "";
+        if (
+          ytSubtitleConfig.style.fontFamilyPreset === "imported" &&
+          ytSubtitleConfig.style.importedFontId === targetId
+        ) {
+          updateYtSubtitleStyle({
+            fontFamilyPreset: "default",
+            importedFontId: "",
+          });
+        }
+      }
+
+      ytSubtitleFontStatus = t("yt_subtitle_font_removed");
+      ytSubtitleFontStatusTone = "neutral";
+    } catch {
+      ytSubtitleFontStatus = t("yt_subtitle_font_remove_failed");
+      ytSubtitleFontStatusTone = "error";
+    }
   }
 
   async function notifyPopupFocusOverride(active: boolean) {
@@ -884,9 +1111,20 @@
 
       if (res.yt_subtitle) {
         ytSubtitleConfig = cloneYTSubtitleConfig(res.yt_subtitle);
+        if (ytSubtitleConfig.style.fontFamilyPreset === "custom") {
+          ytSubtitleConfig = cloneYTSubtitleConfig({
+            ...ytSubtitleConfig,
+            style: {
+              ...ytSubtitleConfig.style,
+              fontFamilyPreset: "default",
+            },
+          });
+        }
+        ytSubtitleManagedImportedFontId = ytSubtitleConfig.style.importedFontId;
         ytSubtitleEnabled = ytSubtitleConfig.enabled;
       }
 
+      void loadYtSubtitleFontAssets();
       loaded = true;
     });
 
@@ -1355,13 +1593,16 @@
             </div>
           </ToggleItem>
 
-          <ToggleItem
+          <AccordionItem
             title={t("yt_subtitle_overlay")}
             desc={t("yt_subtitle_overlay_desc")}
-            checked={ytSubtitleEnabled}
             iconColor="red"
+            isOpen={ytSubtitleOpen}
+            masterChecked={ytSubtitleEnabled}
             disabled={!globalEnabled}
-            onClick={() => globalEnabled && (ytSubtitleEnabled = !ytSubtitleEnabled)}
+            onToggleOpen={() => (ytSubtitleOpen = !ytSubtitleOpen)}
+            onToggleMaster={() =>
+              globalEnabled && (ytSubtitleEnabled = !ytSubtitleEnabled)}
           >
             <div
               slot="icon"
@@ -1387,7 +1628,438 @@
                 />
               </svg>
             </div>
-          </ToggleItem>
+            <div slot="content" class="space-y-3 px-1">
+              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
+                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
+                  {t("yt_subtitle_basic")}
+                </div>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_size")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.fontScale}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="40"
+                    max="220"
+                    step="5"
+                    value={ytSubtitleConfig.style.fontScale}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        fontScale: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.fontScale),
+                          40,
+                          220,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_weight")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.fontWeight}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="900"
+                    step="100"
+                    value={ytSubtitleConfig.style.fontWeight}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        fontWeight: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.fontWeight),
+                          100,
+                          900,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_family")}
+                    </span>
+                  </div>
+                  <select
+                    class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
+                    value={getYtSubtitleFontSelectValue(ytSubtitleConfig)}
+                    disabled={ytSubtitleStyleDisabled}
+                    on:change={(event) =>
+                      updateYtSubtitleFontSelection(
+                        readTextValue(event),
+                      )}
+                  >
+                    <option value="default">{t("yt_subtitle_font_default")}</option>
+                    <option value="system-sans">{t("yt_subtitle_font_system_sans")}</option>
+                    <option value="system-serif">{t("yt_subtitle_font_system_serif")}</option>
+                    <option value="rounded">{t("yt_subtitle_font_rounded")}</option>
+                    <option value="monospace-sans">{t("yt_subtitle_font_monospace_sans")}</option>
+                    <option value="monospace-serif">{t("yt_subtitle_font_monospace_serif")}</option>
+                    <option value="casual">{t("yt_subtitle_font_casual")}</option>
+                    <option value="cursive">{t("yt_subtitle_font_cursive")}</option>
+                    <option value="small-caps">{t("yt_subtitle_font_small_caps")}</option>
+                    {#if ytSubtitleFontAssets.length > 0}
+                      <optgroup label={t("yt_subtitle_font_imported_select")}>
+                        {#each ytSubtitleFontAssets as asset}
+                          <option value={`imported:${asset.id}`}>
+                            {asset.displayName}
+                          </option>
+                        {/each}
+                      </optgroup>
+                    {/if}
+                  </select>
+                </label>
+
+                <input
+                  bind:this={ytSubtitleFontInputRef}
+                  type="file"
+                  accept={SUBTITLE_FONT_FILE_ACCEPT}
+                  class="hidden"
+                  on:change={handleYtSubtitleFontFileChange}
+                />
+
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_import")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleFontAssets.length} {t("yt_subtitle_font_imported_count")}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!ytSubtitleFontStoreSupported || ytSubtitleFontImporting}
+                      on:click={openYtSubtitleFontPicker}
+                    >
+                      {ytSubtitleFontImporting
+                        ? t("yt_subtitle_font_importing")
+                        : t("yt_subtitle_font_import_button")}
+                    </button>
+                    <div class="text-[11px] text-gray-500 dark:text-white/55">
+                      {t("yt_subtitle_font_import_hint")}
+                    </div>
+                  </div>
+
+                  {#if ytSubtitleFontStatus}
+                    <div
+                      class:text-emerald-600={ytSubtitleFontStatusTone === "success"}
+                      class:text-red-500={ytSubtitleFontStatusTone === "error"}
+                      class="text-[11px] text-gray-500 dark:text-white/60"
+                    >
+                      {ytSubtitleFontStatus}
+                    </div>
+                  {/if}
+                </div>
+                <div class="space-y-2 rounded-xl border border-black/5 bg-black/[0.02] px-3 py-2 dark:border-white/8 dark:bg-white/[0.03]">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_font_imported_select")}
+                    </div>
+                    <div class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleManagedImportedFontId
+                        ? formatFileSize(
+                            ytSubtitleFontAssets.find(
+                              (asset) => asset.id === ytSubtitleManagedImportedFontId,
+                            )?.size ?? 0,
+                          )
+                        : t("yt_subtitle_font_imported_empty")}
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <select
+                      class="min-w-0 flex-1 rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={ytSubtitleManagedImportedFontId}
+                      disabled={ytSubtitleFontAssets.length === 0}
+                      on:change={(event) =>
+                        updateYtSubtitleManagedImportedFont(
+                          readTextValue(event),
+                        )}
+                    >
+                      {#if ytSubtitleFontAssets.length === 0}
+                        <option value="">{t("yt_subtitle_font_imported_empty")}</option>
+                      {/if}
+                      {#each ytSubtitleFontAssets as asset}
+                        <option value={asset.id}>
+                          {asset.displayName}
+                        </option>
+                      {/each}
+                    </select>
+
+                    <button
+                      type="button"
+                      class="inline-flex shrink-0 items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!ytSubtitleManagedImportedFontId}
+                      on:click={removeSelectedYtSubtitleFont}
+                    >
+                      {t("remove_tag")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
+                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
+                  {t("yt_subtitle_colors")}
+                </div>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_text_color")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.color}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={ytSubtitleConfig.style.color}
+                      class="h-9 w-14 rounded-lg border border-black/8 bg-transparent p-1 dark:border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          color: normalizeHexColor(
+                            readTextValue(event),
+                            DEFAULT_SETTINGS.yt_subtitle.style.color,
+                          ),
+                        })}
+                    />
+                    <div class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.color}
+                    </div>
+                  </div>
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_text_opacity")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.textOpacity}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={ytSubtitleConfig.style.textOpacity}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        textOpacity: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.textOpacity),
+                          0,
+                          100,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_background_color")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.backgroundColor}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={ytSubtitleConfig.style.backgroundColor}
+                      class="h-9 w-14 rounded-lg border border-black/8 bg-transparent p-1 dark:border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          backgroundColor: normalizeHexColor(
+                            readTextValue(event),
+                            DEFAULT_SETTINGS.yt_subtitle.style.backgroundColor,
+                          ),
+                        })}
+                    />
+                    <div class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.backgroundColor}
+                    </div>
+                  </div>
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_background_opacity")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.backgroundOpacity}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={ytSubtitleConfig.style.backgroundOpacity}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        backgroundOpacity: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.backgroundOpacity),
+                          0,
+                          100,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_background_radius")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.borderRadius}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="1"
+                    value={ytSubtitleConfig.style.borderRadius}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        borderRadius: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.borderRadius),
+                          0,
+                          20,
+                        ),
+                      })}
+                  />
+                </label>
+              </div>
+
+              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
+                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
+                  {t("yt_subtitle_effects")}
+                </div>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_edge_style")}
+                    </span>
+                  </div>
+                  <select
+                    class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
+                    value={ytSubtitleConfig.style.edgeStyle}
+                    disabled={ytSubtitleStyleDisabled}
+                    on:change={(event) =>
+                      updateYtSubtitleEdgeStyle(
+                        readTextValue(event),
+                      )}
+                  >
+                    <option value="none">{t("yt_subtitle_edge_none")}</option>
+                    <option value="drop-shadow">{t("yt_subtitle_edge_drop_shadow")}</option>
+                    <option value="outline">{t("yt_subtitle_edge_outline")}</option>
+                    <option value="raised">{t("yt_subtitle_edge_raised")}</option>
+                    <option value="depressed">{t("yt_subtitle_edge_depressed")}</option>
+                  </select>
+                </label>
+
+                <label
+                  class="block space-y-2"
+                  class:opacity-60={ytSubtitleConfig.style.edgeStyle !== "outline" &&
+                    ytSubtitleConfig.style.edgeStyle !== "raised" &&
+                    ytSubtitleConfig.style.edgeStyle !== "depressed"}
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_outline_width")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.outlineWidth}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="6"
+                    step="1"
+                    value={ytSubtitleConfig.style.outlineWidth}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled ||
+                      (ytSubtitleConfig.style.edgeStyle !== "outline" &&
+                        ytSubtitleConfig.style.edgeStyle !== "raised" &&
+                        ytSubtitleConfig.style.edgeStyle !== "depressed")}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        outlineWidth: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.outlineWidth),
+                          0,
+                          6,
+                        ),
+                      })}
+                  />
+                </label>
+
+                <label class="block space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                      {t("yt_subtitle_shadow_strength")}
+                    </span>
+                    <span class="text-[11px] text-gray-500 dark:text-white/55">
+                      {ytSubtitleConfig.style.shadowStrength}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={ytSubtitleConfig.style.shadowStrength}
+                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={ytSubtitleStyleDisabled}
+                    on:input={(event) =>
+                      updateYtSubtitleStyle({
+                        shadowStrength: clampNumber(
+                          readInputNumber(event, ytSubtitleConfig.style.shadowStrength),
+                          0,
+                          100,
+                        ),
+                      })}
+                  />
+                </label>
+
+              </div>
+            </div>
+          </AccordionItem>
 
           <!-- Hide Members Videos -->
           <AccordionItem

@@ -9,6 +9,11 @@ import {
     tabsSendMessage
 } from '../lib/webext';
 import {
+    getSubtitleFontAsset,
+    subtitleFontBufferToBase64,
+    type SubtitleFontAssetGetResponse
+} from '../lib/subtitleFontAssets';
+import {
     YT_CDN_STATUS_STORAGE_REQUEST_PREFIX,
     youTubeCdnStatusStorageStateKey
 } from '../features/youtube/cdnStatus.shared';
@@ -463,6 +468,7 @@ addRuntimeMessageListener((message, sender, sendResponse) => {
     if (
         message.type !== 'VB_YT_CDN_CAPTURED_URL'
         && message.type !== 'VB_YT_GET_CDN_STATE'
+        && message.type !== 'VB_YT_SUBTITLE_FONT_GET'
         && message.type !== 'VB_TEST_SET_YT_CDN_OVERRIDE'
         && message.type !== 'VB_TEST_CLEAR_YT_CDN_OVERRIDE'
     ) {
@@ -488,6 +494,45 @@ addRuntimeMessageListener((message, sender, sendResponse) => {
         ytCdnTestOverride = null;
         sendResponse({ ok: true });
         return false;
+    }
+
+    if (message.type === 'VB_YT_SUBTITLE_FONT_GET') {
+        const fontId = typeof message.fontId === 'string' ? message.fontId.trim() : '';
+        if (!fontId) {
+            sendResponse({
+                ok: false,
+                error: 'invalid_font_id'
+            } satisfies SubtitleFontAssetGetResponse);
+            return false;
+        }
+
+        void getSubtitleFontAsset(fontId).then((font) => {
+            if (!font) {
+                sendResponse({
+                    ok: false,
+                    error: 'font_not_found'
+                } satisfies SubtitleFontAssetGetResponse);
+                return;
+            }
+
+            sendResponse({
+                ok: true,
+                font: {
+                    id: font.id,
+                    displayName: font.displayName,
+                    mimeType: font.mimeType,
+                    size: font.size,
+                    bufferBase64: subtitleFontBufferToBase64(font.buffer)
+                }
+            } satisfies SubtitleFontAssetGetResponse);
+        }).catch(() => {
+            sendResponse({
+                ok: false,
+                error: 'font_read_failed'
+            } satisfies SubtitleFontAssetGetResponse);
+        });
+
+        return true;
     }
 
     if (message.type === 'VB_YT_CDN_CAPTURED_URL') {

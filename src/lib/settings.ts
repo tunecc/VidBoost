@@ -34,11 +34,40 @@ export type YTSubtitlePosition = {
     anchor: YTSubtitlePositionAnchor;
 };
 
+export type YTSubtitleEdgeStyle =
+    | 'none'
+    | 'drop-shadow'
+    | 'raised'
+    | 'depressed'
+    | 'outline';
+
+export type YTSubtitleFontFamilyPreset =
+    | 'default'
+    | 'system-sans'
+    | 'system-serif'
+    | 'rounded'
+    | 'monospace-sans'
+    | 'monospace-serif'
+    | 'casual'
+    | 'cursive'
+    | 'small-caps'
+    | 'imported'
+    | 'custom';
+
 export type YTSubtitleStyle = {
     fontScale: number;
     fontWeight: number;
     color: string;
+    textOpacity: number;
+    backgroundColor: string;
     backgroundOpacity: number;
+    edgeStyle: YTSubtitleEdgeStyle;
+    outlineWidth: number;
+    shadowStrength: number;
+    borderRadius: number;
+    fontFamilyPreset: YTSubtitleFontFamilyPreset;
+    importedFontId: string;
+    customFontFamily: string;
 };
 
 export type YTSubtitleConfig = {
@@ -201,7 +230,16 @@ export const DEFAULT_SETTINGS: Settings = {
             fontScale: 100,
             fontWeight: 400,
             color: '#FFFFFF',
-            backgroundOpacity: 75
+            textOpacity: 100,
+            backgroundColor: '#000000',
+            backgroundOpacity: 75,
+            edgeStyle: 'drop-shadow',
+            outlineWidth: 2,
+            shadowStrength: 70,
+            borderRadius: 10,
+            fontFamilyPreset: 'default',
+            importedFontId: '',
+            customFontFamily: ''
         }
     },
     h5_config: {
@@ -222,27 +260,118 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_member_allowlist: []
 };
 
-export function cloneYTSubtitlePosition(position: YTSubtitlePosition): YTSubtitlePosition {
+function normalizeYTSubtitlePositionAnchor(
+    anchor: YTSubtitlePositionAnchor | null | undefined
+): YTSubtitlePositionAnchor {
+    return anchor === 'top' ? 'top' : 'bottom';
+}
+
+function normalizeYTSubtitleEdgeStyle(
+    edgeStyle: YTSubtitleEdgeStyle | null | undefined
+): YTSubtitleEdgeStyle {
+    switch (edgeStyle) {
+        case 'none':
+        case 'drop-shadow':
+        case 'raised':
+        case 'depressed':
+        case 'outline':
+            return edgeStyle;
+        default:
+            return DEFAULT_SETTINGS.yt_subtitle.style.edgeStyle;
+    }
+}
+
+function normalizeYTSubtitleFontFamilyPreset(
+    preset: YTSubtitleFontFamilyPreset | null | undefined
+): YTSubtitleFontFamilyPreset {
+    switch (preset) {
+        case 'default':
+        case 'system-sans':
+        case 'system-serif':
+        case 'rounded':
+        case 'monospace-sans':
+        case 'monospace-serif':
+        case 'casual':
+        case 'cursive':
+        case 'small-caps':
+        case 'imported':
+        case 'custom':
+            return preset;
+        default:
+            return DEFAULT_SETTINGS.yt_subtitle.style.fontFamilyPreset;
+    }
+}
+
+function normalizeHexColor(value: string | null | undefined, fallback: string): string {
+    const trimmed = (value || '').trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+        return trimmed.toUpperCase();
+    }
+    if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+        const [, r = '0', g = '0', b = '0'] = trimmed;
+        return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+    }
+    return fallback;
+}
+
+function normalizeYTSubtitleFontWeight(weight: number | null | undefined): number {
+    const fallback = DEFAULT_SETTINGS.yt_subtitle.style.fontWeight;
+    if (typeof weight !== 'number' || !Number.isFinite(weight)) {
+        return fallback;
+    }
+
+    return Math.min(900, Math.max(100, Math.round(weight / 100) * 100));
+}
+
+export function cloneYTSubtitlePosition(
+    position: Partial<YTSubtitlePosition> | null | undefined
+): YTSubtitlePosition {
+    const fallback = DEFAULT_SETTINGS.yt_subtitle.position;
     return {
-        percent: position.percent,
-        anchor: position.anchor
+        percent: typeof position?.percent === 'number' ? position.percent : fallback.percent,
+        anchor: normalizeYTSubtitlePositionAnchor(position?.anchor ?? fallback.anchor)
     };
 }
 
-export function cloneYTSubtitleStyle(style: YTSubtitleStyle): YTSubtitleStyle {
+export function cloneYTSubtitleStyle(
+    style: Partial<YTSubtitleStyle> | null | undefined
+): YTSubtitleStyle {
+    const fallback = DEFAULT_SETTINGS.yt_subtitle.style;
     return {
-        fontScale: style.fontScale,
-        fontWeight: style.fontWeight,
-        color: style.color,
-        backgroundOpacity: style.backgroundOpacity
+        fontScale: typeof style?.fontScale === 'number' ? style.fontScale : fallback.fontScale,
+        fontWeight: normalizeYTSubtitleFontWeight(style?.fontWeight ?? fallback.fontWeight),
+        color: normalizeHexColor(style?.color, fallback.color),
+        textOpacity: typeof style?.textOpacity === 'number' ? style.textOpacity : fallback.textOpacity,
+        backgroundColor: normalizeHexColor(style?.backgroundColor, fallback.backgroundColor),
+        backgroundOpacity: typeof style?.backgroundOpacity === 'number'
+            ? style.backgroundOpacity
+            : fallback.backgroundOpacity,
+        edgeStyle: normalizeYTSubtitleEdgeStyle(style?.edgeStyle ?? fallback.edgeStyle),
+        outlineWidth: typeof style?.outlineWidth === 'number' ? style.outlineWidth : fallback.outlineWidth,
+        shadowStrength: typeof style?.shadowStrength === 'number'
+            ? style.shadowStrength
+            : fallback.shadowStrength,
+        borderRadius: typeof style?.borderRadius === 'number' ? style.borderRadius : fallback.borderRadius,
+        fontFamilyPreset: normalizeYTSubtitleFontFamilyPreset(
+            style?.fontFamilyPreset ?? fallback.fontFamilyPreset
+        ),
+        importedFontId: typeof style?.importedFontId === 'string'
+            ? style.importedFontId.trim()
+            : fallback.importedFontId,
+        customFontFamily: typeof style?.customFontFamily === 'string'
+            ? style.customFontFamily.trim()
+            : fallback.customFontFamily
     };
 }
 
-export function cloneYTSubtitleConfig(config: YTSubtitleConfig): YTSubtitleConfig {
+export function cloneYTSubtitleConfig(
+    config: Partial<YTSubtitleConfig> | null | undefined
+): YTSubtitleConfig {
+    const fallback = DEFAULT_SETTINGS.yt_subtitle;
     return {
-        enabled: config.enabled,
-        position: cloneYTSubtitlePosition(config.position),
-        style: cloneYTSubtitleStyle(config.style)
+        enabled: typeof config?.enabled === 'boolean' ? config.enabled : fallback.enabled,
+        position: cloneYTSubtitlePosition(config?.position),
+        style: cloneYTSubtitleStyle(config?.style)
     };
 }
 
@@ -252,18 +381,7 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         ...DEFAULT_SETTINGS,
         ...source,
         yt_config: { ...DEFAULT_SETTINGS.yt_config, ...(source.yt_config ?? {}) },
-        yt_subtitle: cloneYTSubtitleConfig({
-            ...DEFAULT_SETTINGS.yt_subtitle,
-            ...subtitleSource,
-            position: {
-                ...DEFAULT_SETTINGS.yt_subtitle.position,
-                ...(subtitleSource.position ?? {})
-            },
-            style: {
-                ...DEFAULT_SETTINGS.yt_subtitle.style,
-                ...(subtitleSource.style ?? {})
-            }
-        }),
+        yt_subtitle: cloneYTSubtitleConfig(subtitleSource),
         h5_config: { ...DEFAULT_SETTINGS.h5_config, ...(source.h5_config ?? {}) },
         ui_state: { ...DEFAULT_SETTINGS.ui_state, ...(source.ui_state ?? {}) },
         bb_subtitle: {
