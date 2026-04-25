@@ -14,10 +14,14 @@ import { OSD } from '../lib/OSD';
 import { VideoController } from '../lib/VideoController';
 import { markInteractionRoot } from '../lib/pointerTargets';
 import {
+    buildSubtitleFontFaceDescriptors,
+    buildSubtitleFontVariationSettings,
     buildSubtitleImportedFontFaceName,
     buildSubtitleImportedFontFamily,
-    DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY,
+    normalizeSubtitleFontWeightForCapabilities,
+    resolveYTSubtitleFontFamily,
     subtitleFontBase64ToArrayBuffer,
+    type SubtitleFontAssetCapabilities,
     type SubtitleFontAssetGetResponse
 } from '../lib/subtitleFontAssets';
 import {
@@ -47,6 +51,13 @@ type DragState = {
     startPercent: number;
     height: number;
     anchor: 'bottom' | 'top';
+};
+
+type SubtitleEdgeRenderStyle = {
+    textShadow: string;
+    textStrokeWidth: string;
+    textStrokeColor: string;
+    paintOrder: string;
 };
 
 const OVERLAY_ROOT_ID = 'vb-yt-subtitle-overlay-root';
@@ -109,86 +120,86 @@ function toRgbaColor(value: string | null | undefined, alpha: number, fallback: 
     return `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp(alpha, 0, 1).toFixed(2)})`;
 }
 
-function resolveSubtitleFontFamily(style: YTSubtitleStyle) {
-    switch (style.fontFamilyPreset) {
-        case 'system-sans':
-        case 'default':
-            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
-        case 'system-serif':
-            return 'ui-serif, Georgia, Cambria, "Times New Roman", serif';
-        case 'rounded':
-            return '"Arial Rounded MT Bold", "SF Pro Rounded", "Hiragino Maru Gothic ProN", sans-serif';
-        case 'monospace-sans':
-            return '"SFMono-Regular", Consolas, "Liberation Mono", monospace';
-        case 'monospace-serif':
-            return '"Courier New", Courier, monospace';
-        case 'casual':
-            return '"Comic Sans MS", "Chalkboard SE", cursive';
-        case 'cursive':
-            return '"Snell Roundhand", "Segoe Script", cursive';
-        case 'small-caps':
-            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
-        case 'imported':
-            return buildSubtitleImportedFontFamily(style.importedFontId);
-        case 'custom':
-            return style.customFontFamily.trim()
-                || DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
-        default:
-            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
-    }
-}
-
-function buildOutlineTextShadow(width: number, color: string) {
-    const offsets = [
-        [-width, 0],
-        [width, 0],
-        [0, -width],
-        [0, width],
-        [-width, -width],
-        [-width, width],
-        [width, -width],
-        [width, width]
-    ];
-
-    return offsets
-        .map(([x, y]) => `${x}px ${y}px 0 ${color}`)
-        .join(', ');
-}
-
-function buildSubtitleTextShadow(style: YTSubtitleStyle) {
+function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRenderStyle {
     const shadowStrength = clamp(style.shadowStrength, 0, 100) / 100;
     const outlineWidth = clamp(style.outlineWidth, 0, 6);
+    const noEdge: SubtitleEdgeRenderStyle = {
+        textShadow: 'none',
+        textStrokeWidth: '0px',
+        textStrokeColor: 'transparent',
+        paintOrder: 'normal'
+    };
 
     switch (style.edgeStyle) {
         case 'none':
-            return 'none';
+            return noEdge;
         case 'outline': {
-            if (outlineWidth <= 0) return 'none';
-            const outlineColor = toRgbaColor('#000000', 0.55 + shadowStrength * 0.35, '#000000');
-            return buildOutlineTextShadow(outlineWidth, outlineColor);
+            if (outlineWidth <= 0) return noEdge;
+            const strokeColor = toRgbaColor('#000000', 0.5 + shadowStrength * 0.45, '#000000');
+            const haloColor = toRgbaColor('#000000', 0.12 + shadowStrength * 0.18, '#000000');
+            const haloBlur = Math.max(1, outlineWidth * 0.9).toFixed(1);
+            return {
+                textShadow: `0 0 ${haloBlur}px ${haloColor}`,
+                textStrokeWidth: `${outlineWidth}px`,
+                textStrokeColor: strokeColor,
+                paintOrder: 'stroke fill'
+            };
         }
         case 'raised': {
-            if (shadowStrength <= 0) return 'none';
+            if (shadowStrength <= 0) return noEdge;
             const distance = Math.max(1, outlineWidth || 1);
-            const light = `rgba(255, 255, 255, ${(0.16 + shadowStrength * 0.32).toFixed(2)})`;
-            const dark = `rgba(0, 0, 0, ${(0.32 + shadowStrength * 0.45).toFixed(2)})`;
-            return `0 -${distance}px 0 ${light}, 0 ${distance}px 0 ${dark}`;
+            const softBlur = Math.max(1, distance * 1.35).toFixed(1);
+            const light = `rgba(255, 255, 255, ${(0.18 + shadowStrength * 0.24).toFixed(2)})`;
+            const lightSoft = `rgba(255, 255, 255, ${(0.08 + shadowStrength * 0.12).toFixed(2)})`;
+            const dark = `rgba(0, 0, 0, ${(0.38 + shadowStrength * 0.32).toFixed(2)})`;
+            const darkSoft = `rgba(0, 0, 0, ${(0.18 + shadowStrength * 0.16).toFixed(2)})`;
+            return {
+                textShadow: [
+                    `${-distance}px -${distance}px 0 ${light}`,
+                    `${-distance}px -${distance}px ${softBlur}px ${lightSoft}`,
+                    `${distance}px ${distance}px 0 ${dark}`,
+                    `${distance}px ${distance}px ${softBlur}px ${darkSoft}`
+                ].join(', '),
+                textStrokeWidth: '0px',
+                textStrokeColor: 'transparent',
+                paintOrder: 'normal'
+            };
         }
         case 'depressed': {
-            if (shadowStrength <= 0) return 'none';
+            if (shadowStrength <= 0) return noEdge;
             const distance = Math.max(1, outlineWidth || 1);
-            const light = `rgba(255, 255, 255, ${(0.12 + shadowStrength * 0.24).toFixed(2)})`;
-            const dark = `rgba(0, 0, 0, ${(0.35 + shadowStrength * 0.45).toFixed(2)})`;
-            return `0 ${distance}px 0 ${light}, 0 -${distance}px 0 ${dark}`;
+            const softBlur = Math.max(1, distance * 1.35).toFixed(1);
+            const light = `rgba(255, 255, 255, ${(0.14 + shadowStrength * 0.18).toFixed(2)})`;
+            const lightSoft = `rgba(255, 255, 255, ${(0.06 + shadowStrength * 0.1).toFixed(2)})`;
+            const dark = `rgba(0, 0, 0, ${(0.42 + shadowStrength * 0.34).toFixed(2)})`;
+            const darkSoft = `rgba(0, 0, 0, ${(0.2 + shadowStrength * 0.18).toFixed(2)})`;
+            return {
+                textShadow: [
+                    `${distance}px ${distance}px 0 ${light}`,
+                    `${distance}px ${distance}px ${softBlur}px ${lightSoft}`,
+                    `${-distance}px -${distance}px 0 ${dark}`,
+                    `${-distance}px -${distance}px ${softBlur}px ${darkSoft}`
+                ].join(', '),
+                textStrokeWidth: '0px',
+                textStrokeColor: 'transparent',
+                paintOrder: 'normal'
+            };
         }
         case 'drop-shadow':
         default: {
-            if (shadowStrength <= 0) return 'none';
-            const liftBlur = (1 + shadowStrength * 2).toFixed(1);
-            const spreadBlur = (2 + shadowStrength * 6).toFixed(1);
+            if (shadowStrength <= 0) return noEdge;
+            const offsetX = (0.4 + shadowStrength * 1.2).toFixed(1);
+            const offsetY = (0.8 + shadowStrength * 2).toFixed(1);
+            const liftBlur = (1.4 + shadowStrength * 2.6).toFixed(1);
+            const spreadBlur = (2.4 + shadowStrength * 5.8).toFixed(1);
             const primary = `rgba(0, 0, 0, ${(0.48 + shadowStrength * 0.34).toFixed(2)})`;
             const secondary = `rgba(0, 0, 0, ${(0.22 + shadowStrength * 0.32).toFixed(2)})`;
-            return `0 1px ${liftBlur}px ${primary}, 0 0 ${spreadBlur}px ${secondary}`;
+            return {
+                textShadow: `${offsetX}px ${offsetY}px ${liftBlur}px ${primary}, 0 0 ${spreadBlur}px ${secondary}`,
+                textStrokeWidth: '0px',
+                textStrokeColor: 'transparent',
+                paintOrder: 'normal'
+            };
         }
     }
 }
@@ -388,6 +399,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     private dragState: DragState | null = null;
     private readonly importedFontLoadCache = new Map<string, Promise<boolean>>();
     private readonly importedFontFailureCache = new Set<string>();
+    private readonly importedFontCapabilities = new Map<string, SubtitleFontAssetCapabilities | null>();
 
     private readonly handleNavigationStart = () => {
         this.abortPendingLoad();
@@ -958,15 +970,18 @@ export class YouTubeSubtitleOverlay implements Feature {
                     throw new Error(response?.error || 'font_unavailable');
                 }
 
-                const face = new FontFace(
-                    faceName,
-                    subtitleFontBase64ToArrayBuffer(response.font.bufferBase64)
-                );
+                this.importedFontCapabilities.set(normalizedId, response.font.capabilities ?? null);
+                const fontBuffer = subtitleFontBase64ToArrayBuffer(response.font.bufferBase64);
+                const descriptors = buildSubtitleFontFaceDescriptors(response.font.capabilities);
+                const face = descriptors
+                    ? new FontFace(faceName, fontBuffer, descriptors)
+                    : new FontFace(faceName, fontBuffer);
                 await face.load();
                 document.fonts.add(face);
                 return true;
             }).catch(() => {
                 this.importedFontFailureCache.add(normalizedId);
+                this.importedFontCapabilities.delete(normalizedId);
                 return false;
             });
 
@@ -987,13 +1002,19 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!this.overlayBox || !this.overlayText || !this.dragHandle) return;
 
         const style = this.config.style;
+        const edgeRender = buildSubtitleEdgeRenderStyle(style);
         const fontScale = Math.max(40, style.fontScale);
         const fontSize = Math.max(16, Math.round((BASE_FONT_SIZE_PX * fontScale) / 100));
-        const fontWeight = clamp(style.fontWeight, 100, 900);
+        const importedFontCapabilities = style.fontFamilyPreset === 'imported' && style.importedFontId
+            ? this.importedFontCapabilities.get(style.importedFontId) ?? null
+            : null;
+        const fontWeight = importedFontCapabilities
+            ? normalizeSubtitleFontWeightForCapabilities(style.fontWeight, importedFontCapabilities)
+            : clamp(style.fontWeight, 100, 900);
         const textOpacity = clamp(style.textOpacity, 0, 100) / 100;
         const backgroundOpacity = clamp(style.backgroundOpacity, 0, 100) / 100;
         const borderRadius = clamp(style.borderRadius, 0, 20);
-        const fontFamily = resolveSubtitleFontFamily(style);
+        const fontFamily = resolveYTSubtitleFontFamily(style);
 
         this.overlayBox.style.background = toRgbaColor(
             style.backgroundColor,
@@ -1010,8 +1031,15 @@ export class YouTubeSubtitleOverlay implements Feature {
             textOpacity,
             DEFAULT_SETTINGS.yt_subtitle.style.color
         );
-        this.overlayText.style.textShadow = buildSubtitleTextShadow(style);
+        this.overlayText.style.textShadow = edgeRender.textShadow;
+        this.overlayText.style.setProperty('-webkit-text-stroke-width', edgeRender.textStrokeWidth);
+        this.overlayText.style.setProperty('-webkit-text-stroke-color', edgeRender.textStrokeColor);
+        this.overlayText.style.setProperty('paint-order', edgeRender.paintOrder);
         this.overlayText.style.fontWeight = `${fontWeight}`;
+        this.overlayText.style.fontVariationSettings = buildSubtitleFontVariationSettings(
+            importedFontCapabilities,
+            fontWeight
+        );
         this.overlayText.style.fontVariantCaps =
             style.fontFamilyPreset === 'small-caps' ? 'small-caps' : 'normal';
         this.overlayText.style.letterSpacing =

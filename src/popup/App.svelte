@@ -43,8 +43,10 @@
     canUseSubtitleFontAssetStore,
     createSubtitleFontAssetFromFile,
     deleteSubtitleFontAsset,
+    ensureSubtitleFontAssetCapabilities,
     listSubtitleFontAssetSummaries,
     putSubtitleFontAsset,
+    type SubtitleFontAssetCapabilities,
     type SubtitleFontAssetSummary,
   } from "../lib/subtitleFontAssets";
 
@@ -78,6 +80,8 @@
   let ytSubtitleFontStatus = "";
   let ytSubtitleFontStatusTone: "neutral" | "success" | "error" = "neutral";
   const ytSubtitleFontStoreSupported = canUseSubtitleFontAssetStore();
+  let ytSubtitleSelectedImportedFontAsset: SubtitleFontAssetSummary | null = null;
+  let ytSubtitleCurrentFontCapabilities: SubtitleFontAssetCapabilities | null = null;
 
   // Bilibili Config
   let bbSubtitleEnabled = DEFAULT_SETTINGS.bb_subtitle.enabled;
@@ -805,6 +809,11 @@
   // Helper
   $: t = (key: I18nKey) => i18n(key, language);
   $: ytSubtitleStyleDisabled = !globalEnabled || !ytSubtitleEnabled;
+  $: ytSubtitleSelectedImportedFontAsset = getYtSubtitleCurrentImportedFontAsset(
+    ytSubtitleConfig.style,
+  );
+  $: ytSubtitleCurrentFontCapabilities =
+    ytSubtitleSelectedImportedFontAsset?.capabilities ?? null;
 
   function flushSettingsSave() {
     if (!pendingSettings || !hasStorageApi("local")) {
@@ -855,6 +864,16 @@
     return `${(size / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  function getYtSubtitleCurrentImportedFontAsset(
+    style: YTSubtitleStyle = ytSubtitleConfig.style,
+  ) {
+    if (style.fontFamilyPreset !== "imported" || !style.importedFontId) {
+      return null;
+    }
+
+    return ytSubtitleFontAssets.find((asset) => asset.id === style.importedFontId) ?? null;
+  }
+
   function resolveNextImportedFontId(preferredId = "") {
     if (preferredId && ytSubtitleFontAssets.some((asset) => asset.id === preferredId)) {
       return preferredId;
@@ -888,7 +907,20 @@
     }
 
     try {
-      ytSubtitleFontAssets = await listSubtitleFontAssetSummaries();
+      let summaries = await listSubtitleFontAssetSummaries();
+      const pendingCapabilityAssets = summaries.filter(
+        (asset) => !asset.capabilities?.analysisVersion,
+      );
+      if (pendingCapabilityAssets.length > 0) {
+        await Promise.all(
+          pendingCapabilityAssets.map((asset) =>
+            ensureSubtitleFontAssetCapabilities(asset.id).catch(() => null),
+          ),
+        );
+        summaries = await listSubtitleFontAssetSummaries();
+      }
+
+      ytSubtitleFontAssets = summaries;
       syncManagedImportedFontId(ytSubtitleConfig.style.importedFontId);
       if (ytSubtitleConfig.style.fontFamilyPreset === "imported") {
         const nextFontId = resolveNextImportedFontId(
@@ -949,6 +981,37 @@
     updateYtSubtitleStyle({
       edgeStyle,
     });
+  }
+
+  function getYtSubtitleEdgeWidthLabel(edgeStyle: YTSubtitleEdgeStyle): I18nKey {
+    switch (edgeStyle) {
+      case "raised":
+        return "yt_subtitle_raised_depth";
+      case "depressed":
+        return "yt_subtitle_depressed_depth";
+      case "outline":
+      default:
+        return "yt_subtitle_outline_width";
+    }
+  }
+
+  function getYtSubtitleEdgeStrengthLabel(edgeStyle: YTSubtitleEdgeStyle): I18nKey {
+    switch (edgeStyle) {
+      case "drop-shadow":
+        return "yt_subtitle_drop_shadow_strength";
+      case "outline":
+        return "yt_subtitle_outline_strength";
+      case "raised":
+        return "yt_subtitle_raised_strength";
+      case "depressed":
+        return "yt_subtitle_depressed_strength";
+      default:
+        return "yt_subtitle_shadow_strength";
+    }
+  }
+
+  function formatSliderNumber(value: number): string {
+    return Number.isInteger(value) ? `${value}` : value.toFixed(1);
   }
 
   function openYtSubtitleFontPicker() {
@@ -1688,6 +1751,12 @@
                         ),
                       })}
                   />
+
+                  {#if ytSubtitleCurrentFontCapabilities?.supportsCjk === false}
+                    <div class="text-[11px] text-amber-600 dark:text-amber-300">
+                      {t("yt_subtitle_font_cjk_fallback_hint")}
+                    </div>
+                  {/if}
                 </label>
 
                 <label class="block space-y-2">
@@ -1993,69 +2062,67 @@
                   </select>
                 </label>
 
-                <label
-                  class="block space-y-2"
-                  class:opacity-60={ytSubtitleConfig.style.edgeStyle !== "outline" &&
-                    ytSubtitleConfig.style.edgeStyle !== "raised" &&
-                    ytSubtitleConfig.style.edgeStyle !== "depressed"}
-                >
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_outline_width")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.outlineWidth}px
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="6"
-                    step="1"
-                    value={ytSubtitleConfig.style.outlineWidth}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled ||
-                      (ytSubtitleConfig.style.edgeStyle !== "outline" &&
-                        ytSubtitleConfig.style.edgeStyle !== "raised" &&
-                        ytSubtitleConfig.style.edgeStyle !== "depressed")}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        outlineWidth: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.outlineWidth),
-                          0,
-                          6,
-                        ),
-                      })}
-                  />
-                </label>
+                {#if ytSubtitleConfig.style.edgeStyle === "outline" ||
+                  ytSubtitleConfig.style.edgeStyle === "raised" ||
+                  ytSubtitleConfig.style.edgeStyle === "depressed"}
+                  <label class="block space-y-2">
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                        {t(getYtSubtitleEdgeWidthLabel(ytSubtitleConfig.style.edgeStyle))}
+                      </span>
+                      <span class="text-[11px] text-gray-500 dark:text-white/55">
+                        {formatSliderNumber(ytSubtitleConfig.style.outlineWidth)}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="6"
+                      step="0.5"
+                      value={ytSubtitleConfig.style.outlineWidth}
+                      class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          outlineWidth: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.outlineWidth),
+                            0,
+                            6,
+                          ),
+                        })}
+                    />
+                  </label>
+                {/if}
 
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_shadow_strength")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.shadowStrength}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={ytSubtitleConfig.style.shadowStrength}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        shadowStrength: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.shadowStrength),
-                          0,
-                          100,
-                        ),
-                      })}
-                  />
-                </label>
+                {#if ytSubtitleConfig.style.edgeStyle !== "none"}
+                  <label class="block space-y-2">
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                        {t(getYtSubtitleEdgeStrengthLabel(ytSubtitleConfig.style.edgeStyle))}
+                      </span>
+                      <span class="text-[11px] text-gray-500 dark:text-white/55">
+                        {ytSubtitleConfig.style.shadowStrength}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={ytSubtitleConfig.style.shadowStrength}
+                      class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          shadowStrength: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.shadowStrength),
+                            0,
+                            100,
+                          ),
+                        })}
+                    />
+                  </label>
+                {/if}
 
               </div>
             </div>

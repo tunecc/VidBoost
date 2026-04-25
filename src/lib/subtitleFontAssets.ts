@@ -1,6 +1,9 @@
+import type { YTSubtitleStyle } from './settings';
+
 const SUBTITLE_FONT_DB_NAME = 'vidboost-subtitle-font-assets';
 const SUBTITLE_FONT_DB_VERSION = 1;
 const SUBTITLE_FONT_STORE_NAME = 'yt-subtitle-fonts';
+const SUBTITLE_FONT_CAPABILITY_ANALYSIS_VERSION = 1;
 
 const SUPPORTED_FONT_EXTENSIONS = new Set(['ttf', 'otf', 'woff', 'woff2']);
 const SUPPORTED_FONT_MIME_TYPES = new Set([
@@ -24,6 +27,20 @@ export const DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY =
 export const DEFAULT_YT_SUBTITLE_IMPORTED_FONT_FALLBACK =
     '"PingFang SC", "Hiragino Sans GB", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
+export type SubtitleFontWeightRange = {
+    min: number;
+    max: number;
+    default: number;
+    step: number;
+};
+
+export type SubtitleFontAssetCapabilities = {
+    analysisVersion: number;
+    fullName: string;
+    weightRange: SubtitleFontWeightRange | null;
+    supportsCjk: boolean | null;
+};
+
 export type SubtitleFontAssetRecord = {
     id: string;
     displayName: string;
@@ -33,6 +50,7 @@ export type SubtitleFontAssetRecord = {
     size: number;
     createdAt: number;
     updatedAt: number;
+    capabilities: SubtitleFontAssetCapabilities | null;
 };
 
 export type SubtitleFontAssetSummary = {
@@ -43,6 +61,7 @@ export type SubtitleFontAssetSummary = {
     size: number;
     createdAt: number;
     updatedAt: number;
+    capabilities: SubtitleFontAssetCapabilities | null;
 };
 
 export type SubtitleFontAssetTransport = {
@@ -51,6 +70,7 @@ export type SubtitleFontAssetTransport = {
     mimeType: string;
     size: number;
     bufferBase64: string;
+    capabilities: SubtitleFontAssetCapabilities | null;
 };
 
 export type SubtitleFontAssetGetResponse =
@@ -130,6 +150,127 @@ function toArrayBuffer(value: unknown) {
     return null;
 }
 
+function sanitizeFontMetaText(value: unknown) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function clampSubtitleFontWeight(weight: number, min = 1, max = 1000) {
+    return Math.min(max, Math.max(min, Math.round(weight)));
+}
+
+function normalizeSubtitleFontWeightRange(value: unknown): SubtitleFontWeightRange | null {
+    if (!isRecord(value)) return null;
+
+    const min = clampSubtitleFontWeight(
+        typeof value.min === 'number' ? value.min : 100,
+        1,
+        1000
+    );
+    const max = clampSubtitleFontWeight(
+        typeof value.max === 'number' ? value.max : 900,
+        min,
+        1000
+    );
+    const defaultWeight = clampSubtitleFontWeight(
+        typeof value.default === 'number' ? value.default : 400,
+        min,
+        max
+    );
+    const step = clampSubtitleFontWeight(
+        typeof value.step === 'number' ? value.step : 10,
+        1,
+        100
+    );
+
+    return {
+        min,
+        max,
+        default: defaultWeight,
+        step
+    };
+}
+
+function normalizeSubtitleFontAssetCapabilities(value: unknown): SubtitleFontAssetCapabilities | null {
+    if (!isRecord(value)) return null;
+
+    const weightRange = normalizeSubtitleFontWeightRange(value.weightRange);
+
+    return {
+        analysisVersion: typeof value.analysisVersion === 'number'
+            ? Math.max(1, Math.round(value.analysisVersion))
+            : SUBTITLE_FONT_CAPABILITY_ANALYSIS_VERSION,
+        fullName: sanitizeFontMetaText(value.fullName),
+        weightRange,
+        supportsCjk: typeof value.supportsCjk === 'boolean' ? value.supportsCjk : null
+    };
+}
+
+function createUnknownSubtitleFontCapabilities(): SubtitleFontAssetCapabilities {
+    return {
+        analysisVersion: SUBTITLE_FONT_CAPABILITY_ANALYSIS_VERSION,
+        fullName: '',
+        weightRange: null,
+        supportsCjk: null
+    };
+}
+
+async function detectSubtitleFontCapabilities(buffer: ArrayBuffer): Promise<SubtitleFontAssetCapabilities> {
+    try {
+        const fontkitModule = await import('fontkit');
+        const createFont = fontkitModule.create ?? fontkitModule.default?.create;
+        if (typeof createFont !== 'function') {
+            return createUnknownSubtitleFontCapabilities();
+        }
+
+        const createdFont = createFont(new Uint8Array(buffer));
+        const primaryFont = isRecord(createdFont) && Array.isArray(createdFont.fonts)
+            ? createdFont.fonts.find((font) => isRecord(font)) ?? null
+            : createdFont;
+
+        if (!isRecord(primaryFont)) {
+            return createUnknownSubtitleFontCapabilities();
+        }
+
+        const variationAxes = isRecord(primaryFont.variationAxes)
+            ? primaryFont.variationAxes
+            : null;
+        const rawWeightAxis = variationAxes && isRecord(variationAxes.wght)
+            ? variationAxes.wght
+            : null;
+        const weightRange = rawWeightAxis
+            ? normalizeSubtitleFontWeightRange({
+                min: rawWeightAxis.min,
+                max: rawWeightAxis.max,
+                default: rawWeightAxis.default,
+                step: 10
+            })
+            : null;
+
+        let supportsCjk: boolean | null = null;
+        if (typeof primaryFont.hasGlyphForCodePoint === 'function') {
+            const sampleCodePoints = ['中', '文', '字', '幕'].map((char) => char.codePointAt(0) ?? 0);
+            supportsCjk = sampleCodePoints.some((codePoint) => {
+                try {
+                    return primaryFont.hasGlyphForCodePoint?.(codePoint) === true;
+                } catch {
+                    return false;
+                }
+            });
+        }
+
+        const capabilities = normalizeSubtitleFontAssetCapabilities({
+            analysisVersion: SUBTITLE_FONT_CAPABILITY_ANALYSIS_VERSION,
+            fullName: sanitizeFontMetaText(primaryFont.fullName),
+            weightRange,
+            supportsCjk
+        });
+
+        return capabilities ?? createUnknownSubtitleFontCapabilities();
+    } catch {
+        return createUnknownSubtitleFontCapabilities();
+    }
+}
+
 function normalizeSubtitleFontAssetRecord(value: unknown): SubtitleFontAssetRecord | null {
     if (!isRecord(value)) return null;
 
@@ -144,6 +285,7 @@ function normalizeSubtitleFontAssetRecord(value: unknown): SubtitleFontAssetReco
     const size = typeof value.size === 'number' && value.size > 0 ? value.size : buffer.byteLength;
     const createdAt = typeof value.createdAt === 'number' ? value.createdAt : Date.now();
     const updatedAt = typeof value.updatedAt === 'number' ? value.updatedAt : createdAt;
+    const capabilities = normalizeSubtitleFontAssetCapabilities(value.capabilities);
 
     if (!id || !fileName) return null;
 
@@ -155,7 +297,8 @@ function normalizeSubtitleFontAssetRecord(value: unknown): SubtitleFontAssetReco
         buffer,
         size,
         createdAt,
-        updatedAt
+        updatedAt,
+        capabilities
     };
 }
 
@@ -167,7 +310,8 @@ function toSummary(record: SubtitleFontAssetRecord): SubtitleFontAssetSummary {
         mimeType: record.mimeType,
         size: record.size,
         createdAt: record.createdAt,
-        updatedAt: record.updatedAt
+        updatedAt: record.updatedAt,
+        capabilities: record.capabilities
     };
 }
 
@@ -231,16 +375,19 @@ export async function createSubtitleFontAssetFromFile(file: File): Promise<Subti
 
     const buffer = await file.arrayBuffer();
     const now = Date.now();
+    const capabilities = await detectSubtitleFontCapabilities(buffer);
+    const detectedDisplayName = capabilities.fullName || sanitizeDisplayName(fileName);
 
     return {
         id: createSubtitleFontAssetId(),
-        displayName: sanitizeDisplayName(fileName),
+        displayName: detectedDisplayName,
         fileName,
         mimeType: inferMimeType(fileName, file.type),
         buffer,
         size: buffer.byteLength || file.size || 0,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        capabilities
     };
 }
 
@@ -275,12 +422,15 @@ export async function putSubtitleFontAsset(record: SubtitleFontAssetRecord): Pro
     const fileName = record.fileName.trim() || 'font';
     const nextRecord: SubtitleFontAssetRecord = {
         ...record,
-        displayName: record.displayName.trim() || sanitizeDisplayName(record.fileName),
+        displayName: record.displayName.trim()
+            || record.capabilities?.fullName
+            || sanitizeDisplayName(record.fileName),
         fileName,
         mimeType: inferMimeType(fileName, record.mimeType),
         size: record.size > 0 ? record.size : record.buffer.byteLength,
         createdAt: record.createdAt || now,
-        updatedAt: now
+        updatedAt: now,
+        capabilities: normalizeSubtitleFontAssetCapabilities(record.capabilities)
     };
 
     await requestToPromise(store.put(nextRecord));
@@ -309,6 +459,95 @@ export function buildSubtitleImportedFontFamily(fontId: string) {
     }
 
     return `"${faceName}", ${DEFAULT_YT_SUBTITLE_IMPORTED_FONT_FALLBACK}`;
+}
+
+export function resolveYTSubtitleFontFamily(
+    style: Pick<YTSubtitleStyle, 'fontFamilyPreset' | 'importedFontId' | 'customFontFamily'>
+) {
+    switch (style.fontFamilyPreset) {
+        case 'system-sans':
+        case 'default':
+            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
+        case 'system-serif':
+            return 'ui-serif, Georgia, Cambria, "Times New Roman", serif';
+        case 'rounded':
+            return '"Arial Rounded MT Bold", "SF Pro Rounded", "Hiragino Maru Gothic ProN", sans-serif';
+        case 'monospace-sans':
+            return '"SFMono-Regular", Consolas, "Liberation Mono", monospace';
+        case 'monospace-serif':
+            return '"Courier New", Courier, monospace';
+        case 'casual':
+            return '"Comic Sans MS", "Chalkboard SE", cursive';
+        case 'cursive':
+            return '"Snell Roundhand", "Segoe Script", cursive';
+        case 'small-caps':
+            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
+        case 'imported':
+            return buildSubtitleImportedFontFamily(style.importedFontId);
+        case 'custom':
+            return style.customFontFamily.trim() || DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
+        default:
+            return DEFAULT_YT_SUBTITLE_SYSTEM_FONT_FAMILY;
+    }
+}
+
+export function buildSubtitleFontFaceDescriptors(capabilities: SubtitleFontAssetCapabilities | null | undefined) {
+    const normalizedCapabilities = capabilities ?? null;
+    if (normalizedCapabilities?.weightRange) {
+        return {
+            weight: `${normalizedCapabilities.weightRange.min} ${normalizedCapabilities.weightRange.max}`
+        } satisfies FontFaceDescriptors;
+    }
+
+    return undefined;
+}
+
+export function buildSubtitleFontVariationSettings(
+    capabilities: SubtitleFontAssetCapabilities | null | undefined,
+    fontWeight: number
+) {
+    if (!capabilities?.weightRange) {
+        return 'normal';
+    }
+
+    const normalizedWeight = clampSubtitleFontWeight(
+        fontWeight,
+        capabilities.weightRange.min,
+        capabilities.weightRange.max
+    );
+
+    return `"wght" ${normalizedWeight}`;
+}
+
+export function normalizeSubtitleFontWeightForCapabilities(
+    fontWeight: number,
+    capabilities: SubtitleFontAssetCapabilities | null | undefined
+) {
+    if (capabilities?.weightRange) {
+        return clampSubtitleFontWeight(
+            fontWeight,
+            capabilities.weightRange.min,
+            capabilities.weightRange.max
+        );
+    }
+
+    return clampSubtitleFontWeight(fontWeight, 100, 900);
+}
+
+export async function ensureSubtitleFontAssetCapabilities(id: string) {
+    const record = await getSubtitleFontAsset(id);
+    if (!record) return null;
+
+    if (record.capabilities?.analysisVersion === SUBTITLE_FONT_CAPABILITY_ANALYSIS_VERSION) {
+        return toSummary(record);
+    }
+
+    const capabilities = await detectSubtitleFontCapabilities(record.buffer);
+    return await putSubtitleFontAsset({
+        ...record,
+        displayName: record.displayName.trim() || capabilities.fullName || sanitizeDisplayName(record.fileName),
+        capabilities
+    });
 }
 
 export function subtitleFontBufferToBase64(buffer: ArrayBuffer) {

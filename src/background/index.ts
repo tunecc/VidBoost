@@ -522,7 +522,8 @@ addRuntimeMessageListener((message, sender, sendResponse) => {
                     displayName: font.displayName,
                     mimeType: font.mimeType,
                     size: font.size,
-                    bufferBase64: subtitleFontBufferToBase64(font.buffer)
+                    bufferBase64: subtitleFontBufferToBase64(font.buffer),
+                    capabilities: font.capabilities
                 }
             } satisfies SubtitleFontAssetGetResponse);
         }).catch(() => {
