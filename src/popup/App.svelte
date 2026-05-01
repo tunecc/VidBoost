@@ -110,6 +110,7 @@
   let bbQualityDraftInputRef: HTMLInputElement | null = null;
   let bbQualityOpen = false;
   let bbQualityTargetsTooltipOpen = false;
+  let ytSubtitleFollowNativeTooltipOpen = false;
   let bbQualityAddCurrentPending = false;
   let bbQualityAddCurrentStatus = "";
   let bbQualityAddCurrentTone: "neutral" | "success" | "error" = "neutral";
@@ -952,10 +953,16 @@
     }
   }
 
-  function updateYtSubtitleStyle(patch: Partial<YTSubtitleStyle>) {
+  function updateYtSubtitleConfig(patch: Partial<YTSubtitleConfig>) {
     ytSubtitleConfig = cloneYTSubtitleConfig({
       ...ytSubtitleConfig,
       enabled: ytSubtitleEnabled,
+      ...patch,
+    });
+  }
+
+  function updateYtSubtitleStyle(patch: Partial<YTSubtitleStyle>) {
+    updateYtSubtitleConfig({
       style: {
         ...ytSubtitleConfig.style,
         ...patch,
@@ -1358,6 +1365,7 @@
   function toggleSection(section: "general" | "youtube" | "bilibili") {
     bbSubtitleTargetsTooltipOpen = false;
     bbQualityTargetsTooltipOpen = false;
+    ytSubtitleFollowNativeTooltipOpen = false;
     sectionOpen[section] = !sectionOpen[section];
   }
 
@@ -1377,10 +1385,19 @@
     bbQualityTargetsTooltipOpen = false;
   }
 
+  function toggleYtSubtitleFollowNativeTooltip() {
+    ytSubtitleFollowNativeTooltipOpen = !ytSubtitleFollowNativeTooltipOpen;
+  }
+
+  function closeYtSubtitleFollowNativeTooltip() {
+    ytSubtitleFollowNativeTooltipOpen = false;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       closeBilibiliSubtitleTargetsTooltip();
       closeBilibiliQualityTargetsTooltip();
+      closeYtSubtitleFollowNativeTooltip();
     }
   }
 
@@ -1770,6 +1787,69 @@
                 <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
                   {t("yt_subtitle_basic")}
                 </div>
+
+                <label class="flex items-start justify-between gap-3 rounded-xl border border-black/5 bg-white/70 px-3 py-2.5 dark:border-white/8 dark:bg-white/[0.03]">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <div class="text-[12px] font-medium text-gray-800 dark:text-white/90">
+                        {t("yt_subtitle_follow_native_toggle")}
+                      </div>
+
+                      <div class="relative flex shrink-0 items-center">
+                        <button
+                          type="button"
+                          aria-controls="yt-subtitle-follow-native-tooltip"
+                          aria-expanded={ytSubtitleFollowNativeTooltipOpen}
+                          class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
+                          on:click|stopPropagation={toggleYtSubtitleFollowNativeTooltip}
+                        >
+                          ?
+                        </button>
+
+                        {#if ytSubtitleFollowNativeTooltipOpen}
+                          <div
+                            id="yt-subtitle-follow-native-tooltip"
+                            role="tooltip"
+                            class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                            in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                            out:fade|local={{ duration: 120 }}
+                          >
+                            {t("yt_subtitle_follow_native_toggle_desc")}
+                          </div>
+
+                          <button
+                            type="button"
+                            class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                            aria-label={t("yt_subtitle_follow_native_toggle_desc")}
+                            on:click={closeYtSubtitleFollowNativeTooltip}
+                          ></button>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    class={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${
+                      ytSubtitleConfig.followNativeToggle
+                        ? "bg-red-500"
+                        : "bg-gray-300 dark:bg-white/15"
+                    } ${ytSubtitleStyleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                    aria-pressed={ytSubtitleConfig.followNativeToggle}
+                    disabled={ytSubtitleStyleDisabled}
+                    on:click={() =>
+                      !ytSubtitleStyleDisabled &&
+                      updateYtSubtitleConfig({
+                        followNativeToggle: !ytSubtitleConfig.followNativeToggle,
+                      })}
+                  >
+                    <span
+                      class={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                        ytSubtitleConfig.followNativeToggle ? "left-[22px]" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </label>
 
                 <label class="block space-y-2">
                   <div class="flex items-center justify-between gap-3">

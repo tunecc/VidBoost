@@ -422,6 +422,8 @@ export class YouTubeSubtitleOverlay implements Feature {
     private overlayText: HTMLDivElement | null = null;
     private dragHandle: HTMLButtonElement | null = null;
     private nativeHidden = false;
+    private nativeSubtitleButtonObserver: MutationObserver | null = null;
+    private lastNativeSubtitleButtonState: boolean | null = null;
 
     private dragState: DragState | null = null;
     private dragHandleHovered = false;
@@ -431,6 +433,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     private readonly importedFontCapabilities = new Map<string, SubtitleFontAssetCapabilities | null>();
 
     private readonly handleNavigationStart = () => {
+        this.unbindNativeSubtitleButtonObserver();
         this.abortPendingLoad();
         this.stopRenderer();
         this.clearSubtitleState();
@@ -567,6 +570,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             void this.pollTrackChange();
         }, TRACK_POLL_MS);
 
+        this.preloadCurrentImportedFont();
         this.scheduleSync(0);
     }
 
@@ -590,6 +594,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         document.removeEventListener('yt-navigate-start', this.handleNavigationStart, true);
         document.removeEventListener('yt-navigate-finish', this.handleNavigationFinish, true);
 
+        this.unbindNativeSubtitleButtonObserver();
         this.abortPendingLoad();
         this.stopRenderer();
         this.rebindVideo(null);
@@ -619,6 +624,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.applyOverlayPosition();
 
         if (this.enabled) {
+            this.preloadCurrentImportedFont();
             this.scheduleSync(0);
         }
     }
@@ -647,6 +653,12 @@ export class YouTubeSubtitleOverlay implements Feature {
         installYouTubeSubtitleOverlayBridge();
         ensureYouTubeSubtitleOverlayScriptInjected();
         this.rebindVideo(this.videoCtrl.video);
+        this.bindNativeSubtitleButtonObserver();
+
+        if (this.shouldPauseForNativeToggleOff()) {
+            this.pauseOverlayForNativeToggleOff();
+            return;
+        }
 
         if (!this.ensureOverlayMounted()) {
             this.scheduleSync(250);
@@ -661,6 +673,11 @@ export class YouTubeSubtitleOverlay implements Feature {
     private async loadSubtitlesForCurrentPage(preloadedData?: YouTubeSubtitlePlayerData) {
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId || !this.enabled || !this.isSupportedPage()) return;
+
+        if (this.shouldPauseForNativeToggleOff()) {
+            this.pauseOverlayForNativeToggleOff();
+            return;
+        }
 
         const video = this.videoCtrl.video;
         if (!video) {
@@ -685,7 +702,12 @@ export class YouTubeSubtitleOverlay implements Feature {
             }
 
             const missingSelection = !playerData.selectedTrack.languageCode && !playerData.selectedTrack.vssId;
-            if (missingSelection && playerData.captionTracks.length > 0) {
+            const nativeToggleOn = this.readNativeSubtitleButtonState() === true;
+            if (
+                missingSelection
+                && playerData.captionTracks.length > 0
+                && (!this.shouldFollowNativeToggle() || nativeToggleOn)
+            ) {
                 const ensuredData = await this.ensureSubtitlesEnabled(expectedVideoId, abortController.signal);
                 if (ensuredData) {
                     playerData = ensuredData;
@@ -708,6 +730,10 @@ export class YouTubeSubtitleOverlay implements Feature {
 
             if (loaded.fragments.length === 0) {
                 this.fallbackToNative(true);
+                return;
+            }
+
+            if (!await this.ensureCurrentImportedFontReady(loadId, abortController)) {
                 return;
             }
 
@@ -743,6 +769,11 @@ export class YouTubeSubtitleOverlay implements Feature {
             };
         } catch (error) {
             if (!isHttpStatusError(error, 403)) {
+                throw error;
+            }
+
+            const nativeToggleOn = this.readNativeSubtitleButtonState() === true;
+            if (this.shouldFollowNativeToggle() && !nativeToggleOn) {
                 throw error;
             }
 
@@ -799,6 +830,13 @@ export class YouTubeSubtitleOverlay implements Feature {
     private async pollTrackChange() {
         if (!this.enabled || !this.isSupportedPage()) return;
         if (this.loadAbortController) return;
+
+        this.bindNativeSubtitleButtonObserver();
+
+        if (this.shouldPauseForNativeToggleOff()) {
+            this.pauseOverlayForNativeToggleOff();
+            return;
+        }
 
         this.ensureOverlayMounted();
         this.applyOverlayPosition();
@@ -1059,11 +1097,13 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.dragHandle = null;
     }
 
-    private async ensureImportedFontLoaded(fontId: string) {
+    private async ensureImportedFontLoaded(fontId: string, options?: { cacheFailure?: boolean }) {
         const normalizedId = fontId.trim();
         if (!normalizedId || this.importedFontFailureCache.has(normalizedId)) {
             return false;
         }
+
+        const cacheFailure = options?.cacheFailure !== false;
 
         const faceName = buildSubtitleImportedFontFaceName(normalizedId);
         if (!faceName || typeof FontFace !== 'function' || !document.fonts) {
@@ -1090,7 +1130,6 @@ export class YouTubeSubtitleOverlay implements Feature {
                 document.fonts.add(face);
                 return true;
             }).catch(() => {
-                this.importedFontFailureCache.add(normalizedId);
                 this.importedFontCapabilities.delete(normalizedId);
                 return false;
             });
@@ -1099,12 +1138,51 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
 
         const loaded = await loadPromise;
-        if (!loaded) return false;
-        if (!this.overlayBox) return false;
-        if (this.config.style.fontFamilyPreset !== 'imported') return true;
-        if (this.config.style.importedFontId !== normalizedId) return true;
+        if (!loaded) {
+            this.importedFontLoadCache.delete(normalizedId);
+            if (cacheFailure) {
+                this.importedFontFailureCache.add(normalizedId);
+            }
+            return false;
+        }
+        if (
+            this.overlayBox
+            && this.config.style.fontFamilyPreset === 'imported'
+            && this.config.style.importedFontId === normalizedId
+        ) {
+            this.overlayBox.style.fontFamily = buildSubtitleImportedFontFamily(normalizedId);
+        }
+        return true;
+    }
 
-        this.overlayBox.style.fontFamily = buildSubtitleImportedFontFamily(normalizedId);
+    private preloadCurrentImportedFont() {
+        const style = this.config.style;
+        if (style.fontFamilyPreset !== 'imported' || !style.importedFontId) return;
+
+        const currentFontId = style.importedFontId;
+        void this.ensureImportedFontLoaded(currentFontId, { cacheFailure: false }).then((loaded) => {
+            if (!loaded) return;
+            if (this.config.style.fontFamilyPreset !== 'imported') return;
+            if (this.config.style.importedFontId !== currentFontId) return;
+
+            this.applyOverlayStyles();
+            this.renderAtCurrentTime(true);
+        });
+    }
+
+    private async ensureCurrentImportedFontReady(loadId: number, controller: AbortController) {
+        const style = this.config.style;
+        if (style.fontFamilyPreset !== 'imported' || !style.importedFontId) {
+            return this.isLoadActive(loadId, controller);
+        }
+
+        await this.ensureImportedFontLoaded(style.importedFontId);
+        if (!this.isLoadActive(loadId, controller)) {
+            return false;
+        }
+
+        // Imported font capabilities may change font weight/variation settings after the face is ready.
+        this.applyOverlayStyles();
         return true;
     }
 
@@ -1157,7 +1235,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.dragHandle.style.background = `rgba(0, 0, 0, ${Math.max(0.52, backgroundOpacity).toFixed(2)})`;
 
         if (style.fontFamilyPreset === 'imported' && style.importedFontId) {
-            void this.ensureImportedFontLoaded(style.importedFontId);
+            void this.ensureImportedFontLoaded(style.importedFontId, { cacheFailure: false });
         }
     }
 
@@ -1199,6 +1277,76 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!this.nativeHidden) return;
         document.getElementById(NATIVE_STYLE_ID)?.remove();
         this.nativeHidden = false;
+    }
+
+    private shouldFollowNativeToggle() {
+        return this.config.followNativeToggle === true;
+    }
+
+    private findNativeSubtitleButton() {
+        return document.querySelector<HTMLElement>('.ytp-subtitles-button');
+    }
+
+    private readNativeSubtitleButtonState(): boolean | null {
+        const button = this.findNativeSubtitleButton();
+        if (!button) return null;
+        return button.getAttribute('aria-pressed') === 'true';
+    }
+
+    private shouldPauseForNativeToggleOff() {
+        if (!this.shouldFollowNativeToggle()) return false;
+        return this.readNativeSubtitleButtonState() === false;
+    }
+
+    private pauseOverlayForNativeToggleOff() {
+        this.abortPendingLoad();
+        this.stopRenderer();
+        this.clearSubtitleState();
+        this.renderSubtitleText('');
+        this.showNativeSubtitles();
+    }
+
+    private bindNativeSubtitleButtonObserver() {
+        this.unbindNativeSubtitleButtonObserver();
+
+        const button = this.findNativeSubtitleButton();
+        if (!button) {
+            this.lastNativeSubtitleButtonState = null;
+            return;
+        }
+
+        this.lastNativeSubtitleButtonState = this.readNativeSubtitleButtonState();
+
+        this.nativeSubtitleButtonObserver = new MutationObserver(() => {
+            this.handleNativeSubtitleButtonStateChange();
+        });
+
+        this.nativeSubtitleButtonObserver.observe(button, {
+            attributes: true,
+            attributeFilter: ['aria-pressed']
+        });
+    }
+
+    private unbindNativeSubtitleButtonObserver() {
+        this.nativeSubtitleButtonObserver?.disconnect();
+        this.nativeSubtitleButtonObserver = null;
+    }
+
+    private handleNativeSubtitleButtonStateChange() {
+        const nextState = this.readNativeSubtitleButtonState();
+        if (nextState === this.lastNativeSubtitleButtonState) return;
+        this.lastNativeSubtitleButtonState = nextState;
+
+        if (!this.shouldFollowNativeToggle()) return;
+
+        if (nextState === false) {
+            this.pauseOverlayForNativeToggleOff();
+            return;
+        }
+
+        if (nextState === true) {
+            this.scheduleSync(0);
+        }
     }
 
     private handleDragStart(event: MouseEvent) {

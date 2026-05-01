@@ -78,6 +78,7 @@ export type YTSubtitleStyle = {
 
 export type YTSubtitleConfig = {
     enabled: boolean;
+    followNativeToggle: boolean;
     position: YTSubtitlePosition;
     style: YTSubtitleStyle;
 };
@@ -234,6 +235,7 @@ export const DEFAULT_SETTINGS: Settings = {
     },
     yt_subtitle: {
         enabled: false,
+        followNativeToggle: true,
         position: {
             percent: 10,
             anchor: 'bottom'
@@ -460,6 +462,9 @@ export function cloneYTSubtitleConfig(
     const fallback = DEFAULT_SETTINGS.yt_subtitle;
     return {
         enabled: typeof config?.enabled === 'boolean' ? config.enabled : fallback.enabled,
+        followNativeToggle: typeof config?.followNativeToggle === 'boolean'
+            ? config.followNativeToggle
+            : fallback.followNativeToggle,
         position: cloneYTSubtitlePosition(config?.position),
         style: cloneYTSubtitleStyle(config?.style)
     };

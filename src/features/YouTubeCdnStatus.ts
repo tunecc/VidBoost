@@ -457,13 +457,6 @@ export class YouTubeCdnStatus implements Feature {
             || document.querySelector<HTMLElement>('.ytp-chrome-bottom');
         if (controls) return { el: controls, mode: 'controls-fallback' };
 
-        const player = this.playerRoot();
-        if (player) return { el: player, mode: 'overlay' };
-
-        if (document.body) {
-            return { el: document.body, mode: 'overlay' };
-        }
-
         return null;
     }
 
@@ -520,7 +513,11 @@ export class YouTubeCdnStatus implements Feature {
         if (!this.isFeatureActiveOnCurrentPage()) return null;
 
         const mountPoint = this.findMountPoint();
-        if (!mountPoint) return null;
+        if (!mountPoint) {
+            // Wait until player controls are available to avoid flashing in the page corner.
+            this.removeWidget();
+            return null;
+        }
 
         let widget = document.getElementById(WIDGET_ID) as HTMLSpanElement | null;
         if (!widget) {
