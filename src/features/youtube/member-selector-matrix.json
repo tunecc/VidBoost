@@ -24,6 +24,7 @@
             "all": [
                 "ytd-rich-item-renderer:has(.badge-style-type-members-only)",
                 "ytd-rich-item-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "ytd-rich-item-renderer:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "ytd-rich-item-renderer:has(.yt-badge-shape--membership)"
             ]
         },
@@ -31,6 +32,7 @@
             "id": "desktop-search-list",
             "all": [
                 "ytd-video-renderer:has(.badge-style-type-members-only)",
+                "ytd-video-renderer:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "ytd-video-renderer:has(.yt-badge-shape--membership)"
             ]
         },
@@ -39,11 +41,14 @@
             "all": [
                 "ytd-compact-video-renderer:has(.badge-style-type-members-only)",
                 "ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "ytd-compact-video-renderer:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "ytd-compact-video-renderer:has(.yt-badge-shape--membership)",
                 "#secondary #related ytd-compact-video-renderer:has(.badge-style-type-members-only)",
                 "#secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "#secondary #related ytd-compact-video-renderer:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "#secondary #related ytd-compact-video-renderer:has(.yt-badge-shape--membership)",
                 "#related yt-lockup-view-model:has(.yt-badge-shape--commerce > .yt-badge-shape__icon)",
+                "#related yt-lockup-view-model:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "#related yt-lockup-view-model:has(.yt-badge-shape--membership)"
             ]
         },
@@ -51,6 +56,7 @@
             "id": "desktop-channel-grid",
             "all": [
                 "ytd-item-section-renderer[page-subtype=\"channels\"] ytd-grid-video-renderer:has(.badge-style-type-members-only)",
+                "ytd-item-section-renderer[page-subtype=\"channels\"] ytd-grid-video-renderer:has(.ytBadgeShapeCommerce > .ytBadgeShapeIcon)",
                 "ytd-item-section-renderer[page-subtype=\"channels\"] ytd-grid-video-renderer:has(.yt-badge-shape--membership)"
             ]
         },

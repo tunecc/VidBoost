@@ -11,8 +11,8 @@ import {
     MEMBER_CHANNEL_SELECTORS,
     MEMBER_BADGE_ARIA_LABELS,
     MEMBER_BADGE_CLASS_NAMES,
-    MEMBER_COMMERCE_BADGE_CLASS,
-    MEMBER_COMMERCE_ICON_SELECTOR,
+    MEMBER_COMMERCE_BADGE_CLASS_NAMES,
+    MEMBER_COMMERCE_ICON_SELECTORS,
     MEMBER_MOBILE_BADGE_DATA_TYPE,
     getFastMembershipSelectorsForMode
 } from './youtube/memberSelectorMatrix';
@@ -194,9 +194,9 @@ export class YouTubeMemberBlocker implements Feature {
             }
 
             // Commerce badge can include non-membership labels, so verify text.
-            if (el.classList.contains(MEMBER_COMMERCE_BADGE_CLASS)) {
+            if (MEMBER_COMMERCE_BADGE_CLASS_NAMES.some((className) => el.classList.contains(className))) {
                 // Current YouTube membership badge can be icon-only under commerce shape.
-                if (el.querySelector(MEMBER_COMMERCE_ICON_SELECTOR)) return true;
+                if (MEMBER_COMMERCE_ICON_SELECTORS.some((selector) => el.querySelector(selector))) return true;
                 const text = el.textContent?.trim() ?? '';
                 const lc = text.toLowerCase();
                 if (MEMBER_BADGE_ARIA_LABELS.some((label) => lc.includes(label))) return true;

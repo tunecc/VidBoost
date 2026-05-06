@@ -31,8 +31,14 @@ export const MEMBER_BADGE_CLASS_NAMES = Object.freeze([
     'badge-style-type-members-only',
     'badge-style-type-membership'
 ]);
-export const MEMBER_COMMERCE_BADGE_CLASS = 'yt-badge-shape--commerce';
-export const MEMBER_COMMERCE_ICON_SELECTOR = '.yt-badge-shape__icon';
+export const MEMBER_COMMERCE_BADGE_CLASS_NAMES = Object.freeze([
+    'yt-badge-shape--commerce',
+    'ytBadgeShapeCommerce'
+]);
+export const MEMBER_COMMERCE_ICON_SELECTORS = Object.freeze([
+    '.yt-badge-shape__icon',
+    '.ytBadgeShapeIcon'
+]);
 export const MEMBER_MOBILE_BADGE_DATA_TYPE = 'BADGE_STYLE_TYPE_MEMBERS_ONLY';
 
 function dedupeSelectors(selectors: string[]): string[] {

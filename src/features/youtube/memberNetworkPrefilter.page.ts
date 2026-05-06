@@ -23,7 +23,15 @@ type BridgeToPageMessage = {
     const URL_RE = /\/youtubei\/v1\/(?:browse|search|next)(?:[/?]|$)/;
     const TEXT_MARKERS = ['members only', 'members first'];
     const STYLE_MARKERS = ['badge_style_type_members_only', 'badge_style_type_membership'];
-    const CLASS_MARKERS = ['yt-badge-shape--membership', 'badge-style-type-members-only', 'badge-style-type-membership'];
+    const CLASS_MARKERS = [
+        'yt-badge-shape--membership',
+        'badge-style-type-members-only',
+        'badge-style-type-membership',
+        'yt-badge-shape--commerce',
+        'yt-badge-shape__icon',
+        'ytBadgeShapeCommerce',
+        'ytBadgeShapeIcon'
+    ].map((marker) => marker.toLowerCase());
     const RENDERER_KEYS = [
         'videoRenderer',
         'compactVideoRenderer',
