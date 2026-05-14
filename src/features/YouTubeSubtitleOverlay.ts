@@ -71,6 +71,23 @@ const DRAG_HANDLE_HIDE_DELAY_MS = 300;
 const MIN_POSITION_PERCENT = 4;
 const MAX_POSITION_PERCENT = 72;
 const BASE_FONT_SIZE_PX = 22;
+const MIN_FONT_SIZE_PX = 16;
+const MAX_FONT_SIZE_PX = 72;
+const PLAYER_HEIGHT_BASELINE_PX = 720;
+const RESPONSIVE_GROWTH_DAMPING = 0.55;
+const MAX_RESPONSIVE_SCALE = 1.35;
+const DEFAULT_OVERLAY_MAX_WIDTH_PX = 960;
+const LARGE_PLAYER_OVERLAY_MAX_WIDTH_PX = 1120;
+const FULLSCREEN_OVERLAY_MAX_WIDTH_PX = 1400;
+const SUBTITLE_PADDING_Y_RATIO = 6 / BASE_FONT_SIZE_PX;
+const SUBTITLE_PADDING_X_RATIO = 10 / BASE_FONT_SIZE_PX;
+const BASE_HANDLE_WIDTH_PX = 36;
+const BASE_HANDLE_HEIGHT_PX = 20;
+const BASE_HANDLE_FONT_SIZE_PX = 14;
+const MAX_HANDLE_WIDTH_PX = 44;
+const MAX_HANDLE_HEIGHT_PX = 24;
+const MAX_HANDLE_FONT_SIZE_PX = 16;
+const HANDLE_RESPONSIVE_GROWTH_DAMPING = 0.3;
 
 const DEVICE_PARAM_KEYS = [
     'cbrand',
@@ -122,9 +139,12 @@ function toRgbaColor(value: string | null | undefined, alpha: number, fallback: 
     return `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp(alpha, 0, 1).toFixed(2)})`;
 }
 
-function buildSubtitleSingleEffectRenderStyle(effect: YTSubtitleEffect): SubtitleEdgeRenderStyle {
+function buildSubtitleSingleEffectRenderStyle(
+    effect: YTSubtitleEffect,
+    responsiveScale = 1
+): SubtitleEdgeRenderStyle {
     const shadowStrength = clamp(effect.strength, 0, 100) / 100;
-    const effectSize = clamp(effect.size, 0, 6);
+    const effectSize = clamp(effect.size * responsiveScale, 0, 12);
     const noEdge: SubtitleEdgeRenderStyle = {
         textShadow: 'none',
         textStrokeWidth: '0px',
@@ -205,14 +225,17 @@ function buildSubtitleSingleEffectRenderStyle(effect: YTSubtitleEffect): Subtitl
     }
 }
 
-function buildSubtitleEdgeRenderStyle(style: YTSubtitleStyle): SubtitleEdgeRenderStyle {
+function buildSubtitleEdgeRenderStyle(
+    style: YTSubtitleStyle,
+    responsiveScale = 1
+): SubtitleEdgeRenderStyle {
     const textShadowParts: string[] = [];
     let textStrokeWidth = '0px';
     let textStrokeColor = 'transparent';
     let paintOrder = 'normal';
 
     for (const effect of style.effects) {
-        const render = buildSubtitleSingleEffectRenderStyle(effect);
+        const render = buildSubtitleSingleEffectRenderStyle(effect, responsiveScale);
         if (render.textShadow !== 'none') {
             textShadowParts.push(render.textShadow);
         }
@@ -424,6 +447,9 @@ export class YouTubeSubtitleOverlay implements Feature {
     private nativeHidden = false;
     private nativeSubtitleButtonObserver: MutationObserver | null = null;
     private lastNativeSubtitleButtonState: boolean | null = null;
+    private observedPlayer: HTMLElement | null = null;
+    private playerResizeObserver: ResizeObserver | null = null;
+    private playerResizeRaf: number | null = null;
 
     private dragState: DragState | null = null;
     private dragHandleHovered = false;
@@ -460,6 +486,17 @@ export class YouTubeSubtitleOverlay implements Feature {
     private readonly handleVideoPause = () => {
         this.renderAtCurrentTime(true);
         this.stopRenderer();
+    };
+
+    private readonly handlePlayerResize = () => {
+        if (this.playerResizeRaf != null) return;
+
+        this.playerResizeRaf = window.requestAnimationFrame(() => {
+            this.playerResizeRaf = null;
+            this.applyOverlayLayout();
+            this.applyOverlayStyles();
+            this.syncDragHandleVisibility();
+        });
     };
 
     private readonly handleDragMove = (event: MouseEvent) => {
@@ -595,6 +632,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         document.removeEventListener('yt-navigate-finish', this.handleNavigationFinish, true);
 
         this.unbindNativeSubtitleButtonObserver();
+        this.unbindPlayerResizeObserver();
         this.abortPendingLoad();
         this.stopRenderer();
         this.rebindVideo(null);
@@ -972,6 +1010,8 @@ export class YouTubeSubtitleOverlay implements Feature {
             player.style.position = 'relative';
         }
 
+        this.bindPlayerResizeObserver(player);
+
         if (this.overlayRoot?.parentElement === player) {
             return this.overlayRoot;
         }
@@ -994,7 +1034,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
-            width: min(86%, 960px);
+            width: min(86%, ${DEFAULT_OVERLAY_MAX_WIDTH_PX}px);
             display: flex;
             justify-content: center;
             pointer-events: none;
@@ -1077,6 +1117,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.overlayBox = box;
         this.overlayText = text;
         this.dragHandle = handle;
+        this.applyOverlayLayout();
         this.applyOverlayStyles();
         this.applyOverlayPosition();
         this.renderSubtitleText('');
@@ -1088,6 +1129,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.handleDragEnd();
         }
 
+        this.unbindPlayerResizeObserver();
         this.clearDragHandleHideTimer();
         this.overlayRoot?.remove();
         this.overlayRoot = null;
@@ -1190,9 +1232,34 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!this.overlayBox || !this.overlayText || !this.dragHandle) return;
 
         const style = this.config.style;
-        const edgeRender = buildSubtitleEdgeRenderStyle(style);
+        const responsiveScale = this.resolveResponsiveScale();
+        const edgeRender = buildSubtitleEdgeRenderStyle(style, responsiveScale);
         const fontScale = Math.max(40, style.fontScale);
-        const fontSize = Math.max(16, Math.round((BASE_FONT_SIZE_PX * fontScale) / 100));
+        const fontSize = clamp(
+            Math.round((BASE_FONT_SIZE_PX * fontScale * responsiveScale) / 100),
+            MIN_FONT_SIZE_PX,
+            MAX_FONT_SIZE_PX
+        );
+        const handleScale = 1 + (responsiveScale - 1) * HANDLE_RESPONSIVE_GROWTH_DAMPING;
+        const paddingY = Math.max(6, Math.round(fontSize * SUBTITLE_PADDING_Y_RATIO));
+        const paddingX = Math.max(10, Math.round(fontSize * SUBTITLE_PADDING_X_RATIO));
+        const borderRadius = Math.round(clamp(style.borderRadius, 0, 20) * responsiveScale);
+        const blurRadius = Math.max(2, Math.round(2 * responsiveScale));
+        const handleWidth = clamp(
+            Math.round(BASE_HANDLE_WIDTH_PX * handleScale),
+            BASE_HANDLE_WIDTH_PX,
+            MAX_HANDLE_WIDTH_PX
+        );
+        const handleHeight = clamp(
+            Math.round(BASE_HANDLE_HEIGHT_PX * handleScale),
+            BASE_HANDLE_HEIGHT_PX,
+            MAX_HANDLE_HEIGHT_PX
+        );
+        const handleFontSize = clamp(
+            Math.round(BASE_HANDLE_FONT_SIZE_PX * handleScale),
+            BASE_HANDLE_FONT_SIZE_PX,
+            MAX_HANDLE_FONT_SIZE_PX
+        );
         const importedFontCapabilities = style.fontFamilyPreset === 'imported' && style.importedFontId
             ? this.importedFontCapabilities.get(style.importedFontId) ?? null
             : null;
@@ -1201,7 +1268,6 @@ export class YouTubeSubtitleOverlay implements Feature {
             : clamp(style.fontWeight, 100, 900);
         const textOpacity = clamp(style.textOpacity, 0, 100) / 100;
         const backgroundOpacity = clamp(style.backgroundOpacity, 0, 100) / 100;
-        const borderRadius = clamp(style.borderRadius, 0, 20);
         const fontFamily = resolveYTSubtitleFontFamily(style);
 
         this.overlayBox.style.background = toRgbaColor(
@@ -1209,11 +1275,12 @@ export class YouTubeSubtitleOverlay implements Feature {
             backgroundOpacity,
             DEFAULT_SETTINGS.yt_subtitle.style.backgroundColor
         );
+        this.overlayBox.style.padding = `${paddingY}px ${paddingX}px`;
         this.overlayBox.style.fontSize = `${fontSize}px`;
         this.overlayBox.style.fontFamily = fontFamily;
         this.overlayBox.style.lineHeight = '1.35';
         this.overlayBox.style.borderRadius = `${borderRadius}px`;
-        this.overlayBox.style.backdropFilter = backgroundOpacity > 0 ? 'blur(2px)' : 'none';
+        this.overlayBox.style.backdropFilter = backgroundOpacity > 0 ? `blur(${blurRadius}px)` : 'none';
         this.overlayText.style.color = toRgbaColor(
             style.color,
             textOpacity,
@@ -1233,10 +1300,32 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.overlayText.style.letterSpacing =
             style.fontFamilyPreset === 'small-caps' ? '0.04em' : 'normal';
         this.dragHandle.style.background = `rgba(0, 0, 0, ${Math.max(0.52, backgroundOpacity).toFixed(2)})`;
+        this.dragHandle.style.width = `${handleWidth}px`;
+        this.dragHandle.style.height = `${handleHeight}px`;
+        this.dragHandle.style.fontSize = `${handleFontSize}px`;
 
         if (style.fontFamilyPreset === 'imported' && style.importedFontId) {
             void this.ensureImportedFontLoaded(style.importedFontId, { cacheFailure: false });
         }
+    }
+
+    private applyOverlayLayout() {
+        if (!this.overlayPositioner) return;
+
+        const player = this.overlayRoot?.parentElement instanceof HTMLElement
+            ? this.overlayRoot.parentElement
+            : this.playerRoot();
+        const playerWidth = player?.getBoundingClientRect().width ?? 0;
+        const isFullscreen = document.fullscreenElement === player;
+
+        let maxWidth = DEFAULT_OVERLAY_MAX_WIDTH_PX;
+        if (playerWidth >= 1400) {
+            maxWidth = isFullscreen ? FULLSCREEN_OVERLAY_MAX_WIDTH_PX : LARGE_PLAYER_OVERLAY_MAX_WIDTH_PX;
+        } else if (playerWidth >= 1100) {
+            maxWidth = LARGE_PLAYER_OVERLAY_MAX_WIDTH_PX;
+        }
+
+        this.overlayPositioner.style.width = `min(86%, ${maxWidth}px)`;
     }
 
     private applyOverlayPosition() {
@@ -1250,6 +1339,18 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.overlayPositioner.style.bottom = `${percent}%`;
             this.overlayPositioner.style.top = '';
         }
+    }
+
+    private resolveResponsivePlayerMetrics() {
+        const player = this.overlayRoot?.parentElement instanceof HTMLElement
+            ? this.overlayRoot.parentElement
+            : this.playerRoot();
+        const rect = player?.getBoundingClientRect();
+        return {
+            player,
+            width: rect?.width ?? 0,
+            height: rect?.height ?? 0
+        };
     }
 
     private hideNativeSubtitles() {
@@ -1330,6 +1431,29 @@ export class YouTubeSubtitleOverlay implements Feature {
     private unbindNativeSubtitleButtonObserver() {
         this.nativeSubtitleButtonObserver?.disconnect();
         this.nativeSubtitleButtonObserver = null;
+    }
+
+    private bindPlayerResizeObserver(player: HTMLElement | null) {
+        if (this.observedPlayer === player) return;
+
+        this.unbindPlayerResizeObserver();
+        if (!player || typeof ResizeObserver !== 'function') return;
+
+        this.playerResizeObserver = new ResizeObserver(() => {
+            this.handlePlayerResize();
+        });
+        this.playerResizeObserver.observe(player);
+        this.observedPlayer = player;
+    }
+
+    private unbindPlayerResizeObserver() {
+        this.playerResizeObserver?.disconnect();
+        this.playerResizeObserver = null;
+        this.observedPlayer = null;
+        if (this.playerResizeRaf != null) {
+            window.cancelAnimationFrame(this.playerResizeRaf);
+            this.playerResizeRaf = null;
+        }
     }
 
     private handleNativeSubtitleButtonStateChange() {
@@ -1435,6 +1559,18 @@ export class YouTubeSubtitleOverlay implements Feature {
 
     private getRouteKey() {
         return `${window.location.pathname}|${window.location.search}`;
+    }
+
+    private resolveResponsiveScale() {
+        const { height: playerHeight } = this.resolveResponsivePlayerMetrics();
+        if (playerHeight <= 0) return 1;
+        if (playerHeight <= PLAYER_HEIGHT_BASELINE_PX) return 1;
+
+        // Use a damped growth curve instead of linear scaling so fullscreen stays balanced
+        // rather than turning a tuned windowed size into an oversized caption block.
+        const growthRatio = playerHeight / PLAYER_HEIGHT_BASELINE_PX;
+        const scale = 1 + (growthRatio - 1) * RESPONSIVE_GROWTH_DAMPING;
+        return clamp(scale, 1, MAX_RESPONSIVE_SCALE);
     }
 
     private playerRoot() {

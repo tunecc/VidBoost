@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "可选：手动指定已有 tag，例如 v1.6.2"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "release tag is empty" >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify version consistency
+        run: npm run version:check -- --expected-tag "${{ steps.release_tag.outputs.tag }}"
+
+      - name: Build and package release artifacts
+        run: npm run prepare:release
+
+      - name: Generate release notes
+        run: |
+          mkdir -p .github/tmp
+          npm run release:notes -- \
+            --current-tag "${{ steps.release_tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --output .github/tmp/release-notes.md
+
+      - name: Create or update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.release_tag.outputs.tag }}" \
+            releases/chrome/*.zip \
+            releases/firefox/*.xpi \
+            releases/firefox/*-source.zip \
+            --title "${{ steps.release_tag.outputs.tag }}" \
+            --notes-file .github/tmp/release-notes.md \
+          || gh release upload "${{ steps.release_tag.outputs.tag }}" \
+            releases/chrome/*.zip \
+            releases/firefox/*.xpi \
+            releases/firefox/*-source.zip \
+            --clobber
+
