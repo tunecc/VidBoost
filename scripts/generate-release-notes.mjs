@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,7 +77,25 @@ function classifyCommit(subject) {
     return { type: 'other', text: subject };
 }
 
-function renderNotes({ currentTag, previousTag, repo, commits }) {
+function extractChangelogSection(changelog, currentTag) {
+    if (!changelog.trim()) return '';
+
+    const normalizedVersion = normalizeVersionFromTag(currentTag);
+    const heading = `## [${normalizedVersion}]`;
+    const startIndex = changelog.indexOf(heading);
+    if (startIndex === -1) return '';
+
+    const sectionStart = changelog.indexOf('\n', startIndex);
+    if (sectionStart === -1) return '';
+
+    const nextSectionIndex = changelog.indexOf('\n## [', sectionStart + 1);
+    const rawSection = nextSectionIndex === -1
+        ? changelog.slice(sectionStart + 1)
+        : changelog.slice(sectionStart + 1, nextSectionIndex);
+    return rawSection.trim();
+}
+
+function renderNotes({ currentTag, previousTag, repo, commits, changelogSection }) {
     const grouped = new Map(SECTION_ORDER.map(([id]) => [id, []]));
     for (const commit of commits) {
         const { type, text } = classifyCommit(commit.subject);
@@ -94,6 +112,15 @@ function renderNotes({ currentTag, previousTag, repo, commits }) {
         lines.push(`首次发布，当前 tag 为 \`${currentTag}\`。`);
     }
     lines.push('');
+
+    if (changelogSection.trim()) {
+        lines.push(changelogSection.trim());
+        lines.push('');
+        lines.push('---');
+        lines.push('');
+        lines.push('## 自动整理的代码变更');
+        lines.push('');
+    }
 
     let renderedSection = false;
     for (const [sectionId, title] of SECTION_ORDER) {
@@ -123,6 +150,7 @@ async function main() {
     const previousTagFlag = normalizeTag(readFlag('--previous-tag'));
     const repo = String(readFlag('--repo') || process.env.GITHUB_REPOSITORY || '').trim();
     const outputPath = String(readFlag('--output') || '').trim();
+    const changelogPath = String(readFlag('--changelog') || 'CHANGELOG.md').trim();
 
     if (!currentTag) {
         fail('缺少当前 tag，请传入 --current-tag v1.6.2');
@@ -143,11 +171,14 @@ async function main() {
         };
     }).filter((entry) => entry.subject);
 
+    const changelogRaw = await readFile(path.resolve(repoRoot, changelogPath), 'utf8');
+    const changelogSection = extractChangelogSection(changelogRaw, currentTag);
     const notes = renderNotes({
         currentTag,
         previousTag,
         repo,
-        commits
+        commits,
+        changelogSection
     });
 
     if (outputPath) {

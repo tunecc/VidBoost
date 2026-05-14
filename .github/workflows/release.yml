@@ -62,6 +62,7 @@ jobs:
           npm run release:notes -- \
             --current-tag "${{ steps.release_tag.outputs.tag }}" \
             --repo "${{ github.repository }}" \
+            --changelog CHANGELOG.md \
             --output .github/tmp/release-notes.md
 
       - name: Create or update GitHub Release
@@ -74,9 +75,14 @@ jobs:
             releases/firefox/*-source.zip \
             --title "${{ steps.release_tag.outputs.tag }}" \
             --notes-file .github/tmp/release-notes.md \
-          || gh release upload "${{ steps.release_tag.outputs.tag }}" \
+          || true
+
+          gh release edit "${{ steps.release_tag.outputs.tag }}" \
+            --title "${{ steps.release_tag.outputs.tag }}" \
+            --notes-file .github/tmp/release-notes.md
+
+          gh release upload "${{ steps.release_tag.outputs.tag }}" \
             releases/chrome/*.zip \
             releases/firefox/*.xpi \
             releases/firefox/*-source.zip \
             --clobber
-
