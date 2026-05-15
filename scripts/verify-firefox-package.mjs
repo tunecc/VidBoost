@@ -22,6 +22,7 @@ const REQUIRED_FILES = [
     'assets/firefox-feature-h5-enhancer.js',
     'assets/firefox-feature-stats-speed-converter.js',
     'assets/firefox-feature-youtube-cdn-status.js',
+    'assets/firefox-feature-youtube-bottom-progress.js',
     'assets/firefox-feature-youtube-fast-pause.js',
     'assets/firefox-feature-youtube-member-blocker.js',
     'assets/firefox-feature-youtube-original-audio.js',

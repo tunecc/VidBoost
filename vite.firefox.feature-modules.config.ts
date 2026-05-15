@@ -29,6 +29,7 @@ export default defineConfig({
                 'firefox-feature-youtube-original-audio': path.resolve(__dirname, 'src/features/YouTubeOriginalAudio.ts'),
                 'firefox-feature-youtube-subtitle-overlay': path.resolve(__dirname, 'src/features/YouTubeSubtitleOverlay.ts'),
                 'firefox-feature-youtube-cdn-status': path.resolve(__dirname, 'src/features/YouTubeCdnStatus.ts'),
+                'firefox-feature-youtube-bottom-progress': path.resolve(__dirname, 'src/features/YouTubeBottomProgress.ts'),
                 'firefox-feature-bilibili-space-blocker': path.resolve(__dirname, 'src/features/BilibiliSpaceBlocker.ts'),
                 'firefox-feature-youtube-member-blocker': path.resolve(__dirname, 'src/features/YouTubeMemberBlocker.ts')
             },

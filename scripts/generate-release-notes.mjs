@@ -95,32 +95,29 @@ function extractChangelogSection(changelog, currentTag) {
     return rawSection.trim();
 }
 
-function renderNotes({ currentTag, previousTag, repo, commits, changelogSection }) {
+function renderNotes({ currentTag, repo, commits, changelogSection }) {
+    if (changelogSection.trim()) {
+        const lines = [];
+        lines.push(`## VidBoost ${normalizeVersionFromTag(currentTag)}`);
+        lines.push('');
+        lines.push(changelogSection.trim());
+        lines.push('');
+        if (repo) {
+            lines.push(`**Full Changelog**: https://github.com/${repo}/releases/tag/${currentTag}`);
+            lines.push('');
+        }
+        return `${lines.join('\n').trimEnd()}\n`;
+    }
+
     const grouped = new Map(SECTION_ORDER.map(([id]) => [id, []]));
     for (const commit of commits) {
         const { type, text } = classifyCommit(commit.subject);
-        grouped.get(type)?.push(`- ${text} (\`${commit.sha}\`)`);
+        grouped.get(type)?.push(`- ${text}`);
     }
 
     const lines = [];
     lines.push(`## VidBoost ${normalizeVersionFromTag(currentTag)}`);
     lines.push('');
-
-    if (previousTag) {
-        lines.push(`基于 \`${previousTag}\` 到 \`${currentTag}\` 之间的提交自动整理。`);
-    } else {
-        lines.push(`首次发布，当前 tag 为 \`${currentTag}\`。`);
-    }
-    lines.push('');
-
-    if (changelogSection.trim()) {
-        lines.push(changelogSection.trim());
-        lines.push('');
-        lines.push('---');
-        lines.push('');
-        lines.push('## 自动整理的代码变更');
-        lines.push('');
-    }
 
     let renderedSection = false;
     for (const [sectionId, title] of SECTION_ORDER) {
@@ -137,8 +134,8 @@ function renderNotes({ currentTag, previousTag, repo, commits, changelogSection 
         lines.push('');
     }
 
-    if (repo && previousTag) {
-        lines.push(`**Full Changelog**: https://github.com/${repo}/compare/${previousTag}...${currentTag}`);
+    if (repo) {
+        lines.push(`**Full Changelog**: https://github.com/${repo}/releases/tag/${currentTag}`);
         lines.push('');
     }
 
@@ -175,7 +172,6 @@ async function main() {
     const changelogSection = extractChangelogSection(changelogRaw, currentTag);
     const notes = renderNotes({
         currentTag,
-        previousTag,
         repo,
         commits,
         changelogSection

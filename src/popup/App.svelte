@@ -68,6 +68,11 @@
   let ytAlwaysUseOriginalAudio =
     DEFAULT_SETTINGS.yt_config.alwaysUseOriginalAudio ?? false;
   let ytShowCdnCountry = DEFAULT_SETTINGS.yt_config.showCdnCountry ?? false;
+  let ytBottomProgressEnabled =
+    DEFAULT_SETTINGS.yt_config.showBottomProgress ?? false;
+  let ytBottomProgressHeight =
+    DEFAULT_SETTINGS.yt_config.bottomProgressHeight ?? 2;
+  let ytBottomProgressOpen = false;
   let ytSubtitleConfig: YTSubtitleConfig = cloneYTSubtitleConfig(
     DEFAULT_SETTINGS.yt_subtitle,
   );
@@ -1249,6 +1254,13 @@
         ytAlwaysUseOriginalAudio =
           res.yt_config.alwaysUseOriginalAudio ?? false;
         ytShowCdnCountry = res.yt_config.showCdnCountry ?? false;
+        ytBottomProgressEnabled = res.yt_config.showBottomProgress ?? false;
+        ytBottomProgressHeight = clampNumber(
+          res.yt_config.bottomProgressHeight
+            ?? (DEFAULT_SETTINGS.yt_config.bottomProgressHeight ?? 2),
+          1,
+          20,
+        );
       } else if (res.h5_config) {
         ytBlockNative = res.h5_config.blockNumKeys ?? true;
       }
@@ -1319,6 +1331,8 @@
           blockNativeSeek: ytBlockNative,
           alwaysUseOriginalAudio: ytAlwaysUseOriginalAudio,
           showCdnCountry: ytShowCdnCountry,
+          showBottomProgress: ytBottomProgressEnabled,
+          bottomProgressHeight: clampNumber(ytBottomProgressHeight, 1, 20),
         },
         yt_subtitle: {
           ...cloneYTSubtitleConfig(ytSubtitleConfig),
@@ -1746,6 +1760,71 @@
               </svg>
             </div>
           </ToggleItem>
+
+          <AccordionItem
+            title={t("yt_bottom_progress")}
+            desc={t("yt_bottom_progress_desc")}
+            iconColor="red"
+            isOpen={ytBottomProgressOpen}
+            masterChecked={ytBottomProgressEnabled}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (ytBottomProgressOpen = !ytBottomProgressOpen)}
+            onToggleMaster={() =>
+              globalEnabled &&
+              (ytBottomProgressEnabled = !ytBottomProgressEnabled)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 18h16"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M7 14h10"
+                />
+              </svg>
+            </div>
+            <div slot="content" class="space-y-3 px-1">
+              <label class="block space-y-2">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                    {t("yt_bottom_progress_height")}
+                  </span>
+                  <span class="text-[11px] text-gray-500 dark:text-white/55">
+                    {ytBottomProgressHeight}px
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="20"
+                  step="1"
+                  value={ytBottomProgressHeight}
+                  class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!globalEnabled || !ytBottomProgressEnabled}
+                  on:input={(event) =>
+                    (ytBottomProgressHeight = clampNumber(
+                      readInputNumber(event, ytBottomProgressHeight),
+                      1,
+                      20,
+                    ))}
+                />
+              </label>
+            </div>
+          </AccordionItem>
 
           <AccordionItem
             title={t("yt_subtitle_overlay")}

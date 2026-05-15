@@ -29,6 +29,7 @@ type FirefoxFeatureModuleMap = {
     'firefox-feature-youtube-original-audio': { YouTubeOriginalAudio: new () => Feature };
     'firefox-feature-youtube-subtitle-overlay': { YouTubeSubtitleOverlay: new () => Feature };
     'firefox-feature-youtube-cdn-status': { YouTubeCdnStatus: new () => Feature };
+    'firefox-feature-youtube-bottom-progress': { YouTubeBottomProgress: new () => Feature };
     'firefox-feature-bilibili-space-blocker': { BilibiliSpaceBlocker: new () => Feature };
     'firefox-feature-youtube-member-blocker': { YouTubeMemberBlocker: new () => Feature };
 };
@@ -175,6 +176,12 @@ const youtubeCdnStatus = createDeferredFeature(
         await loadFirefoxFeatureModule('firefox-feature-youtube-cdn-status')
     ).YouTubeCdnStatus()
 );
+const youtubeBottomProgress = createDeferredFeature(
+    'YouTubeBottomProgress',
+    async () => new (
+        await loadFirefoxFeatureModule('firefox-feature-youtube-bottom-progress')
+    ).YouTubeBottomProgress()
+);
 const bilibiliSpaceBlocker = createDeferredFeature(
     'BilibiliSpaceBlocker',
     async () => new (
@@ -253,6 +260,7 @@ const features = [
     bilibiliAutoSubtitle,
     bilibiliCdn,
     youtubeCdnStatus,
+    youtubeBottomProgress,
     statsSpeedConverter,
     bilibiliAutoQuality
 ];
@@ -391,6 +399,7 @@ function applyFromSettings(res: Partial<Settings>) {
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
     const ytSubtitleOn = settings.yt_subtitle.enabled === true;
     const ytCdnStatusOn = settings.yt_config.showCdnCountry === true;
+    const ytBottomProgressOn = settings.yt_config.showBottomProgress === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
     const bbSubtitleOn = settings.bb_subtitle.enabled === true;
@@ -405,6 +414,7 @@ function applyFromSettings(res: Partial<Settings>) {
     bilibiliAutoSubtitle.updateSettings(settings);
     bilibiliAutoQuality.updateSettings(settings);
     youtubeCdnStatus.updateSettings(settings);
+    youtubeBottomProgress.updateSettings(settings);
     statsSpeedConverter.updateSettings(settings);
 
     setFeatureEnabled(0, settings.h5_enabled !== false);
@@ -419,8 +429,9 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(9, bbSubtitleOn);
     setFeatureEnabled(10, bbCdnOn);
     setFeatureEnabled(11, ytCdnStatusOn);
-    setFeatureEnabled(12, statsSpeedConverterOn);
-    setFeatureEnabled(13, bbQualityOn);
+    setFeatureEnabled(12, ytBottomProgressOn);
+    setFeatureEnabled(13, statsSpeedConverterOn);
+    setFeatureEnabled(14, bbQualityOn);
 
     // Push CDN config update (always, so page script gets latest node)
     bilibiliCdn.updateSettings(settings);

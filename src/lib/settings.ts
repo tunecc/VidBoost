@@ -25,6 +25,8 @@ export type YTConfig = {
     blockNativeSeek?: boolean;
     alwaysUseOriginalAudio?: boolean;
     showCdnCountry?: boolean;
+    showBottomProgress?: boolean;
+    bottomProgressHeight?: number;
 };
 
 export type YTSubtitlePositionAnchor = 'bottom' | 'top';
@@ -231,7 +233,9 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_config: {
         blockNativeSeek: true,
         alwaysUseOriginalAudio: false,
-        showCdnCountry: false
+        showCdnCountry: false,
+        showBottomProgress: false,
+        bottomProgressHeight: 2
     },
     yt_subtitle: {
         enabled: false,
