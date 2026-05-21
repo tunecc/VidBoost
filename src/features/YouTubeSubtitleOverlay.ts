@@ -10,7 +10,11 @@ import {
     type YTSubtitleEffect,
     type YTSubtitleStyle
 } from '../lib/settings';
-import { runtimeSendMessage } from '../lib/webext';
+import {
+    runtimeSendMessage,
+    storageLocalGet,
+    storageLocalSet
+} from '../lib/webext';
 import { OSD } from '../lib/OSD';
 import { VideoController } from '../lib/VideoController';
 import { markInteractionRoot } from '../lib/pointerTargets';
@@ -29,7 +33,8 @@ import {
     ensureYouTubeSubtitleOverlayScriptInjected,
     installYouTubeSubtitleOverlayBridge,
     requestYouTubeSubtitleEnsureEnabled,
-    requestYouTubeSubtitlePlayerData
+    requestYouTubeSubtitlePlayerData,
+    requestYouTubeSubtitleSetEnabled
 } from './youtube/subtitleOverlay';
 import {
     type YouTubeSubtitleAudioCaptionTrack,
@@ -45,6 +50,11 @@ import {
 type PotToken = {
     pot: string | null;
     potc: string | null;
+};
+
+type NativeSubtitleToggleMemory = {
+    defaultEnabled?: boolean;
+    channels?: Record<string, boolean>;
 };
 
 type DragState = {
@@ -88,6 +98,8 @@ const MAX_HANDLE_WIDTH_PX = 44;
 const MAX_HANDLE_HEIGHT_PX = 24;
 const MAX_HANDLE_FONT_SIZE_PX = 16;
 const HANDLE_RESPONSIVE_GROWTH_DAMPING = 0.3;
+const NATIVE_TOGGLE_MEMORY_KEY = 'yt_subtitle_native_toggle_memory';
+const NATIVE_TOGGLE_MEMORY_SUPPRESS_MS = 600;
 
 const DEVICE_PARAM_KEYS = [
     'cbrand',
@@ -435,6 +447,8 @@ export class YouTubeSubtitleOverlay implements Feature {
     private currentIndex = -1;
     private routeKey = '';
     private lastFallbackNoticeKey = '';
+    private lastNativeToggleRestoreKey = '';
+    private nativeToggleMemorySuppressUntil = 0;
 
     private boundVideo: HTMLVideoElement | null = null;
     private unsubscribeVideo: (() => void) | null = null;
@@ -465,6 +479,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.showNativeSubtitles();
+        this.lastNativeToggleRestoreKey = '';
     };
 
     private readonly handleNavigationFinish = () => {
@@ -693,6 +708,18 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.rebindVideo(this.videoCtrl.video);
         this.bindNativeSubtitleButtonObserver();
 
+        void this.restoreNativeToggleForCurrentPage();
+
+        if (!this.shouldRenderOverlay()) {
+            this.abortPendingLoad();
+            this.stopRenderer();
+            this.clearSubtitleState();
+            this.renderSubtitleText('');
+            this.destroyOverlay();
+            this.showNativeSubtitles();
+            return;
+        }
+
         if (this.shouldPauseForNativeToggleOff()) {
             this.pauseOverlayForNativeToggleOff();
             return;
@@ -711,6 +738,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     private async loadSubtitlesForCurrentPage(preloadedData?: YouTubeSubtitlePlayerData) {
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId || !this.enabled || !this.isSupportedPage()) return;
+        if (!this.shouldRenderOverlay()) return;
 
         if (this.shouldPauseForNativeToggleOff()) {
             this.pauseOverlayForNativeToggleOff();
@@ -861,6 +889,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     private async ensureSubtitlesEnabled(expectedVideoId: string, signal: AbortSignal) {
         if (signal.aborted) return null;
 
+        this.suppressNextNativeToggleMemoryWrite();
         await requestYouTubeSubtitleEnsureEnabled();
         return await this.requestPlayerDataWithRetries(expectedVideoId, signal);
     }
@@ -870,6 +899,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (this.loadAbortController) return;
 
         this.bindNativeSubtitleButtonObserver();
+        void this.restoreNativeToggleForCurrentPage();
+
+        if (!this.shouldRenderOverlay()) return;
 
         if (this.shouldPauseForNativeToggleOff()) {
             this.pauseOverlayForNativeToggleOff();
@@ -1384,6 +1416,19 @@ export class YouTubeSubtitleOverlay implements Feature {
         return this.config.followNativeToggle === true;
     }
 
+    private shouldRenderOverlay() {
+        return this.config.enabled === true;
+    }
+
+    private shouldRememberNativeToggle() {
+        return this.config.rememberNativeToggle === true;
+    }
+
+    private shouldApplyNativeToggleMemory() {
+        if (!this.shouldRememberNativeToggle()) return false;
+        return !this.shouldRenderOverlay() || this.shouldFollowNativeToggle();
+    }
+
     private findNativeSubtitleButton() {
         return document.querySelector<HTMLElement>('.ytp-subtitles-button');
     }
@@ -1392,6 +1437,115 @@ export class YouTubeSubtitleOverlay implements Feature {
         const button = this.findNativeSubtitleButton();
         if (!button) return null;
         return button.getAttribute('aria-pressed') === 'true';
+    }
+
+    private suppressNextNativeToggleMemoryWrite() {
+        this.nativeToggleMemorySuppressUntil = Date.now() + NATIVE_TOGGLE_MEMORY_SUPPRESS_MS;
+    }
+
+    private shouldSuppressNativeToggleMemoryWrite() {
+        return Date.now() < this.nativeToggleMemorySuppressUntil;
+    }
+
+    private async readNativeToggleMemory(): Promise<NativeSubtitleToggleMemory> {
+        try {
+            const result = await storageLocalGet<Record<string, unknown>>(NATIVE_TOGGLE_MEMORY_KEY);
+            const value = result[NATIVE_TOGGLE_MEMORY_KEY];
+            if (!isRecord(value)) return {};
+
+            const channels = isRecord(value.channels)
+                ? Object.entries(value.channels).reduce<Record<string, boolean>>((acc, [channel, enabled]) => {
+                    if (typeof enabled === 'boolean') {
+                        acc[channel] = enabled;
+                    }
+                    return acc;
+                }, {})
+                : {};
+
+            return {
+                defaultEnabled: typeof value.defaultEnabled === 'boolean'
+                    ? value.defaultEnabled
+                    : undefined,
+                channels
+            };
+        } catch {
+            return {};
+        }
+    }
+
+    private async writeNativeToggleMemory(channelKey: string | null, enabled: boolean) {
+        if (!this.shouldRememberNativeToggle()) return;
+
+        const current = await this.readNativeToggleMemory();
+        const next: NativeSubtitleToggleMemory = {
+            ...current,
+            defaultEnabled: enabled,
+            channels: { ...(current.channels ?? {}) }
+        };
+
+        if (this.config.rememberNativeToggleByChannel === true && channelKey) {
+            next.channels = {
+                ...next.channels,
+                [channelKey]: enabled
+            };
+        }
+
+        await storageLocalSet({ [NATIVE_TOGGLE_MEMORY_KEY]: next });
+    }
+
+    private async resolveRememberedNativeToggle(channelKey: string | null) {
+        if (!this.shouldRememberNativeToggle()) return null;
+
+        const memory = await this.readNativeToggleMemory();
+        if (
+            this.config.rememberNativeToggleByChannel === true
+            && channelKey
+            && typeof memory.channels?.[channelKey] === 'boolean'
+        ) {
+            return memory.channels[channelKey];
+        }
+
+        return typeof memory.defaultEnabled === 'boolean' ? memory.defaultEnabled : null;
+    }
+
+    private async restoreNativeToggleForCurrentPage() {
+        if (!this.shouldApplyNativeToggleMemory()) return;
+
+        const expectedVideoId = this.getCurrentUrlVideoId();
+        if (!expectedVideoId) return;
+
+        const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
+        if (!response?.success || !response.data) return;
+
+        const channelKey = response.data.channelKey;
+        const restoreKey = [
+            response.data.videoId,
+            channelKey ?? '',
+            this.config.rememberNativeToggleByChannel === true ? 'channel' : 'default'
+        ].join('|');
+        if (restoreKey === this.lastNativeToggleRestoreKey) return;
+
+        const remembered = await this.resolveRememberedNativeToggle(channelKey);
+        if (remembered === null) return;
+
+        const current = this.readNativeSubtitleButtonState();
+        if (current === null) return;
+        if (current === remembered) {
+            this.lastNativeToggleRestoreKey = restoreKey;
+            return;
+        }
+
+        this.suppressNextNativeToggleMemoryWrite();
+        const setResult = await requestYouTubeSubtitleSetEnabled(remembered);
+        if (setResult?.success) {
+            this.lastNativeToggleRestoreKey = restoreKey;
+            this.lastNativeSubtitleButtonState = setResult.enabled;
+            if (setResult.enabled === false && this.shouldRenderOverlay() && this.shouldFollowNativeToggle()) {
+                this.pauseOverlayForNativeToggleOff();
+            } else if (setResult.enabled === true && this.shouldRenderOverlay()) {
+                this.scheduleSync(0);
+            }
+        }
     }
 
     private shouldPauseForNativeToggleOff() {
@@ -1461,7 +1615,19 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (nextState === this.lastNativeSubtitleButtonState) return;
         this.lastNativeSubtitleButtonState = nextState;
 
-        if (!this.shouldFollowNativeToggle()) return;
+        if (
+            nextState !== null
+            && this.shouldApplyNativeToggleMemory()
+            && !this.shouldSuppressNativeToggleMemoryWrite()
+        ) {
+            const expectedVideoId = this.getCurrentUrlVideoId();
+            void requestYouTubeSubtitlePlayerData(expectedVideoId || null).then((response) => {
+                const channelKey = response?.success ? response.data?.channelKey ?? null : null;
+                return this.writeNativeToggleMemory(channelKey, nextState);
+            });
+        }
+
+        if (!this.shouldRenderOverlay() || !this.shouldFollowNativeToggle()) return;
 
         if (nextState === false) {
             this.pauseOverlayForNativeToggleOff();

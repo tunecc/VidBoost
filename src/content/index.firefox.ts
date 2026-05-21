@@ -397,7 +397,8 @@ function applyFromSettings(res: Partial<Settings>) {
     const statsSpeedConverterOn = settings.stats_speed_converter === true;
     const ytBlockNativeOn = settings.yt_config.blockNativeSeek !== false;
     const ytOriginalAudioOn = settings.yt_config.alwaysUseOriginalAudio === true;
-    const ytSubtitleOn = settings.yt_subtitle.enabled === true;
+    const ytSubtitleOn = settings.yt_subtitle.enabled === true
+        || settings.yt_subtitle.rememberNativeToggle === true;
     const ytCdnStatusOn = settings.yt_config.showCdnCountry === true;
     const ytBottomProgressOn = settings.yt_config.showBottomProgress === true;
     const bbBlockSpaceOn = settings.bb_block_space !== false;

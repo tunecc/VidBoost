@@ -7,6 +7,8 @@ import {
     YT_SUBTITLE_OVERLAY_PAGE_SOURCE,
     YT_SUBTITLE_OVERLAY_PLAYER_DATA_REQUEST,
     YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE,
+    YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST,
+    YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
     type YouTubeSubtitleAudioCaptionTrack,
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
@@ -19,6 +21,7 @@ type BridgeRequest = {
     type: string;
     requestId: string;
     expectedVideoId?: string | null;
+    enabled?: boolean;
 };
 
 type YouTubePlayerElement = HTMLElement & {
@@ -144,6 +147,40 @@ function extractSelectedTrack(value: unknown): YouTubeSubtitleSelectedTrack {
     };
 }
 
+function normalizeChannelKey(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    try {
+        return decodeURIComponent(trimmed).toLowerCase();
+    } catch {
+        return trimmed.toLowerCase();
+    }
+}
+
+function extractChannelKey(playerResponse: any): string | null {
+    const channelId = normalizeChannelKey(playerResponse?.videoDetails?.channelId);
+    if (channelId) return channelId;
+
+    const ownerProfileUrl = playerResponse?.microformat?.playerMicroformatRenderer?.ownerProfileUrl;
+    if (typeof ownerProfileUrl !== 'string') return null;
+
+    try {
+        const url = ownerProfileUrl.startsWith('http')
+            ? new URL(ownerProfileUrl)
+            : new URL(ownerProfileUrl, location.origin);
+        const pathname = url.pathname.replace(/\/+$/g, '');
+        const channelMatch = pathname.match(/^\/channel\/([^/]+)$/i);
+        if (channelMatch) return normalizeChannelKey(channelMatch[1]);
+        const handleMatch = pathname.match(/^\/@([^/]+)$/i);
+        if (handleMatch) return normalizeChannelKey(`@${handleMatch[1]}`);
+        return normalizeChannelKey(pathname.replace(/^\/+/, ''));
+    } catch {
+        return normalizeChannelKey(ownerProfileUrl.replace(/^https?:\/\/(?:www\.)?youtube\.com\//i, ''));
+    }
+}
+
 function findYoutubePlayer(): YouTubePlayerElement | null {
     return document.querySelector<HTMLElement>(
         '#movie_player.html5-video-player, ytd-player #movie_player, #movie_player'
@@ -161,6 +198,7 @@ function getPlayerData(expectedVideoId: string | null): YouTubeSubtitlePlayerDat
 
     return {
         videoId,
+        channelKey: extractChannelKey(playerResponse),
         captionTracks: normalizeTracks(
             playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
         ),
@@ -173,26 +211,41 @@ function getPlayerData(expectedVideoId: string | null): YouTubeSubtitlePlayerDat
     };
 }
 
-function ensureSubtitlesEnabled() {
+function readSubtitlesEnabled() {
     const button = document.querySelector<HTMLElement>('.ytp-subtitles-button');
-    if (!button) return false;
+    if (!button) return null;
+    return button.getAttribute('aria-pressed') === 'true';
+}
 
-    if (button.getAttribute('aria-pressed') === 'true') {
-        return true;
+function setSubtitlesEnabled(enabled: boolean) {
+    const button = document.querySelector<HTMLElement>('.ytp-subtitles-button');
+    if (!button) return { success: false, enabled: false };
+
+    let current = readSubtitlesEnabled();
+    if (current === enabled) {
+        return { success: true, enabled: current };
     }
 
     const player = findYoutubePlayer();
     if (typeof player?.toggleSubtitles === 'function') {
         try {
             player.toggleSubtitles();
-            return true;
         } catch {
-            return false;
+            return { success: false, enabled: current ?? false };
         }
+    } else {
+        button.click();
     }
 
-    button.click();
-    return true;
+    current = readSubtitlesEnabled();
+    return {
+        success: current === enabled,
+        enabled: current ?? false
+    };
+}
+
+function ensureSubtitlesEnabled() {
+    return setSubtitlesEnabled(true).success;
 }
 
 function postResponse(message: Record<string, unknown>) {
@@ -247,6 +300,17 @@ function handleMessage(event: MessageEvent<unknown>) {
             requestId: request.requestId,
             success: true,
             enabled: ensureSubtitlesEnabled()
+        });
+        return;
+    }
+
+    if (request.type === YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST) {
+        const result = setSubtitlesEnabled(request.enabled === true);
+        postResponse({
+            type: YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
+            requestId: request.requestId,
+            success: result.success,
+            enabled: result.enabled
         });
     }
 }

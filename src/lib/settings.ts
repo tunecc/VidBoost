@@ -81,6 +81,8 @@ export type YTSubtitleStyle = {
 export type YTSubtitleConfig = {
     enabled: boolean;
     followNativeToggle: boolean;
+    rememberNativeToggle: boolean;
+    rememberNativeToggleByChannel: boolean;
     position: YTSubtitlePosition;
     style: YTSubtitleStyle;
 };
@@ -240,6 +242,8 @@ export const DEFAULT_SETTINGS: Settings = {
     yt_subtitle: {
         enabled: false,
         followNativeToggle: true,
+        rememberNativeToggle: false,
+        rememberNativeToggleByChannel: true,
         position: {
             percent: 10,
             anchor: 'bottom'
@@ -469,6 +473,12 @@ export function cloneYTSubtitleConfig(
         followNativeToggle: typeof config?.followNativeToggle === 'boolean'
             ? config.followNativeToggle
             : fallback.followNativeToggle,
+        rememberNativeToggle: typeof config?.rememberNativeToggle === 'boolean'
+            ? config.rememberNativeToggle
+            : fallback.rememberNativeToggle,
+        rememberNativeToggleByChannel: typeof config?.rememberNativeToggleByChannel === 'boolean'
+            ? config.rememberNativeToggleByChannel
+            : fallback.rememberNativeToggleByChannel,
         position: cloneYTSubtitlePosition(config?.position),
         style: cloneYTSubtitleStyle(config?.style)
     };

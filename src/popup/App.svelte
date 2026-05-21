@@ -77,8 +77,11 @@
     DEFAULT_SETTINGS.yt_subtitle,
   );
   let ytSubtitleEnabled = ytSubtitleConfig.enabled;
+  let ytSubtitleRememberOpen = false;
   let ytSubtitleOpen = false;
   let ytSubtitleStyleDisabled = !globalEnabled || !ytSubtitleEnabled;
+  let ytSubtitleRememberEnabled = false;
+  let ytSubtitleRememberMode: "global" | "channel" = "global";
   let ytSubtitleFontAssets: SubtitleFontAssetSummary[] = [];
   let ytSubtitleManagedImportedFontId = "";
   let ytSubtitleFontInputRef: HTMLInputElement | null = null;
@@ -823,6 +826,12 @@
   // Helper
   $: t = (key: I18nKey) => i18n(key, language);
   $: ytSubtitleStyleDisabled = !globalEnabled || !ytSubtitleEnabled;
+  $: ytSubtitleRememberEnabled =
+    ytSubtitleConfig.rememberNativeToggle === true;
+  $: ytSubtitleRememberMode =
+    ytSubtitleConfig.rememberNativeToggleByChannel === true
+      ? "channel"
+      : "global";
   $: ytSubtitleSelectedImportedFontAsset = getYtSubtitleCurrentImportedFontAsset(
     ytSubtitleConfig.style,
   );
@@ -963,6 +972,20 @@
       ...ytSubtitleConfig,
       enabled: ytSubtitleEnabled,
       ...patch,
+    });
+  }
+
+  function updateYtSubtitleRememberEnabled(enabled: boolean) {
+    updateYtSubtitleConfig({
+      rememberNativeToggle: enabled,
+      rememberNativeToggleByChannel: ytSubtitleConfig.rememberNativeToggleByChannel,
+    });
+  }
+
+  function updateYtSubtitleRememberMode(value: string) {
+    updateYtSubtitleConfig({
+      rememberNativeToggle: true,
+      rememberNativeToggleByChannel: value === "channel",
     });
   }
 
@@ -1760,6 +1783,67 @@
               </svg>
             </div>
           </ToggleItem>
+
+          <AccordionItem
+            title={t("yt_subtitle_remember_native_toggle")}
+            desc={t("yt_subtitle_remember_native_toggle_desc")}
+            iconColor="red"
+            isOpen={ytSubtitleRememberOpen}
+            masterChecked={ytSubtitleRememberEnabled}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (ytSubtitleRememberOpen = !ytSubtitleRememberOpen)}
+            onToggleMaster={() =>
+              globalEnabled &&
+              updateYtSubtitleRememberEnabled(!ytSubtitleRememberEnabled)}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 11h3M13 11h3M8 14h5"
+                />
+              </svg>
+            </div>
+            <div slot="content" class="space-y-3 px-1">
+              <label class="block space-y-2">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
+                    {t("yt_subtitle_remember_native_toggle_mode")}
+                  </span>
+                </div>
+                <select
+                  class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={ytSubtitleRememberMode}
+                  disabled={!globalEnabled || !ytSubtitleRememberEnabled}
+                  on:change={(event) =>
+                    updateYtSubtitleRememberMode(readTextValue(event))}
+                >
+                  <option value="global">
+                    {t("yt_subtitle_remember_native_toggle_mode_global")}
+                  </option>
+                  <option value="channel">
+                    {t("yt_subtitle_remember_native_toggle_mode_channel")}
+                  </option>
+                </select>
+              </label>
+            </div>
+          </AccordionItem>
 
           <AccordionItem
             title={t("yt_bottom_progress")}

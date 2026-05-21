@@ -28,6 +28,7 @@ export type YouTubeSubtitleSelectedTrack = {
 
 export type YouTubeSubtitlePlayerData = {
     videoId: string;
+    channelKey: string | null;
     captionTracks: YouTubeSubtitleCaptionTrack[];
     audioCaptionTracks: YouTubeSubtitleAudioCaptionTrack[];
     device: string | null;
@@ -70,6 +71,15 @@ export type YouTubeSubtitleEnsureEnabledResponse = {
     enabled: boolean;
 };
 
+export type YouTubeSubtitleSetEnabledResponse = {
+    source: typeof YT_SUBTITLE_OVERLAY_PAGE_SOURCE;
+    channel: typeof YT_SUBTITLE_OVERLAY_BRIDGE_CHANNEL;
+    type: typeof YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE;
+    requestId: string;
+    success: boolean;
+    enabled: boolean;
+};
+
 export const YT_SUBTITLE_OVERLAY_PAGE_SCRIPT_PATH = 'assets/yt-subtitle-overlay.page.js';
 export const YT_SUBTITLE_OVERLAY_INJECTED_SCRIPT_ID = 'vb-yt-subtitle-overlay';
 export const YT_SUBTITLE_OVERLAY_BRIDGE_CHANNEL = 'vb:yt-subtitle-overlay';
@@ -80,6 +90,8 @@ export const YT_SUBTITLE_OVERLAY_PLAYER_DATA_REQUEST = 'player-data-request';
 export const YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE = 'player-data-response';
 export const YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_REQUEST = 'ensure-subtitles-request';
 export const YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_RESPONSE = 'ensure-subtitles-response';
+export const YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST = 'set-subtitles-request';
+export const YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE = 'set-subtitles-response';
 
 export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPageConfig = {
     enabled: false

@@ -8,13 +8,19 @@ import {
     YT_SUBTITLE_OVERLAY_PAGE_SOURCE,
     YT_SUBTITLE_OVERLAY_PLAYER_DATA_REQUEST,
     YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE,
+    YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST,
+    YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
     type YouTubeSubtitleEnsureEnabledResponse,
-    type YouTubeSubtitlePlayerDataResponse
+    type YouTubeSubtitlePlayerDataResponse,
+    type YouTubeSubtitleSetEnabledResponse
 } from './subtitleOverlay.shared';
 import { isPageBridgeMessageEvent } from './bridge';
 import { getRuntimeUrl, isFirefoxExtensionRuntime } from '../../lib/webext';
 
-type BridgeResponse = YouTubeSubtitlePlayerDataResponse | YouTubeSubtitleEnsureEnabledResponse;
+type BridgeResponse =
+    | YouTubeSubtitlePlayerDataResponse
+    | YouTubeSubtitleEnsureEnabledResponse
+    | YouTubeSubtitleSetEnabledResponse;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
@@ -132,5 +138,13 @@ export async function requestYouTubeSubtitleEnsureEnabled() {
     return await postBridgeRequest<YouTubeSubtitleEnsureEnabledResponse>(
         YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_REQUEST,
         YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_RESPONSE
+    );
+}
+
+export async function requestYouTubeSubtitleSetEnabled(enabled: boolean) {
+    return await postBridgeRequest<YouTubeSubtitleSetEnabledResponse>(
+        YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST,
+        YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
+        { enabled }
     );
 }
