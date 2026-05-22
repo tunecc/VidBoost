@@ -19,8 +19,13 @@
         ? 'bg-indigo-500/5 dark:bg-indigo-500/10'
         : 'hover:bg-black/5 dark:hover:bg-white/10'}"
 >
-    <div class="flex items-center justify-between p-2">
-        <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 p-1.5">
+        <button
+            type="button"
+            class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 text-left outline-none transition-colors hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-400/25 dark:hover:bg-white/[0.04]"
+            aria-expanded={isOpen}
+            on:click={onToggleOpen}
+        >
             <!-- Icon -->
             <div
                 class="w-8 h-8 shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
@@ -57,53 +62,50 @@
                 <slot name="icon"></slot>
             </div>
 
-            <div>
+            <div class="min-w-0">
                 <h4
-                    class="text-sm font-medium text-gray-800 dark:text-white/90"
+                    class="truncate text-sm font-medium text-gray-800 dark:text-white/90"
                 >
                     {title}
                 </h4>
-                <p class="text-[10px] text-gray-500 dark:text-white/50">
+                <p class="truncate text-[10px] text-gray-500 dark:text-white/50">
                     {desc}
                 </p>
             </div>
-        </div>
-        <div class="flex items-center gap-2">
-            <button
-                class="p-1.5 text-gray-400 hover:text-gray-900 dark:text-white/40 dark:hover:text-white rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer outline-none"
-                title="Settings"
-                on:click={onToggleOpen}
+            <svg
+                class="ml-auto w-4 h-4 shrink-0 text-gray-400 dark:text-white/50 transition-transform duration-200"
+                class:rotate-180={isOpen}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                /></svg
             >
-                <svg
-                    class="w-4 h-4 transition-transform duration-200"
-                    class:rotate-180={isOpen}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    ><path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                    /></svg
-                >
-            </button>
+        </button>
 
+        <div class="flex items-center gap-2">
             <!-- Mini Toggle for Master Switch of this accordion -->
             <div
                 class="relative inline-flex h-4 w-7 items-center cursor-pointer outline-none"
                 class:opacity-50={disabled}
                 class:grayscale={disabled}
                 role="button"
-                tabindex="0"
+                tabindex={disabled ? -1 : 0}
+                aria-disabled={disabled}
                 on:click={(e) => {
                     e.stopPropagation();
                     !disabled && onToggleMaster();
                 }}
                 on:keydown={(e) => {
+                    if (disabled) return;
                     if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
                         e.stopPropagation();
-                        !disabled && onToggleMaster();
+                        onToggleMaster();
                     }
                 }}
             >
@@ -133,7 +135,7 @@
     </div>
 
     {#if isOpen}
-        <div class="px-2 pb-2 pl-12 space-y-2" transition:slide|local>
+        <div class="px-2 pb-2 space-y-2" transition:slide|local>
             <slot name="content" />
         </div>
     {/if}

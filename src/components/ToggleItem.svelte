@@ -16,10 +16,15 @@
   class:opacity-60={disabled}
   class:grayscale={disabled || !checked}
   role="button"
-  tabindex="0"
-  on:click={onClick}
+  tabindex={disabled ? -1 : 0}
+  aria-disabled={disabled}
+  on:click={() => !disabled && onClick()}
   on:keydown={(e) => {
-    if (e.key === "Enter" || e.key === " ") onClick();
+    if (disabled) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
   }}
 >
   <div class="flex items-center gap-3">

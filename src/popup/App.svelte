@@ -310,14 +310,14 @@
 
   function getBilibiliSubtitleStatusClass() {
     if (bbSubtitleAddCurrentTone === "success") {
-      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/12 dark:text-emerald-300";
+      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/20 dark:text-emerald-300";
     }
 
     if (bbSubtitleAddCurrentTone === "error") {
-      return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/12 dark:text-rose-300";
+      return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/20 dark:text-rose-300";
     }
 
-    return "border-black/6 bg-black/[0.03] text-gray-600 dark:border-white/8 dark:bg-white/[0.04] dark:text-white/60";
+    return "border-black/5 bg-black/[0.03] text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60";
   }
 
   function showBilibiliSubtitleStatus(
@@ -481,6 +481,18 @@
       bbQualityAddCurrentStatus = "";
       bbQualityAddCurrentStatusTimer = null;
     }, autoHideMs);
+  }
+
+  function getBilibiliQualityStatusClass() {
+    if (bbQualityAddCurrentTone === "success") {
+      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/20 dark:text-emerald-300";
+    }
+
+    if (bbQualityAddCurrentTone === "error") {
+      return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/20 dark:text-rose-300";
+    }
+
+    return "border-black/5 bg-black/[0.03] text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60";
   }
 
   function appendBilibiliQualityTargets(values: string[]) {
@@ -706,23 +718,34 @@
     bbCdnNode = event.detail.bbCdnNode;
   }
 
+  function normalizeMemberTagList(items: string[]) {
+    return [
+      ...new Set(
+        items
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0),
+      ),
+    ];
+  }
+
+  function splitMemberTagInput(input: string) {
+    return normalizeMemberTagList(input.split(/[\n,，;；|｜]+/));
+  }
+
   function addTags(mode: "block" | "allow", input: string) {
-    if (!input.trim()) return;
-    const items = input
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const items = splitMemberTagInput(input);
+    if (!items.length) return;
     if (mode === "block") {
-      ytMemberBlocklist = [...new Set([...ytMemberBlocklist, ...items])];
+      ytMemberBlocklist = normalizeMemberTagList([...ytMemberBlocklist, ...items]);
       newBlockItem = "";
     } else {
-      ytMemberAllowlist = [...new Set([...ytMemberAllowlist, ...items])];
+      ytMemberAllowlist = normalizeMemberTagList([...ytMemberAllowlist, ...items]);
       newAllowItem = "";
     }
   }
 
   function handleTagKeyDown(e: KeyboardEvent, mode: "block" | "allow") {
-    if (e.key === "Enter" || e.key === ",") {
+    if (e.key === "Enter" || e.key === "," || e.key === "，") {
       e.preventDefault();
       const val = mode === "block" ? newBlockItem : newAllowItem;
       addTags(mode, val);
@@ -731,9 +754,17 @@
       if (val === "") {
         e.preventDefault();
         if (mode === "block" && ytMemberBlocklist.length > 0) {
-          ytMemberBlocklist = ytMemberBlocklist.slice(0, -1);
+          startEditingTag(
+            "block",
+            ytMemberBlocklist.length - 1,
+            ytMemberBlocklist[ytMemberBlocklist.length - 1],
+          );
         } else if (mode === "allow" && ytMemberAllowlist.length > 0) {
-          ytMemberAllowlist = ytMemberAllowlist.slice(0, -1);
+          startEditingTag(
+            "allow",
+            ytMemberAllowlist.length - 1,
+            ytMemberAllowlist[ytMemberAllowlist.length - 1],
+          );
         }
       }
     }
@@ -784,10 +815,10 @@
       // Update the tag
       if (mode === "block") {
         ytMemberBlocklist[index] = trimmed;
-        ytMemberBlocklist = [...ytMemberBlocklist];
+        ytMemberBlocklist = normalizeMemberTagList(ytMemberBlocklist);
       } else {
         ytMemberAllowlist[index] = trimmed;
-        ytMemberAllowlist = [...ytMemberAllowlist];
+        ytMemberAllowlist = normalizeMemberTagList(ytMemberAllowlist);
       }
     }
     editingTag = null;
@@ -1017,6 +1048,12 @@
   function updateYtSubtitleManagedImportedFont(value: string) {
     const importedFontId = value.trim();
     ytSubtitleManagedImportedFontId = importedFontId;
+    if (!importedFontId) return;
+
+    updateYtSubtitleStyle({
+      fontFamilyPreset: "imported",
+      importedFontId,
+    });
   }
 
   function createYtSubtitleEffect(type: YTSubtitleEffectType): YTSubtitleEffect {
@@ -1881,32 +1918,40 @@
                 />
               </svg>
             </div>
-            <div slot="content" class="space-y-3 px-1">
-              <label class="block space-y-2">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                    {t("yt_bottom_progress_height")}
-                  </span>
-                  <span class="text-[11px] text-gray-500 dark:text-white/55">
-                    {ytBottomProgressHeight}px
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="20"
-                  step="1"
-                  value={ytBottomProgressHeight}
-                  class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!globalEnabled || !ytBottomProgressEnabled}
-                  on:input={(event) =>
-                    (ytBottomProgressHeight = clampNumber(
-                      readInputNumber(event, ytBottomProgressHeight),
-                      1,
-                      20,
-                    ))}
-                />
-              </label>
+            <div slot="content" class="space-y-2">
+              <div class="settings-panel">
+                <label class="settings-field settings-field-wide block">
+                  <div class="setting-line">
+                    <span class="setting-label">{t("yt_bottom_progress_height")}</span>
+                    <span class="setting-value">{ytBottomProgressHeight}px</span>
+                  </div>
+                  <div class="settings-progress-preview mt-2">
+                    <div class="settings-progress-frame">
+                      <div
+                        class="settings-progress-track"
+                        style={`height: ${ytBottomProgressHeight}px`}
+                      >
+                        <div class="settings-progress-fill"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="1"
+                    value={ytBottomProgressHeight}
+                    class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!globalEnabled || !ytBottomProgressEnabled}
+                    on:input={(event) =>
+                      (ytBottomProgressHeight = clampNumber(
+                        readInputNumber(event, ytBottomProgressHeight),
+                        1,
+                        20,
+                      ))}
+                  />
+                </label>
+              </div>
             </div>
           </AccordionItem>
 
@@ -1945,55 +1990,51 @@
                 />
               </svg>
             </div>
-            <div slot="content" class="space-y-3 px-1">
-              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
-                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
-                  {t("yt_subtitle_basic")}
+            <div slot="content" class="space-y-2">
+              <div class="settings-panel">
+                <div class="settings-panel-header">
+                  <div class="settings-panel-title">{t("yt_subtitle_basic")}</div>
                 </div>
 
-                <label class="flex items-start justify-between gap-3 rounded-xl border border-black/5 bg-white/70 px-3 py-2.5 dark:border-white/8 dark:bg-white/[0.03]">
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <div class="text-[12px] font-medium text-gray-800 dark:text-white/90">
-                        {t("yt_subtitle_follow_native_toggle")}
-                      </div>
+                <div class="settings-field setting-line">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="setting-label">{t("yt_subtitle_follow_native_toggle")}</span>
 
-                      <div class="relative flex shrink-0 items-center">
+                    <div class="relative flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        aria-controls="yt-subtitle-follow-native-tooltip"
+                        aria-expanded={ytSubtitleFollowNativeTooltipOpen}
+                        class="relative z-50 flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-black/5 text-[10px] font-bold text-gray-400 outline-none transition-colors hover:bg-black/10 hover:text-gray-600 focus:bg-cyan-500/10 focus:text-cyan-600 dark:bg-white/10 dark:text-white/40 dark:hover:bg-white/20 dark:hover:text-white/70 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300"
+                        on:click|stopPropagation={toggleYtSubtitleFollowNativeTooltip}
+                      >
+                        ?
+                      </button>
+
+                      {#if ytSubtitleFollowNativeTooltipOpen}
+                        <div
+                          id="yt-subtitle-follow-native-tooltip"
+                          role="tooltip"
+                          class="absolute left-1/2 top-full z-50 mt-2 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                          in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                          out:fade|local={{ duration: 120 }}
+                        >
+                          {t("yt_subtitle_follow_native_toggle_desc")}
+                        </div>
+
                         <button
                           type="button"
-                          aria-controls="yt-subtitle-follow-native-tooltip"
-                          aria-expanded={ytSubtitleFollowNativeTooltipOpen}
-                          class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
-                          on:click|stopPropagation={toggleYtSubtitleFollowNativeTooltip}
-                        >
-                          ?
-                        </button>
-
-                        {#if ytSubtitleFollowNativeTooltipOpen}
-                          <div
-                            id="yt-subtitle-follow-native-tooltip"
-                            role="tooltip"
-                            class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
-                            in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
-                            out:fade|local={{ duration: 120 }}
-                          >
-                            {t("yt_subtitle_follow_native_toggle_desc")}
-                          </div>
-
-                          <button
-                            type="button"
-                            class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
-                            aria-label={t("yt_subtitle_follow_native_toggle_desc")}
-                            on:click={closeYtSubtitleFollowNativeTooltip}
-                          ></button>
-                        {/if}
-                      </div>
+                          class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
+                          aria-label={t("yt_subtitle_follow_native_toggle_desc")}
+                          on:click={closeYtSubtitleFollowNativeTooltip}
+                        ></button>
+                      {/if}
                     </div>
                   </div>
 
                   <button
                     type="button"
-                    class={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${
+                    class={`relative h-6 w-11 shrink-0 rounded-full transition ${
                       ytSubtitleConfig.followNativeToggle
                         ? "bg-red-500"
                         : "bg-gray-300 dark:bg-white/15"
@@ -2012,477 +2053,404 @@
                       }`}
                     />
                   </button>
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_family")}
-                    </span>
-                  </div>
-                  <select
-                    class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
-                    value={getYtSubtitleFontSelectValue(ytSubtitleConfig)}
-                    disabled={ytSubtitleStyleDisabled}
-                    on:change={(event) =>
-                      updateYtSubtitleFontSelection(
-                        readTextValue(event),
-                      )}
-                  >
-                    <option value="default">{t("yt_subtitle_font_default")}</option>
-                    <option value="system-sans">{t("yt_subtitle_font_system_sans")}</option>
-                    <option value="system-serif">{t("yt_subtitle_font_system_serif")}</option>
-                    <option value="rounded">{t("yt_subtitle_font_rounded")}</option>
-                    <option value="monospace-sans">{t("yt_subtitle_font_monospace_sans")}</option>
-                    <option value="monospace-serif">{t("yt_subtitle_font_monospace_serif")}</option>
-                    <option value="casual">{t("yt_subtitle_font_casual")}</option>
-                    <option value="cursive">{t("yt_subtitle_font_cursive")}</option>
-                    <option value="small-caps">{t("yt_subtitle_font_small_caps")}</option>
-                    {#if ytSubtitleFontAssets.length > 0}
-                      <optgroup label={t("yt_subtitle_font_imported_select")}>
-                        {#each ytSubtitleFontAssets as asset}
-                          <option value={`imported:${asset.id}`}>
-                            {asset.displayName}
-                          </option>
-                        {/each}
-                      </optgroup>
-                    {/if}
-                  </select>
-
-                  {#if ytSubtitleCurrentFontCapabilities?.supportsCjk === false}
-                    <div class="text-[11px] text-amber-600 dark:text-amber-300">
-                      {t("yt_subtitle_font_cjk_fallback_hint")}
-                    </div>
-                  {/if}
-                </label>
-
-                <input
-                  bind:this={ytSubtitleFontInputRef}
-                  type="file"
-                  accept={SUBTITLE_FONT_FILE_ACCEPT}
-                  class="hidden"
-                  on:change={handleYtSubtitleFontFileChange}
-                />
-
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_import")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleFontAssets.length} {t("yt_subtitle_font_imported_count")}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={!ytSubtitleFontStoreSupported || ytSubtitleFontImporting}
-                      on:click={openYtSubtitleFontPicker}
-                    >
-                      {ytSubtitleFontImporting
-                        ? t("yt_subtitle_font_importing")
-                        : t("yt_subtitle_font_import_button")}
-                    </button>
-                    <div class="text-[11px] text-gray-500 dark:text-white/55">
-                      {t("yt_subtitle_font_import_hint")}
-                    </div>
-                  </div>
-
-                  {#if ytSubtitleFontStatus}
-                    <div
-                      class:text-emerald-600={ytSubtitleFontStatusTone === "success"}
-                      class:text-red-500={ytSubtitleFontStatusTone === "error"}
-                      class="text-[11px] text-gray-500 dark:text-white/60"
-                    >
-                      {ytSubtitleFontStatus}
-                    </div>
-                  {/if}
                 </div>
-                <div class="space-y-2 rounded-xl border border-black/5 bg-black/[0.02] px-3 py-2 dark:border-white/8 dark:bg-white/[0.03]">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_imported_select")}
-                    </div>
-                    <div class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleManagedImportedFontId
-                        ? formatFileSize(
-                            ytSubtitleFontAssets.find(
-                              (asset) => asset.id === ytSubtitleManagedImportedFontId,
-                            )?.size ?? 0,
-                          )
-                        : t("yt_subtitle_font_imported_empty")}
-                    </div>
-                  </div>
 
-                  <div class="flex items-center gap-2">
+                <div class="settings-grid mt-2">
+                  <label class="settings-field settings-field-wide space-y-2">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_font_family")}</span>
+                    </div>
                     <select
-                      class="min-w-0 flex-1 rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
-                      value={ytSubtitleManagedImportedFontId}
-                      disabled={ytSubtitleFontAssets.length === 0}
+                      class="settings-select"
+                      value={getYtSubtitleFontSelectValue(ytSubtitleConfig)}
+                      disabled={ytSubtitleStyleDisabled}
                       on:change={(event) =>
-                        updateYtSubtitleManagedImportedFont(
+                        updateYtSubtitleFontSelection(
                           readTextValue(event),
                         )}
                     >
-                      {#if ytSubtitleFontAssets.length === 0}
-                        <option value="">{t("yt_subtitle_font_imported_empty")}</option>
+                      <option value="default">{t("yt_subtitle_font_default")}</option>
+                      <option value="system-sans">{t("yt_subtitle_font_system_sans")}</option>
+                      <option value="system-serif">{t("yt_subtitle_font_system_serif")}</option>
+                      <option value="rounded">{t("yt_subtitle_font_rounded")}</option>
+                      <option value="monospace-sans">{t("yt_subtitle_font_monospace_sans")}</option>
+                      <option value="monospace-serif">{t("yt_subtitle_font_monospace_serif")}</option>
+                      <option value="casual">{t("yt_subtitle_font_casual")}</option>
+                      <option value="cursive">{t("yt_subtitle_font_cursive")}</option>
+                      <option value="small-caps">{t("yt_subtitle_font_small_caps")}</option>
+                      {#if ytSubtitleFontAssets.length > 0}
+                        <optgroup label={t("yt_subtitle_font_imported_select")}>
+                          {#each ytSubtitleFontAssets as asset}
+                            <option value={`imported:${asset.id}`}>
+                              {asset.displayName}
+                            </option>
+                          {/each}
+                        </optgroup>
                       {/if}
-                      {#each ytSubtitleFontAssets as asset}
-                        <option value={asset.id}>
-                          {asset.displayName}
-                        </option>
-                      {/each}
                     </select>
 
-                    <button
-                      type="button"
-                      class="inline-flex shrink-0 items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={!ytSubtitleManagedImportedFontId}
-                      on:click={removeSelectedYtSubtitleFont}
-                    >
-                      {t("remove_tag")}
-                    </button>
-                  </div>
-                </div>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_size")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.fontScale}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="220"
-                    step="5"
-                    value={ytSubtitleConfig.style.fontScale}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        fontScale: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.fontScale),
-                          40,
-                          220,
-                        ),
-                      })}
-                  />
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_font_weight")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.fontWeight}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="100"
-                    max="900"
-                    step="100"
-                    value={ytSubtitleConfig.style.fontWeight}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        fontWeight: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.fontWeight),
-                          100,
-                          900,
-                        ),
-                      })}
-                  />
-                </label>
-              </div>
-
-              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
-                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
-                  {t("yt_subtitle_colors")}
-                </div>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_text_color")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.color}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={ytSubtitleConfig.style.color}
-                      class="h-9 w-14 rounded-lg border border-black/8 bg-transparent p-1 dark:border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={ytSubtitleStyleDisabled}
-                      on:input={(event) =>
-                        updateYtSubtitleStyle({
-                          color: normalizeHexColor(
-                            readTextValue(event),
-                            DEFAULT_SETTINGS.yt_subtitle.style.color,
-                          ),
-                        })}
-                    />
-                    <div class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.color}
-                    </div>
-                  </div>
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_text_opacity")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.textOpacity}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={ytSubtitleConfig.style.textOpacity}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        textOpacity: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.textOpacity),
-                          0,
-                          100,
-                        ),
-                      })}
-                  />
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_background_color")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.backgroundColor}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={ytSubtitleConfig.style.backgroundColor}
-                      class="h-9 w-14 rounded-lg border border-black/8 bg-transparent p-1 dark:border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={ytSubtitleStyleDisabled}
-                      on:input={(event) =>
-                        updateYtSubtitleStyle({
-                          backgroundColor: normalizeHexColor(
-                            readTextValue(event),
-                            DEFAULT_SETTINGS.yt_subtitle.style.backgroundColor,
-                          ),
-                        })}
-                    />
-                    <div class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.backgroundColor}
-                    </div>
-                  </div>
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_background_opacity")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.backgroundOpacity}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={ytSubtitleConfig.style.backgroundOpacity}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        backgroundOpacity: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.backgroundOpacity),
-                          0,
-                          100,
-                        ),
-                      })}
-                  />
-                </label>
-
-                <label class="block space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                      {t("yt_subtitle_background_radius")}
-                    </span>
-                    <span class="text-[11px] text-gray-500 dark:text-white/55">
-                      {ytSubtitleConfig.style.borderRadius}px
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    step="1"
-                    value={ytSubtitleConfig.style.borderRadius}
-                    class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={ytSubtitleStyleDisabled}
-                    on:input={(event) =>
-                      updateYtSubtitleStyle({
-                        borderRadius: clampNumber(
-                          readInputNumber(event, ytSubtitleConfig.style.borderRadius),
-                          0,
-                          20,
-                        ),
-                      })}
-                  />
-                </label>
-              </div>
-
-              <div class="rounded-2xl border border-black/5 bg-black/[0.02] p-3 space-y-3 dark:border-white/8 dark:bg-white/[0.03]">
-                <div class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/55">
-                  {t("yt_subtitle_effects")}
-                </div>
-
-                {#if ytSubtitleConfig.style.effects.length === 0}
-                  <div class="space-y-3 rounded-xl border border-dashed border-black/8 bg-white/40 px-3 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-                    <div class="text-[11px] text-gray-500 dark:text-white/55">
-                      {t("yt_subtitle_effect_empty")}
-                    </div>
-                    <button
-                      type="button"
-                      class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={ytSubtitleStyleDisabled || !canAddYtSubtitleEffect()}
-                      on:click={addYtSubtitleEffect}
-                    >
-                      {t("yt_subtitle_add_effect")}
-                    </button>
-                  </div>
-                {/if}
-
-                {#each ytSubtitleConfig.style.effects as effect, effectIndex (effect.type)}
-                  <div class="space-y-3 rounded-xl border border-black/8 bg-white/40 px-3 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                        {effectIndex + 1}. {t(getYtSubtitleEffectTypeNameKey(effect.type))}
+                    {#if ytSubtitleCurrentFontCapabilities?.supportsCjk === false}
+                      <div class="text-[11px] text-amber-600 dark:text-amber-300">
+                        {t("yt_subtitle_font_cjk_fallback_hint")}
                       </div>
+                    {/if}
+                  </label>
+
+                  <div class="settings-field settings-field-wide space-y-2">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_font_import")}</span>
+                      <span class="setting-value">
+                        {ytSubtitleFontAssets.length} {t("yt_subtitle_font_imported_count")}
+                      </span>
+                    </div>
+
+                    <input
+                      bind:this={ytSubtitleFontInputRef}
+                      type="file"
+                      accept={SUBTITLE_FONT_FILE_ACCEPT}
+                      class="hidden"
+                      on:change={handleYtSubtitleFontFileChange}
+                    />
+
+                    <div class="grid grid-cols-[minmax(0,1fr),auto] gap-2">
+                      <select
+                        class="settings-select"
+                        value={ytSubtitleManagedImportedFontId}
+                        disabled={ytSubtitleFontAssets.length === 0}
+                        on:change={(event) =>
+                          updateYtSubtitleManagedImportedFont(
+                            readTextValue(event),
+                          )}
+                      >
+                        {#if ytSubtitleFontAssets.length === 0}
+                          <option value="">{t("yt_subtitle_font_imported_empty")}</option>
+                        {/if}
+                        {#each ytSubtitleFontAssets as asset}
+                          <option value={asset.id}>
+                            {asset.displayName}
+                          </option>
+                        {/each}
+                      </select>
+
                       <button
                         type="button"
-                        class="inline-flex items-center justify-center rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={ytSubtitleStyleDisabled}
-                        on:click={() => removeYtSubtitleEffect(effectIndex)}
+                        class="settings-button"
+                        disabled={!ytSubtitleFontStoreSupported || ytSubtitleFontImporting}
+                        on:click={openYtSubtitleFontPicker}
+                      >
+                        {ytSubtitleFontImporting
+                          ? t("yt_subtitle_font_importing")
+                          : t("yt_subtitle_font_import_button")}
+                      </button>
+                    </div>
+
+                    <div class="setting-line">
+                      <span class="min-w-0 truncate text-[10.5px] text-gray-500 dark:text-white/50">
+                        {ytSubtitleManagedImportedFontId
+                          ? formatFileSize(
+                              ytSubtitleFontAssets.find(
+                                (asset) => asset.id === ytSubtitleManagedImportedFontId,
+                              )?.size ?? 0,
+                            )
+                          : t("yt_subtitle_font_import_hint")}
+                      </span>
+                      <button
+                        type="button"
+                        class="settings-button settings-button-danger min-h-0 px-2 py-1 text-[11px]"
+                        disabled={!ytSubtitleManagedImportedFontId}
+                        on:click={removeSelectedYtSubtitleFont}
                       >
                         {t("remove_tag")}
                       </button>
                     </div>
 
-                    <label class="block space-y-2">
-                      <div class="flex items-center justify-between gap-3">
-                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                          {t("yt_subtitle_effect_type")}
-                        </span>
-                      </div>
-                      <select
-                        class="w-full rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 disabled:opacity-50 disabled:cursor-not-allowed"
-                        value={effect.type}
-                        disabled={ytSubtitleStyleDisabled}
-                        on:change={(event) =>
-                          updateYtSubtitleEffectType(
-                            effectIndex,
-                            readTextValue(event),
-                          )}
+                    {#if ytSubtitleFontStatus}
+                      <div
+                        class:text-emerald-600={ytSubtitleFontStatusTone === "success"}
+                        class:text-red-500={ytSubtitleFontStatusTone === "error"}
+                        class="text-[11px] text-gray-500 dark:text-white/60"
                       >
-                        {#each getAvailableYtSubtitleEffectTypes(effectIndex) as effectType}
-                          <option value={effectType}>
-                            {t(getYtSubtitleEffectTypeNameKey(effectType))}
-                          </option>
-                        {/each}
-                      </select>
-                    </label>
-
-                    <label class="block space-y-2">
-                      <div class="flex items-center justify-between gap-3">
-                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                          {t(getYtSubtitleEffectSizeLabel(effect.type))}
-                        </span>
-                        <span class="text-[11px] text-gray-500 dark:text-white/55">
-                          {formatSliderNumber(effect.size)}px
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="6"
-                        step="0.5"
-                        value={effect.size}
-                        class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={ytSubtitleStyleDisabled}
-                        on:input={(event) =>
-                          updateYtSubtitleEffect(effectIndex, {
-                            size: clampNumber(
-                              readInputNumber(event, effect.size),
-                              0,
-                              6,
-                            ),
-                          })}
-                      />
-                    </label>
-
-                    <label class="block space-y-2">
-                      <div class="flex items-center justify-between gap-3">
-                        <span class="text-[11px] font-medium text-gray-700 dark:text-white/80">
-                          {t(getYtSubtitleEffectStrengthLabel(effect.type))}
-                        </span>
-                        <span class="text-[11px] text-gray-500 dark:text-white/55">
-                          {effect.strength}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={effect.strength}
-                        class="w-full accent-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={ytSubtitleStyleDisabled}
-                        on:input={(event) =>
-                          updateYtSubtitleEffect(effectIndex, {
-                            strength: clampNumber(
-                              readInputNumber(event, effect.strength),
-                              0,
-                              100,
-                            ),
-                          })}
-                      />
-                    </label>
-
-                    {#if effectIndex === ytSubtitleConfig.style.effects.length - 1}
-                      <div class="flex justify-end">
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center rounded-xl border border-black/8 bg-white/80 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:border-red-400/60 dark:hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={ytSubtitleStyleDisabled || !canAddYtSubtitleEffect()}
-                          on:click={addYtSubtitleEffect}
-                        >
-                          {t("yt_subtitle_add_effect")}
-                        </button>
+                        {ytSubtitleFontStatus}
                       </div>
                     {/if}
                   </div>
-                {/each}
 
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_font_size")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.fontScale}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="40"
+                      max="220"
+                      step="5"
+                      value={ytSubtitleConfig.style.fontScale}
+                      class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          fontScale: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.fontScale),
+                            40,
+                            220,
+                          ),
+                        })}
+                    />
+                  </label>
+
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_font_weight")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.fontWeight}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="900"
+                      step="100"
+                      value={ytSubtitleConfig.style.fontWeight}
+                      class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          fontWeight: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.fontWeight),
+                            100,
+                            900,
+                          ),
+                        })}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings-panel">
+                <div class="settings-panel-header">
+                  <div class="settings-panel-title">{t("yt_subtitle_colors")}</div>
+                </div>
+
+                <div class="settings-grid">
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_text_color")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.color}</span>
+                    </div>
+                    <div class="settings-color-row">
+                      <input
+                        type="color"
+                        value={ytSubtitleConfig.style.color}
+                        class="settings-color-input disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={ytSubtitleStyleDisabled}
+                        on:input={(event) =>
+                          updateYtSubtitleStyle({
+                            color: normalizeHexColor(
+                              readTextValue(event),
+                              DEFAULT_SETTINGS.yt_subtitle.style.color,
+                            ),
+                          })}
+                      />
+                    </div>
+                  </label>
+
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_text_opacity")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.textOpacity}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={ytSubtitleConfig.style.textOpacity}
+                      class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          textOpacity: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.textOpacity),
+                            0,
+                            100,
+                          ),
+                        })}
+                    />
+                  </label>
+
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_background_color")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.backgroundColor}</span>
+                    </div>
+                    <div class="settings-color-row">
+                      <input
+                        type="color"
+                        value={ytSubtitleConfig.style.backgroundColor}
+                        class="settings-color-input disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={ytSubtitleStyleDisabled}
+                        on:input={(event) =>
+                          updateYtSubtitleStyle({
+                            backgroundColor: normalizeHexColor(
+                              readTextValue(event),
+                              DEFAULT_SETTINGS.yt_subtitle.style.backgroundColor,
+                            ),
+                          })}
+                      />
+                    </div>
+                  </label>
+
+                  <label class="settings-field">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_background_opacity")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.backgroundOpacity}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={ytSubtitleConfig.style.backgroundOpacity}
+                      class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          backgroundOpacity: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.backgroundOpacity),
+                            0,
+                            100,
+                          ),
+                        })}
+                    />
+                  </label>
+
+                  <label class="settings-field settings-field-wide">
+                    <div class="setting-line">
+                      <span class="setting-label">{t("yt_subtitle_background_radius")}</span>
+                      <span class="setting-value">{ytSubtitleConfig.style.borderRadius}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      step="1"
+                      value={ytSubtitleConfig.style.borderRadius}
+                      class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={ytSubtitleStyleDisabled}
+                      on:input={(event) =>
+                        updateYtSubtitleStyle({
+                          borderRadius: clampNumber(
+                            readInputNumber(event, ytSubtitleConfig.style.borderRadius),
+                            0,
+                            20,
+                          ),
+                        })}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings-panel">
+                <div class="settings-panel-header">
+                  <div class="settings-panel-title">{t("yt_subtitle_effects")}</div>
+                  <button
+                    type="button"
+                    class="settings-button min-h-0 px-2 py-1 text-[11px]"
+                    disabled={ytSubtitleStyleDisabled || !canAddYtSubtitleEffect()}
+                    on:click={addYtSubtitleEffect}
+                  >
+                    {t("yt_subtitle_add_effect")}
+                  </button>
+                </div>
+
+                <div class="space-y-2">
+                  {#if ytSubtitleConfig.style.effects.length === 0}
+                    <div class="rounded-xl border border-dashed border-black/10 bg-white/35 px-3 py-2 text-[11px] text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/55">
+                      {t("yt_subtitle_effect_empty")}
+                    </div>
+                  {/if}
+
+                  {#each ytSubtitleConfig.style.effects as effect, effectIndex (effect.type)}
+                    <div class="settings-field settings-field-wide space-y-2">
+                      <div class="grid grid-cols-[minmax(0,1fr),auto] gap-2">
+                        <select
+                          class="settings-select"
+                          value={effect.type}
+                          disabled={ytSubtitleStyleDisabled}
+                          on:change={(event) =>
+                            updateYtSubtitleEffectType(
+                              effectIndex,
+                              readTextValue(event),
+                            )}
+                        >
+                          {#each getAvailableYtSubtitleEffectTypes(effectIndex) as effectType}
+                            <option value={effectType}>
+                              {effectIndex + 1}. {t(getYtSubtitleEffectTypeNameKey(effectType))}
+                            </option>
+                          {/each}
+                        </select>
+
+                        <button
+                          type="button"
+                          class="settings-button settings-button-danger"
+                          disabled={ytSubtitleStyleDisabled}
+                          on:click={() => removeYtSubtitleEffect(effectIndex)}
+                        >
+                          {t("remove_tag")}
+                        </button>
+                      </div>
+
+                      <div class="settings-grid">
+                        <label class="settings-field">
+                          <div class="setting-line">
+                            <span class="setting-label">{t(getYtSubtitleEffectSizeLabel(effect.type))}</span>
+                            <span class="setting-value">{formatSliderNumber(effect.size)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="6"
+                            step="0.5"
+                            value={effect.size}
+                            class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={ytSubtitleStyleDisabled}
+                            on:input={(event) =>
+                              updateYtSubtitleEffect(effectIndex, {
+                                size: clampNumber(
+                                  readInputNumber(event, effect.size),
+                                  0,
+                                  6,
+                                ),
+                              })}
+                          />
+                        </label>
+
+                        <label class="settings-field">
+                          <div class="setting-line">
+                            <span class="setting-label">{t(getYtSubtitleEffectStrengthLabel(effect.type))}</span>
+                            <span class="setting-value">{effect.strength}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={effect.strength}
+                            class="settings-range disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={ytSubtitleStyleDisabled}
+                            on:input={(event) =>
+                              updateYtSubtitleEffect(effectIndex, {
+                                strength: clampNumber(
+                                  readInputNumber(event, effect.strength),
+                                  0,
+                                  100,
+                                ),
+                              })}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
               </div>
             </div>
           </AccordionItem>
@@ -2522,103 +2490,59 @@
                 <path d="m2 2 20 20" />
               </svg>
             </div>
-            <div slot="content" class="space-y-3 px-1">
-              <!-- Artwork-Level Elegance: Mode Slider -->
-              <div
-                class="relative p-1 bg-black/5 dark:bg-black/20 rounded-[12px] border border-black/[0.04] dark:border-white/5 w-fit mx-auto mt-2 mb-3 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.2)] isolate"
-              >
-                <div class="relative flex items-center">
-                  <!-- Animated Thumb -->
-                  <div
-                    class="absolute left-0 top-0 bottom-0 w-1/3 rounded-[10px] bg-white dark:bg-[#32363F] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] border border-black/[0.04] dark:border-white/[0.05] z-0 pointer-events-none"
-                    style="transform: translateX(calc({ytMemberBlockMode ===
-                    'all'
-                      ? 0
-                      : ytMemberBlockMode === 'blocklist'
-                        ? 1
-                        : 2} * 100%)); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);"
-                  ></div>
-
-                  <!-- Mode: All -->
+            <div slot="content" class="space-y-2">
+              <div class="settings-panel">
+                <div class="settings-segmented settings-segmented-3">
                   <button
-                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
-                    'all'
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    type="button"
+                    class={`settings-segment ${ytMemberBlockMode === "all" ? "settings-segment-active-red" : ""}`}
                     disabled={!globalEnabled || !ytMemberBlock}
                     on:click={() =>
                       globalEnabled &&
                       ytMemberBlock &&
                       (ytMemberBlockMode = "all")}
                   >
-                    <span
-                      class="active:scale-95 transition-transform duration-200 ease-out"
-                    >
-                      {t("yt_member_mode_all_short")}
-                    </span>
+                    {t("yt_member_mode_all_short")}
                   </button>
-
-                  <!-- Mode: Blocklist -->
                   <button
-                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
-                    'blocklist'
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    type="button"
+                    class={`settings-segment ${ytMemberBlockMode === "blocklist" ? "settings-segment-active-red" : ""}`}
                     disabled={!globalEnabled || !ytMemberBlock}
                     on:click={() =>
                       globalEnabled &&
                       ytMemberBlock &&
                       (ytMemberBlockMode = "blocklist")}
                   >
-                    <span
-                      class="active:scale-95 transition-transform duration-200 ease-out"
-                    >
-                      {t("yt_member_mode_blocklist_short")}
-                    </span>
+                    {t("yt_member_mode_blocklist_short")}
                   </button>
-
-                  <!-- Mode: Allowlist -->
                   <button
-                    class="relative z-10 w-[68px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {ytMemberBlockMode ===
-                    'allowlist'
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    type="button"
+                    class={`settings-segment ${ytMemberBlockMode === "allowlist" ? "settings-segment-active-red" : ""}`}
                     disabled={!globalEnabled || !ytMemberBlock}
                     on:click={() =>
                       globalEnabled &&
                       ytMemberBlock &&
                       (ytMemberBlockMode = "allowlist")}
                   >
-                    <span
-                      class="active:scale-95 transition-transform duration-200 ease-out"
-                    >
-                      {t("yt_member_mode_allowlist_short")}
-                    </span>
+                    {t("yt_member_mode_allowlist_short")}
                   </button>
                 </div>
               </div>
 
-              <!-- Blocklist Tags -->
               {#if ytMemberBlockMode === "blocklist"}
-                <div class="pt-1">
-                  <div class="flex items-center justify-between mb-1.5 px-0.5">
-                    <span
-                      class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide"
-                    >
+                <div class="settings-panel">
+                  <div class="settings-panel-header">
+                    <span class="settings-panel-title">
                       {t("yt_member_blocklist_label")}
                     </span>
-                    <span
-                      class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium"
-                    >
+                    <span class="settings-status-pill border-black/5 bg-black/[0.03] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50">
                       {ytMemberBlocklist.length}
                     </span>
                   </div>
+
                   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                   <div
-                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-red-400/50 focus-within:border-red-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {ytMemberBlocklist.length ===
-                    0
-                      ? 'items-start'
-                      : 'items-center'}"
+                    class="settings-token-box settings-token-box-red no-scrollbar flex flex-wrap gap-1.5 cursor-text {ytMemberBlocklist.length === 0 ? 'items-start' : 'items-center'}"
                     on:click={(e) => {
                       if (e.target === e.currentTarget) {
                         document.getElementById("blocklist-input")?.focus();
@@ -2627,95 +2551,80 @@
                   >
                     {#each ytMemberBlocklist as item, i}
                       {#if editingTag?.mode === "block" && editingTag?.index === i}
-                        <div class="flex items-center max-w-full">
-                          <input
-                            bind:this={tagInputRef}
-                            class="bg-white dark:bg-black/40 border border-blue-400/50 dark:border-blue-400/50 outline-none text-xs font-mono text-gray-800 dark:text-white/90 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-400/20 shadow-inner"
-                            style="width: {Math.max(
-                              4,
-                              editingValue.length + 3,
-                            )}ch;"
-                            bind:value={editingValue}
-                            on:blur={finishEditingTag}
-                            on:keydown={(e) => {
-                              if (e.key === "Enter") finishEditingTag();
-                              if (e.key === "Escape") cancelEditingTag();
-                            }}
-                          />
-                        </div>
+                        <input
+                          bind:this={tagInputRef}
+                          class="min-w-[84px] max-w-full rounded-lg border border-red-400/40 bg-white px-2 py-1 text-xs font-mono text-gray-800 outline-none shadow-inner focus:ring-2 focus:ring-red-400/15 dark:bg-black/35 dark:text-white/90"
+                          style="width: {Math.max(8, editingValue.length + 3)}ch;"
+                          bind:value={editingValue}
+                          on:blur={finishEditingTag}
+                          on:keydown={(e) => {
+                            if (e.key === "Enter") finishEditingTag();
+                            if (e.key === "Escape") cancelEditingTag();
+                          }}
+                        />
                       {:else}
-                        <button
-                          class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] group hover:bg-white hover:border-red-400/30 dark:hover:bg-black/40 dark:hover:border-red-400/30 transition-all focus:outline-none focus:ring-2 focus:ring-blue-400/30 cursor-pointer text-left max-w-full flex-shrink-0"
-                          on:click|stopPropagation={() =>
-                            startEditingTag("block", i, item)}
+                        <div
+                          class="group flex max-w-full flex-shrink-0 cursor-default items-center gap-1 rounded-lg border border-black/5 bg-white/65 py-1 pl-2.5 pr-1 text-xs text-gray-700 shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all hover:border-red-400/30 hover:bg-white dark:border-white/10 dark:bg-black/20 dark:text-white/80 dark:hover:bg-black/40"
                           title={item}
                         >
-                          <span
-                            class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors"
-                            >{item}</span
-                          >
-                          <div
-                            class="text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 p-0.5 rounded-full"
+                          <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white">
+                            {item}
+                          </span>
+                          <button
+                            type="button"
+                            class="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-black/5 hover:text-gray-600 dark:text-white/30 dark:hover:bg-white/10 dark:hover:text-white/70"
                             on:click|stopPropagation={() =>
-                              removeTag("block", i)}
-                            role="button"
-                            tabindex="0"
-                            aria-label={t("remove_tag")}
-                            on:keydown={(e) =>
-                              e.key === "Enter" && removeTag("block", i)}
+                              startEditingTag("block", i, item)}
+                            aria-label={item}
                           >
-                            <svg
-                              class="w-3 h-3"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              stroke-width="2.5"
-                              ><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M6 18L18 6M6 6l12 12"
-                              /></svg
-                            >
-                          </div>
-                        </button>
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L8.25 18.402 4.5 19.5l1.098-3.75L16.862 4.487Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-white/30 dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                            on:click|stopPropagation={() => removeTag("block", i)}
+                            aria-label={t("remove_tag")}
+                          >
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       {/if}
                     {/each}
                     {#if editingTag?.mode !== "block"}
                       <input
                         id="blocklist-input"
-                        class="flex-1 min-w-[30px] w-full bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                        class="min-w-[96px] flex-1 bg-transparent px-1 py-1 text-xs font-mono font-medium text-gray-700 outline-none placeholder:text-gray-400/70 dark:text-white/80 dark:placeholder:text-white/30"
                         placeholder={t("yt_member_blocklist_placeholder")}
                         disabled={!globalEnabled || !ytMemberBlock}
                         bind:value={newBlockItem}
                         on:keydown={(e) => handleTagKeyDown(e, "block")}
                         on:paste={(e) => handleTagPaste(e, "block")}
+                        on:blur={() => addTags("block", newBlockItem)}
+                        spellcheck="false"
                       />
                     {/if}
                   </div>
                 </div>
               {/if}
 
-              <!-- Allowlist Tags -->
               {#if ytMemberBlockMode === "allowlist"}
-                <div class="pt-1">
-                  <div class="flex items-center justify-between mb-1.5 px-0.5">
-                    <span
-                      class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide"
-                    >
+                <div class="settings-panel">
+                  <div class="settings-panel-header">
+                    <span class="settings-panel-title">
                       {t("yt_member_allowlist_label")}
                     </span>
-                    <span
-                      class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium"
-                    >
+                    <span class="settings-status-pill border-black/5 bg-black/[0.03] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50">
                       {ytMemberAllowlist.length}
                     </span>
                   </div>
+
                   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                   <div
-                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-red-400/50 focus-within:border-red-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {ytMemberAllowlist.length ===
-                    0
-                      ? 'items-start'
-                      : 'items-center'}"
+                    class="settings-token-box settings-token-box-red no-scrollbar flex flex-wrap gap-1.5 cursor-text {ytMemberAllowlist.length === 0 ? 'items-start' : 'items-center'}"
                     on:click={(e) => {
                       if (e.target === e.currentTarget) {
                         document.getElementById("allowlist-input")?.focus();
@@ -2724,68 +2633,60 @@
                   >
                     {#each ytMemberAllowlist as item, i}
                       {#if editingTag?.mode === "allow" && editingTag?.index === i}
-                        <div class="flex items-center max-w-full">
-                          <input
-                            bind:this={tagInputRef}
-                            class="bg-white dark:bg-black/40 border border-blue-400/50 dark:border-blue-400/50 outline-none text-xs font-mono text-gray-800 dark:text-white/90 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-400/20 shadow-inner"
-                            style="width: {Math.max(
-                              4,
-                              editingValue.length + 3,
-                            )}ch;"
-                            bind:value={editingValue}
-                            on:blur={finishEditingTag}
-                            on:keydown={(e) => {
-                              if (e.key === "Enter") finishEditingTag();
-                              if (e.key === "Escape") cancelEditingTag();
-                            }}
-                          />
-                        </div>
+                        <input
+                          bind:this={tagInputRef}
+                          class="min-w-[84px] max-w-full rounded-lg border border-red-400/40 bg-white px-2 py-1 text-xs font-mono text-gray-800 outline-none shadow-inner focus:ring-2 focus:ring-red-400/15 dark:bg-black/35 dark:text-white/90"
+                          style="width: {Math.max(8, editingValue.length + 3)}ch;"
+                          bind:value={editingValue}
+                          on:blur={finishEditingTag}
+                          on:keydown={(e) => {
+                            if (e.key === "Enter") finishEditingTag();
+                            if (e.key === "Escape") cancelEditingTag();
+                          }}
+                        />
                       {:else}
-                        <button
-                          class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] group hover:bg-white hover:border-red-400/30 dark:hover:bg-black/40 dark:hover:border-red-400/30 transition-all focus:outline-none focus:ring-2 focus:ring-blue-400/30 cursor-pointer text-left max-w-full flex-shrink-0"
-                          on:click|stopPropagation={() =>
-                            startEditingTag("allow", i, item)}
+                        <div
+                          class="group flex max-w-full flex-shrink-0 cursor-default items-center gap-1 rounded-lg border border-black/5 bg-white/65 py-1 pl-2.5 pr-1 text-xs text-gray-700 shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all hover:border-red-400/30 hover:bg-white dark:border-white/10 dark:bg-black/20 dark:text-white/80 dark:hover:bg-black/40"
                           title={item}
                         >
-                          <span
-                            class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors"
-                            >{item}</span
-                          >
-                          <div
-                            class="text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/20 dark:text-white/30 dark:hover:text-red-400 transition-colors ml-0.5 p-0.5 rounded-full"
+                          <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white">
+                            {item}
+                          </span>
+                          <button
+                            type="button"
+                            class="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-black/5 hover:text-gray-600 dark:text-white/30 dark:hover:bg-white/10 dark:hover:text-white/70"
                             on:click|stopPropagation={() =>
-                              removeTag("allow", i)}
-                            role="button"
-                            tabindex="0"
-                            aria-label={t("remove_tag")}
-                            on:keydown={(e) =>
-                              e.key === "Enter" && removeTag("allow", i)}
+                              startEditingTag("allow", i, item)}
+                            aria-label={item}
                           >
-                            <svg
-                              class="w-3 h-3"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              stroke-width="2.5"
-                              ><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M6 18L18 6M6 6l12 12"
-                              /></svg
-                            >
-                          </div>
-                        </button>
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L8.25 18.402 4.5 19.5l1.098-3.75L16.862 4.487Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-white/30 dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                            on:click|stopPropagation={() => removeTag("allow", i)}
+                            aria-label={t("remove_tag")}
+                          >
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       {/if}
                     {/each}
                     {#if editingTag?.mode !== "allow"}
                       <input
                         id="allowlist-input"
-                        class="flex-1 min-w-[30px] w-full bg-transparent outline-none text-xs font-mono text-gray-700 dark:text-white/80 placeholder:text-gray-400/70 dark:placeholder:text-white/30 py-1 font-medium px-1"
+                        class="min-w-[96px] flex-1 bg-transparent px-1 py-1 text-xs font-mono font-medium text-gray-700 outline-none placeholder:text-gray-400/70 dark:text-white/80 dark:placeholder:text-white/30"
                         placeholder={t("yt_member_allowlist_placeholder")}
                         disabled={!globalEnabled || !ytMemberBlock}
                         bind:value={newAllowItem}
                         on:keydown={(e) => handleTagKeyDown(e, "allow")}
                         on:paste={(e) => handleTagPaste(e, "allow")}
+                        on:blur={() => addTags("allow", newAllowItem)}
+                        spellcheck="false"
                       />
                     {/if}
                   </div>
@@ -2832,66 +2733,39 @@
                 />
               </svg>
             </div>
-            <div slot="content" class="space-y-3 px-1">
-              <!-- Artwork-Level Elegance: Mode Slider -->
-              <div
-                class="relative p-1 bg-black/5 dark:bg-black/20 rounded-[12px] border border-black/[0.04] dark:border-white/5 w-fit mx-auto mt-2 mb-3 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.2)] isolate"
-              >
-                <div class="relative flex items-center">
-                  <!-- Animated Thumb -->
-                  <div
-                    class="absolute left-0 top-0 bottom-0 w-1/2 rounded-[10px] bg-white dark:bg-[#32363F] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] border border-black/[0.04] dark:border-white/[0.05] z-0 pointer-events-none"
-                    style="transform: translateX(calc({bbSubtitleTargetMode ===
-                    'all'
-                      ? 0
-                      : 1} * 100%)); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);"
-                  ></div>
-
-                  <!-- Mode: All -->
+            <div slot="content" class="space-y-2">
+              <div class="settings-panel">
+                <div class="settings-segmented settings-segmented-2">
                   <button
-                    class="relative z-10 w-[86px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {bbSubtitleTargetMode ===
-                    'all'
-                      ? 'text-cyan-600 dark:text-cyan-400'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    type="button"
+                    class={`settings-segment ${bbSubtitleTargetMode === "all" ? "settings-segment-active-cyan" : ""}`}
                     disabled={!globalEnabled || !bbSubtitleEnabled}
                     on:click={() =>
                       globalEnabled &&
                       bbSubtitleEnabled &&
-                      (bbSubtitleTargetMode = 'all')}
+                      (bbSubtitleTargetMode = "all")}
                   >
-                    <span
-                      class="active:scale-95 transition-transform duration-200 ease-out"
-                    >
-                      {t("bb_subtitle_scope_all")}
-                    </span>
+                    {t("bb_subtitle_scope_all")}
                   </button>
-
-                  <!-- Mode: Allowlist -->
                   <button
-                    class="relative z-10 w-[86px] flex items-center justify-center py-1.5 text-[11px] font-medium transition-colors duration-300 {bbSubtitleTargetMode ===
-                    'allowlist'
-                      ? 'text-cyan-600 dark:text-cyan-400'
-                      : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'}"
+                    type="button"
+                    class={`settings-segment ${bbSubtitleTargetMode === "allowlist" ? "settings-segment-active-cyan" : ""}`}
                     disabled={!globalEnabled || !bbSubtitleEnabled}
                     on:click={() =>
                       globalEnabled &&
                       bbSubtitleEnabled &&
-                      (bbSubtitleTargetMode = 'allowlist')}
+                      (bbSubtitleTargetMode = "allowlist")}
                   >
-                    <span
-                      class="active:scale-95 transition-transform duration-200 ease-out"
-                    >
-                      {t("bb_subtitle_scope_allowlist")}
-                    </span>
+                    {t("bb_subtitle_scope_allowlist")}
                   </button>
                 </div>
               </div>
 
               {#if bbSubtitleTargetMode === "allowlist"}
-                <div class="pt-1">
-                  <div class="flex items-center justify-between mb-1.5 px-0.5 relative z-20">
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide">
+                <div class="settings-panel">
+                  <div class="settings-panel-header relative z-20">
+                    <div class="flex min-w-0 items-center gap-1.5">
+                      <span class="settings-panel-title">
                         {t("bb_subtitle_targets")}
                       </span>
 
@@ -2900,7 +2774,7 @@
                           type="button"
                           aria-controls="bb-subtitle-targets-tooltip"
                           aria-expanded={bbSubtitleTargetsTooltipOpen}
-                          class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
+                          class="relative z-50 flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-black/5 text-[10px] font-bold text-gray-400 outline-none transition-colors hover:bg-black/10 hover:text-gray-600 focus:bg-cyan-500/10 focus:text-cyan-600 dark:bg-white/10 dark:text-white/40 dark:hover:bg-white/20 dark:hover:text-white/70 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300"
                           on:click|stopPropagation={toggleBilibiliSubtitleTargetsTooltip}
                         >
                           ?
@@ -2910,7 +2784,7 @@
                           <div
                             id="bb-subtitle-targets-tooltip"
                             role="tooltip"
-                            class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                            class="absolute left-1/2 top-full z-50 mt-2 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
                             in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
                             out:fade|local={{ duration: 120 }}
                           >
@@ -2919,21 +2793,21 @@
 
                           <button
                             type="button"
-                            class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                            class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
                             aria-label={t("bb_subtitle_targets_desc")}
                             on:click={closeBilibiliSubtitleTargetsTooltip}
                           ></button>
                         {/if}
                       </div>
                     </div>
-                    <span class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium">
+                    <span class="settings-status-pill border-black/5 bg-black/[0.03] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50">
                       {bbSubtitleTargetsList.length}
                     </span>
                   </div>
 
                   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                   <div
-                    class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-cyan-400/50 focus-within:border-cyan-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {bbSubtitleTargetsList.length ===
+                    class="settings-token-box no-scrollbar flex flex-wrap gap-1.5 cursor-text {bbSubtitleTargetsList.length ===
                     0
                       ? 'items-start'
                       : 'items-center'}"
@@ -2944,7 +2818,7 @@
                     }}
                   >
                     {#each bbSubtitleTargetsList as item}
-                      <div class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] cursor-default max-w-full flex-shrink-0 group hover:bg-white hover:border-cyan-400/30 dark:hover:bg-black/40 transition-all">
+                      <div class="flex max-w-full flex-shrink-0 cursor-default items-center gap-1.5 rounded-lg border border-black/5 bg-white/65 py-1 pl-2.5 pr-1 text-xs text-gray-700 shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all hover:border-cyan-400/30 hover:bg-white dark:border-white/10 dark:bg-black/20 dark:text-white/80 dark:hover:bg-black/40">
                         <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors">{item}</span>
                         <button
                           type="button"
@@ -2973,10 +2847,10 @@
                     />
                   </div>
                   
-                  <div class="flex items-center justify-between mt-2.5 px-0.5 gap-2">
+                  <div class="mt-2 flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-1.5 text-[11px] font-medium text-cyan-700 shadow-[0_2px_8px_rgba(8,145,178,0.08)] transition-all hover:bg-cyan-500/[0.12] active:scale-[0.98] dark:border-cyan-400/18 dark:bg-cyan-500/[0.12] dark:text-cyan-300 dark:hover:bg-cyan-500/[0.18] disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="settings-button settings-button-cyan shrink-0"
                       disabled={!globalEnabled || !bbSubtitleEnabled || bbSubtitleAddCurrentPending}
                       on:click={addCurrentBilibiliUploaderToAllowlist}
                     >
@@ -2987,7 +2861,7 @@
                     </button>
 
                     {#if bbSubtitleAddCurrentStatus}
-                      <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full border truncate ${bbSubtitleAddCurrentTone === 'success' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/20' : bbSubtitleAddCurrentTone === 'error' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/20' : 'bg-black/5 text-gray-500 border-black/5 dark:bg-white/10 dark:text-gray-300 dark:border-white/10'}`}>
+                      <span class={`settings-status-pill ${getBilibiliSubtitleStatusClass()}`}>
                         {bbSubtitleAddCurrentStatus}
                       </span>
                     {/if}
@@ -3026,28 +2900,45 @@
                 />
               </svg>
             </div>
-            <div slot="content" class="space-y-3 px-1">
-              <div class="space-y-2 rounded-xl border border-black/5 bg-black/[0.03] px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
-                <div class="grid grid-cols-[auto,1fr] items-center gap-3">
-                  <span class="text-[11px] font-medium text-gray-500 dark:text-white/50">
-                    {t("bb_quality_default_quality")}
-                  </span>
-                  <select
-                    class="w-full rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/40 dark:border-white/10 dark:bg-[#2A2D35] dark:text-white/85"
-                    disabled={!globalEnabled || !bbQualityEnabled}
-                    bind:value={bbQualityDefaultQn}
-                  >
-                    {#each BILIBILI_QUALITY_OPTIONS as option}
-                      <option value={option.value}>{option.label}</option>
-                    {/each}
-                  </select>
+            <div slot="content" class="space-y-2">
+              <div class="settings-panel">
+                <div class="settings-grid">
+                  <label class="settings-field">
+                    <div class="setting-line mb-2">
+                      <span class="setting-label">{t("bb_quality_default_quality")}</span>
+                    </div>
+                    <select
+                      class="settings-select settings-select-cyan"
+                      disabled={!globalEnabled || !bbQualityEnabled}
+                      bind:value={bbQualityDefaultQn}
+                    >
+                      {#each BILIBILI_QUALITY_OPTIONS as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+
+                  <label class="settings-field">
+                    <div class="setting-line mb-2">
+                      <span class="setting-label">{t("bb_quality_target")}</span>
+                    </div>
+                    <select
+                      class="settings-select settings-select-cyan"
+                      disabled={!globalEnabled || !bbQualityEnabled}
+                      bind:value={bbQualityTargetQn}
+                    >
+                      {#each BILIBILI_QUALITY_OPTIONS as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
                 </div>
               </div>
 
-              <div class="pt-1">
-                <div class="flex items-center justify-between mb-1.5 px-0.5 relative z-20">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide">
+              <div class="settings-panel">
+                <div class="settings-panel-header relative z-20">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="settings-panel-title">
                       {t("bb_quality_targets")}
                     </span>
 
@@ -3056,7 +2947,7 @@
                         type="button"
                         aria-controls="bb-quality-targets-tooltip"
                         aria-expanded={bbQualityTargetsTooltipOpen}
-                        class="relative z-50 flex shrink-0 items-center justify-center w-[14px] h-[14px] rounded-full text-[10px] font-bold text-gray-400 bg-black/5 hover:bg-black/10 hover:text-gray-600 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/20 dark:hover:text-white/70 transition-colors focus:bg-cyan-500/10 focus:text-cyan-600 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300 outline-none"
+                        class="relative z-50 flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-black/5 text-[10px] font-bold text-gray-400 outline-none transition-colors hover:bg-black/10 hover:text-gray-600 focus:bg-cyan-500/10 focus:text-cyan-600 dark:bg-white/10 dark:text-white/40 dark:hover:bg-white/20 dark:hover:text-white/70 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300"
                         on:click|stopPropagation={toggleBilibiliQualityTargetsTooltip}
                       >
                         ?
@@ -3066,7 +2957,7 @@
                         <div
                           id="bb-quality-targets-tooltip"
                           role="tooltip"
-                          class="absolute left-1/2 top-full mt-2 z-50 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                          class="absolute left-1/2 top-full z-50 mt-2 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
                           in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
                           out:fade|local={{ duration: 120 }}
                         >
@@ -3075,21 +2966,21 @@
 
                         <button
                           type="button"
-                          class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
+                          class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
                           aria-label={t("bb_quality_targets_desc")}
                           on:click={closeBilibiliQualityTargetsTooltip}
                         ></button>
                       {/if}
                     </div>
                   </div>
-                  <span class="text-[10px] text-gray-400 dark:text-white/30 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full font-medium">
+                  <span class="settings-status-pill border-black/5 bg-black/[0.03] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50">
                     {bbQualityTargetsList.length}
                   </span>
                 </div>
 
                 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                 <div
-                  class="w-full rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-2 min-h-[72px] flex flex-wrap gap-1.5 focus-within:ring-1 focus-within:ring-cyan-400/50 focus-within:border-cyan-400/30 transition-all cursor-text overflow-y-auto max-h-[140px] no-scrollbar {bbQualityTargetsList.length === 0 ? 'items-start' : 'items-center'}"
+                  class="settings-token-box no-scrollbar flex flex-wrap gap-1.5 cursor-text {bbQualityTargetsList.length === 0 ? 'items-start' : 'items-center'}"
                   on:click={(event) => {
                     if (event.target === event.currentTarget) {
                       focusBilibiliQualityDraftInput();
@@ -3097,7 +2988,7 @@
                   }}
                 >
                   {#each bbQualityTargetsList as item}
-                    <div class="flex items-center gap-1.5 bg-white/60 dark:bg-black/20 border border-black/5 dark:border-white/10 pl-2.5 pr-1 py-1 rounded-lg text-xs text-gray-700 dark:text-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] cursor-default max-w-full flex-shrink-0 group hover:bg-white hover:border-cyan-400/30 dark:hover:bg-black/40 transition-all">
+                    <div class="flex max-w-full flex-shrink-0 cursor-default items-center gap-1.5 rounded-lg border border-black/5 bg-white/65 py-1 pl-2.5 pr-1 text-xs text-gray-700 shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all hover:border-cyan-400/30 hover:bg-white dark:border-white/10 dark:bg-black/20 dark:text-white/80 dark:hover:bg-black/40">
                       <span class="truncate font-mono group-hover:text-black dark:group-hover:text-white transition-colors">{item}</span>
                       <button
                         type="button"
@@ -3126,10 +3017,10 @@
                   />
                 </div>
 
-                <div class="flex items-center justify-between mt-2.5 px-0.5 gap-2">
+                <div class="mt-2 flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-1.5 text-[11px] font-medium text-cyan-700 shadow-[0_2px_8px_rgba(8,145,178,0.08)] transition-all hover:bg-cyan-500/[0.12] active:scale-[0.98] dark:border-cyan-400/18 dark:bg-cyan-500/[0.12] dark:text-cyan-300 dark:hover:bg-cyan-500/[0.18] disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="settings-button settings-button-cyan shrink-0"
                     disabled={!globalEnabled || !bbQualityEnabled || bbQualityAddCurrentPending}
                     on:click={addCurrentBilibiliUploaderToQualityTargets}
                   >
@@ -3140,26 +3031,11 @@
                   </button>
 
                   {#if bbQualityAddCurrentStatus}
-                    <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full border truncate ${bbQualityAddCurrentTone === 'success' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-400/20' : bbQualityAddCurrentTone === 'error' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/20' : 'bg-black/5 text-gray-500 border-black/5 dark:bg-white/10 dark:text-gray-300 dark:border-white/10'}`}>
+                    <span class={`settings-status-pill ${getBilibiliQualityStatusClass()}`}>
                       {bbQualityAddCurrentStatus}
                     </span>
                   {/if}
                 </div>
-              </div>
-
-              <div class="grid grid-cols-[auto,1fr] items-center gap-3 rounded-xl border border-black/5 bg-black/[0.03] px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                <span class="text-[11px] font-medium text-gray-500 dark:text-white/50">
-                  {t("bb_quality_target")}
-                </span>
-                <select
-                  class="w-full rounded-lg border border-black/8 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/40 dark:border-white/10 dark:bg-[#2A2D35] dark:text-white/85"
-                  disabled={!globalEnabled || !bbQualityEnabled}
-                  bind:value={bbQualityTargetQn}
-                >
-                  {#each BILIBILI_QUALITY_OPTIONS as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
               </div>
             </div>
           </AccordionItem>
