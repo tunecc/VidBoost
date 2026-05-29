@@ -6,6 +6,34 @@
   export let isOpen: boolean = true;
   export let enabled: boolean = true;
   export let onToggle: () => void;
+
+  function getDotClasses(color: string, isEnabled: boolean) {
+    if (!isEnabled) {
+      return "bg-gray-400 shadow-none dark:bg-white/30";
+    }
+
+    if (color === "blue") {
+      return "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]";
+    }
+
+    if (color === "red") {
+      return "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]";
+    }
+
+    if (color === "purple") {
+      return "bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]";
+    }
+
+    if (color === "cyan") {
+      return "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]";
+    }
+
+    if (color === "pink") {
+      return "bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]";
+    }
+
+    return "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]";
+  }
 </script>
 
 <div
@@ -23,17 +51,7 @@
            Actually, let's use a mapping for the dot color to be safe with Tailwind. -->
 
       <div
-        class="w-2.5 h-2.5 rounded-[4px] border border-white/40 dark:border-white/10 {iconColor === 'blue'
-          ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
-          : ''} {iconColor === 'red'
-          ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
-          : ''} {iconColor === 'purple'
-          ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]'
-          : ''} {iconColor === 'cyan'
-          ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
-          : ''} {iconColor === 'pink'
-          ? 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]'
-          : ''}"
+        class="w-2.5 h-2.5 rounded-[4px] border border-white/40 dark:border-white/10 {getDotClasses(iconColor, enabled)}"
       ></div>
 
       <h3 class="font-semibold text-sm text-gray-800 dark:text-white/90">

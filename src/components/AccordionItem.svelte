@@ -12,6 +12,40 @@
     export let onToggleOpen: () => void = () => {};
     export let onToggleMaster: () => void = () => {};
     export let disabled: boolean = false;
+
+    const iconPalettes: Record<string, { background: string; border: string; color: string }> = {
+        blue: {
+            background: "rgba(59,130,246,0.1)",
+            border: "rgba(59,130,246,0.1)",
+            color: "#2563eb",
+        },
+        red: {
+            background: "rgba(239,68,68,0.1)",
+            border: "rgba(239,68,68,0.1)",
+            color: "#ef4444",
+        },
+        cyan: {
+            background: "rgba(6,182,212,0.1)",
+            border: "rgba(6,182,212,0.1)",
+            color: "#06b6d4",
+        },
+        indigo: {
+            background: "rgba(99,102,241,0.1)",
+            border: "rgba(99,102,241,0.1)",
+            color: "#4f46e5",
+        },
+    };
+
+    const mutedIconPalette = {
+        background: "rgba(107,114,128,0.1)",
+        border: "rgba(107,114,128,0.18)",
+        color: "#6b7280",
+    };
+
+    $: iconMuted = disabled || !masterChecked;
+    $: iconPalette = iconMuted
+        ? mutedIconPalette
+        : iconPalettes[iconColor] ?? iconPalettes.blue;
 </script>
 
 <div
@@ -29,34 +63,11 @@
             <!-- Icon -->
             <div
                 class="w-8 h-8 shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                class:feature-icon-muted={iconMuted}
                 style="
-            background-color: {iconColor === 'blue'
-                    ? 'rgba(59,130,246,0.1)'
-                    : iconColor === 'red'
-                      ? 'rgba(239,68,68,0.1)'
-                      : iconColor === 'cyan'
-                        ? 'rgba(6,182,212,0.1)'
-                        : iconColor === 'indigo'
-                          ? 'rgba(99,102,241,0.1)'
-                          : 'rgba(59,130,246,0.1)'};
-            border-color: {iconColor === 'blue'
-                    ? 'rgba(59,130,246,0.1)'
-                    : iconColor === 'red'
-                      ? 'rgba(239,68,68,0.1)'
-                      : iconColor === 'cyan'
-                        ? 'rgba(6,182,212,0.1)'
-                        : iconColor === 'indigo'
-                          ? 'rgba(99,102,241,0.1)'
-                          : 'rgba(59,130,246,0.1)'};
-            color: {iconColor === 'blue'
-                    ? '#2563eb'
-                    : iconColor === 'red'
-                      ? '#ef4444'
-                      : iconColor === 'cyan'
-                        ? '#06b6d4'
-                        : iconColor === 'indigo'
-                          ? '#4f46e5'
-                          : '#2563eb'};
+            background-color: {iconPalette.background};
+            border-color: {iconPalette.border};
+            color: {iconPalette.color};
         "
             >
                 <slot name="icon"></slot>
@@ -140,3 +151,17 @@
         </div>
     {/if}
 </div>
+
+<style>
+    .feature-icon-muted :global(*) {
+        color: inherit !important;
+    }
+
+    .feature-icon-muted :global([fill]:not([fill="none"])) {
+        fill: currentColor !important;
+    }
+
+    .feature-icon-muted :global([stroke]:not([stroke="none"])) {
+        stroke: currentColor !important;
+    }
+</style>
