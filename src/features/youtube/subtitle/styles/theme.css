@@ -1,0 +1,54 @@
+/**
+ * Base theme styles for subtitle overlay
+ * Injected into Shadow DOM for style isolation
+ */
+
+:host {
+  all: initial;
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.subtitle-container {
+  position: absolute;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.subtitle-text {
+  display: inline-block;
+  padding: 4px 12px;
+  text-align: center;
+  word-wrap: break-word;
+  max-width: 90%;
+  pointer-events: none;
+}
+
+.drag-handle {
+  position: absolute;
+  width: 100%;
+  height: 8px;
+  cursor: ns-resize;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+}
