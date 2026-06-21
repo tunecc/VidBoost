@@ -134,7 +134,7 @@ describe('cjk-utils', () => {
 
       it('should count characters for mixed CJK text', () => {
         const text = '你好こんにちは안녕';
-        expect(getTextLength(text, true)).toBe(10);
+        expect(getTextLength(text, true)).toBe(9);
       });
 
       it('should count all characters including punctuation for CJK', () => {
@@ -267,7 +267,7 @@ describe('cjk-utils', () => {
       const maxLength = getMaxLength(isCJK);
 
       expect(isCJK).toBe(true);
-      expect(length).toBe(11);
+      expect(length).toBe(10);
       expect(maxLength).toBe(40);
       expect(length).toBeLessThan(maxLength);
     });

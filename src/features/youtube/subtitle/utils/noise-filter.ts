@@ -3,7 +3,7 @@ import type { TimedTextEvent } from './types';
 const NOISE_PATTERNS = [
   /^\[.*?\]$/,        // [Music], [Applause], [Laughter]
   /^\(.*?\)$/,        // (音乐), (掌声)
-  /^♪.*♪$/,          // ♪ ... ♪
+  /^♪.*♪$|^♪$/,      // ♪ ... ♪ or single ♪
   /^🎵$/,            // 🎵
   /^🎶.*🎶$/,        // 🎶 ... 🎶
 ];
