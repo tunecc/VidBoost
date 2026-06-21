@@ -1,4 +1,5 @@
-import { SubtitleFetcher, SubtitleResult } from './fetcher';
+import { SubtitleFetcher } from './fetcher';
+import type { SubtitleResult } from './fetcher';
 import type { CaptionTrack, SubtitleFragment } from '../utils/types';
 
 export type ControllerState = 'idle' | 'loading' | 'ready' | 'error';
