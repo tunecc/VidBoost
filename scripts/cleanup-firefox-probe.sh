@@ -5,8 +5,8 @@ PATTERN='firefox_youtube_cdn_probe.py|firefox-youtube-cdn-probe-safe.sh|geckodri
 
 collect_pids() {
   ps -axo pid=,command= 2>/dev/null \
-    | rg "$PATTERN" \
-    | rg -v 'rg ' \
+    | grep -E "$PATTERN" \
+    | grep -v 'grep ' \
     | awk '{print $1}'
 }
 
