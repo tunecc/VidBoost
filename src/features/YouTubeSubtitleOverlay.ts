@@ -42,10 +42,8 @@ import {
     type YouTubeSubtitlePlayerData,
     type YouTubeTimedText
 } from './youtube/subtitleOverlay.shared';
-import {
-    parseYouTubeSubtitleEvents,
-    type SubtitleFragment
-} from './youtube/subtitleOverlayParser';
+import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
+import type { SubtitleFragment } from './youtube/subtitle/utils/types';
 
 type PotToken = {
     pot: string | null;
