@@ -21,6 +21,11 @@
         "src/**/*.js",
         "src/**/*.svelte"
     ],
+    "exclude": [
+        "src/**/__tests__/**/*",
+        "src/**/*.test.ts",
+        "src/**/*.test.js"
+    ],
     "references": [
         {
             "path": "./tsconfig.node.json"

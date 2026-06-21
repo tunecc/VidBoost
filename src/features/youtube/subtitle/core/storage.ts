@@ -87,7 +87,7 @@ export function watch(
         const changedKeys: Partial<SubtitleConfig> = {};
         (Object.keys(newValue) as SubtitleConfigKey[]).forEach((key) => {
           if (!oldValue || newValue[key] !== oldValue[key]) {
-            changedKeys[key] = newValue[key];
+            changedKeys[key] = newValue[key] as SubtitleConfig[typeof key];
           }
         });
 

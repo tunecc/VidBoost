@@ -4,8 +4,8 @@
  * This file demonstrates how to use the SubtitleFetcher module.
  */
 
-import { SubtitleFetcher, defaultFetcher } from './core/fetcher';
-import type { CaptionTrack, SubtitleResult } from './utils/types';
+import { SubtitleFetcher, defaultFetcher } from './fetcher';
+import type { CaptionTrack, SubtitleResult } from '../utils/types';
 
 // Example 1: Using the default singleton instance
 async function fetchSubtitlesSimple(videoId: string, track: CaptionTrack) {
@@ -46,7 +46,7 @@ async function fetchWithRetry(
     // Tries fast path first, then falls back
     const result = await defaultFetcher.fetchWithFallback(videoId, track, playerData);
     return result;
-  } catch (error) {
+  } catch (error: any) {
     // Handle typed errors
     if (error.code === 'NETWORK_ERROR') {
       console.error('Network issue:', error.message);
@@ -117,11 +117,11 @@ async function fetchAndProcess(videoId: string, track: CaptionTrack) {
 
   // Process fragments
   const totalDuration = result.fragments.reduce(
-    (sum, frag) => sum + (frag.end - frag.start),
+    (sum: number, frag) => sum + (frag.end - frag.start),
     0
   );
 
-  const allText = result.fragments.map(f => f.text).join(' ');
+  const allText = result.fragments.map((f) => f.text).join(' ');
 
   console.log({
     videoId: result.videoId,
