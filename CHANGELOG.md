@@ -8,6 +8,16 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [1.8.2] - 2026-06-21
+
+### Changed
+- **[重构] YouTube 字幕系统模块化重写**：将原有单一 298 行解析器文件重构为模块化架构，涵盖解析器层、UI 组件层和核心协调层。
+  - **解析器层**：新增 5 种专用解析器（Standard、Karaoke、Stylized Karaoke、Scrolling ASR、Animated），支持智能格式检测、噪音过滤和 CJK 语言优化。
+  - **UI 组件层**：基于 Shadow DOM 隔离的 Svelte 组件系统，包含可拖拽定位手柄、样式化文本显示和容器整合。
+  - **核心层**：完整的 Fetcher（网络获取+缓存）、Controller（状态管理+事件系统）、Storage（持久化配置）和 Renderer（渲染协调）。
+  - 代码结构：40 个模块化文件，~7,000 行代码（含测试），>300 个测试用例覆盖。
+  - 质量保障：TypeScript strict mode、零运行时回归、Drop-in 替换验证。
+
 ## [1.8.1] - 2026-05-29
 
 ### Fixed
