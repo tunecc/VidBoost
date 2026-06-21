@@ -328,7 +328,7 @@ describe('cjk-utils', () => {
 
     it('should detect when text exceeds max length for non-CJK', () => {
       const languageCode = 'en';
-      const text = 'This is a very long subtitle text that is intended to test whether the length exceeds the maximum allowed limit which should be around eighty words for non-CJK languages so we need to make sure this text has enough words to properly test the boundary condition and verify that our length calculation is working correctly in all scenarios that might occur in real-world usage of the subtitle system';
+      const text = 'This is a very long subtitle text that is intended to test whether the length exceeds the maximum allowed limit which should be around eighty words for non-CJK languages so we need to make sure this text has enough words to properly test the boundary condition and verify that our length calculation is working correctly in all scenarios that might occur in real-world usage of the subtitle system including edge cases and various combinations of punctuation marks and special characters that could appear in natural language content';
 
       const isCJK = isCJKLanguage(languageCode);
       const length = getTextLength(text, isCJK);
