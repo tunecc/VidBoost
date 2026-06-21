@@ -4,8 +4,8 @@
  * This file demonstrates how to use the SubtitleFetcher module.
  */
 
-import { SubtitleFetcher, defaultFetcher } from './fetcher';
-import type { CaptionTrack, SubtitleResult } from '../utils/types';
+import { SubtitleFetcher, defaultFetcher, type SubtitleResult } from './fetcher';
+import type { CaptionTrack } from '../utils/types';
 
 // Example 1: Using the default singleton instance
 async function fetchSubtitlesSimple(videoId: string, track: CaptionTrack) {
