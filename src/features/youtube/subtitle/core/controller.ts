@@ -1,6 +1,7 @@
 import { SubtitleFetcher } from './fetcher';
 import type { SubtitleResult } from './fetcher';
 import type { CaptionTrack, SubtitleFragment } from '../utils/types';
+import { optimizeSubtitles } from '../processors/subtitle-optimizer';
 
 export type ControllerState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -63,7 +64,10 @@ export class SubtitleController {
         this.playerData
       );
 
-      this.fragments = result.fragments;
+      // Optimize subtitles: merge word-level fragments into sentence-level segments
+      const language = track.languageCode || 'en';
+      this.fragments = optimizeSubtitles(result.fragments, language);
+
       this.currentFragmentIndex = -1;
       this.setState('ready');
 
