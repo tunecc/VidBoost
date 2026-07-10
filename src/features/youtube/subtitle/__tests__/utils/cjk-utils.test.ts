@@ -234,12 +234,12 @@ describe('cjk-utils', () => {
   });
 
   describe('getMaxLength', () => {
-    it('should return 40 for CJK languages', () => {
-      expect(getMaxLength(true)).toBe(40);
+    it('should return 50 for CJK languages', () => {
+      expect(getMaxLength(true)).toBe(50);
     });
 
-    it('should return 80 for non-CJK languages', () => {
-      expect(getMaxLength(false)).toBe(80);
+    it('should return 15 for non-CJK languages', () => {
+      expect(getMaxLength(false)).toBe(15);
     });
   });
 
@@ -254,7 +254,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(10);
-      expect(maxLength).toBe(40);
+      expect(maxLength).toBe(50);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -268,7 +268,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(10);
-      expect(maxLength).toBe(40);
+      expect(maxLength).toBe(50);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -282,7 +282,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(13);
-      expect(maxLength).toBe(40);
+      expect(maxLength).toBe(50);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -296,7 +296,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(false);
       expect(length).toBe(9);
-      expect(maxLength).toBe(80);
+      expect(maxLength).toBe(15);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -310,12 +310,12 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(false);
       expect(length).toBe(2);
-      expect(maxLength).toBe(80);
+      expect(maxLength).toBe(15);
     });
 
     it('should detect when text exceeds max length for CJK', () => {
       const languageCode = 'zh-CN';
-      const text = '这是一个非常长的字幕文本用来测试是否超过了最大长度限制这应该会超过四十个字符的限制值以便我们可以正确处理';
+      const text = '这是一个非常长的字幕文本用来测试是否超过了最大长度限制这应该会超过五十个字符的限制值以便我们可以正确处理';
 
       const isCJK = isCJKLanguage(languageCode);
       const length = getTextLength(text, isCJK);
@@ -323,12 +323,12 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBeGreaterThan(maxLength);
-      expect(length).toBeGreaterThan(40);
+      expect(length).toBeGreaterThan(50);
     });
 
     it('should detect when text exceeds max length for non-CJK', () => {
       const languageCode = 'en';
-      const text = 'This is a very long subtitle text that is intended to test whether the length exceeds the maximum allowed limit which should be around eighty words for non-CJK languages so we need to make sure this text has enough words to properly test the boundary condition and verify that our length calculation is working correctly in all scenarios that might occur in real-world usage of the subtitle system including edge cases and various combinations of punctuation marks and special characters that could appear in natural language content';
+      const text = 'This is a very long subtitle text that is intended to test whether the length exceeds the maximum allowed limit';
 
       const isCJK = isCJKLanguage(languageCode);
       const length = getTextLength(text, isCJK);
@@ -336,7 +336,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(false);
       expect(length).toBeGreaterThan(maxLength);
-      expect(length).toBeGreaterThan(80);
+      expect(length).toBeGreaterThan(15);
     });
   });
 });
