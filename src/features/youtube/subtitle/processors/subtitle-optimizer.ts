@@ -65,6 +65,28 @@ function isQualityPoor(fragments: SubtitleFragment[]): boolean {
 }
 
 /**
+ * Punctuation pattern for ASR detection
+ */
+const ASR_PUNCTUATION_PATTERN = /[.!?,;。！？，；]$/;
+
+/**
+ * Detect if input fragments lack punctuation (typical of YouTube ASR auto-captions)
+ * If fewer than 5% of fragments end with punctuation, treat as "no punctuation" ASR input
+ * and enable aggressive pause word segmentation from the start.
+ */
+function isNoPunctuationASR(fragments: SubtitleFragment[]): boolean {
+  if (fragments.length < 5) {
+    return false;
+  }
+
+  const punctuatedCount = fragments.filter(f =>
+    ASR_PUNCTUATION_PATTERN.test(f.text.trim())
+  ).length;
+
+  return punctuatedCount / fragments.length < 0.05;
+}
+
+/**
  * Process subtitles: merge word-level fragments into sentence-level segments
  *
  * @param fragments - Input subtitle fragments (word-level or phrase-level)
@@ -135,6 +157,11 @@ function processSubtitles(
 
     buffer.push({ text, start: frag.start, end: frag.end });
     bufferLength += fragLength;
+
+    // Sign fragments (e.g., [Music], (Applause)) should stand alone
+    if (STARTS_WITH_SIGN_PATTERN.test(frag.text)) {
+      flushBuffer();
+    }
   }
 
   flushBuffer();
@@ -165,8 +192,9 @@ function shouldKeepBoundary(
   right: SubtitleFragment
 ): boolean {
   const isTimeout = right.start - left.end > PAUSE_TIMEOUT_MS;
-  const startsWithSign = STARTS_WITH_SIGN_PATTERN.test(right.text);
-  return isTimeout || startsWithSign;
+  const rightStartsWithSign = STARTS_WITH_SIGN_PATTERN.test(right.text);
+  const leftIsSign = STARTS_WITH_SIGN_PATTERN.test(left.text);
+  return isTimeout || rightStartsWithSign || leftIsSign;
 }
 
 /**
@@ -265,11 +293,14 @@ export function optimizeSubtitles(
   }
 
   try {
-    // First pass: merge fragments without aggressive pause detection
-    let result = processSubtitles(fragments, language, false);
+    // Detect if input lacks punctuation (YouTube ASR auto-captions)
+    const noPunctuation = isNoPunctuationASR(fragments);
 
-    // Quality check: if too many long lines, reprocess with pause detection
-    if (isQualityPoor(result)) {
+    // First pass: if no punctuation detected, enable pause word segmentation immediately
+    let result = processSubtitles(fragments, language, noPunctuation);
+
+    // Quality check: if first pass didn't use pause words and quality is poor, reprocess
+    if (!noPunctuation && isQualityPoor(result)) {
       result = processSubtitles(fragments, language, true);
     }
 

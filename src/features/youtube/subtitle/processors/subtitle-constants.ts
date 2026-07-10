@@ -7,12 +7,13 @@
  * Time gap threshold (milliseconds)
  * Fragments separated by more than this are considered separate sentences
  */
-export const PAUSE_TIMEOUT_MS = 1500;
+export const PAUSE_TIMEOUT_MS = 1000;
 
 /**
  * Sentence-ending punctuation pattern
+ * Includes comma and semicolons as weak break points for natural segmentation
  */
-export const SENTENCE_END_PATTERN = /[.!?。！？]$/;
+export const SENTENCE_END_PATTERN = /[,.。?？！!；;…؟۔\n]$/;
 
 /**
  * Quality detection thresholds
@@ -35,9 +36,10 @@ export const TARGET_MAX_NON_CJK = 20;
 /**
  * Maximum line length limits
  * Used to prevent excessively long single lines
+ * Non-CJK uses word count: 15 words ≈ one natural spoken sentence
  */
 export const MAX_LENGTH_CJK = 50;
-export const MAX_LENGTH_NON_CJK = 42;
+export const MAX_LENGTH_NON_CJK = 15;
 
 /**
  * Pause words - common transition words that can serve as natural break points

@@ -90,7 +90,7 @@ describe('SubtitleUtils', () => {
     });
 
     it('should return correct max length for non-CJK', () => {
-      expect(getMaxLength(false)).toBe(42);
+      expect(getMaxLength(false)).toBe(15);
     });
   });
 
