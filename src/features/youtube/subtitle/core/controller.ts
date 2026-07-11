@@ -2,6 +2,7 @@ import { SubtitleFetcher } from './fetcher';
 import type { SubtitleResult } from './fetcher';
 import type { CaptionTrack, SubtitleFragment } from '../utils/types';
 import { optimizeSubtitles } from '../processors/subtitle-optimizer';
+import { refineAsrFragments } from '../processors/asr-merge';
 
 export type ControllerState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -64,14 +65,13 @@ export class SubtitleController {
         this.playerData
       );
 
-      // Optimize subtitles: merge word-level fragments into sentence-level segments.
-      // For auto-generated (ASR) tracks, YouTube already segments text into
-      // precisely-timed phrases; skip optimization to preserve original timing
-      // and avoid corrupting the exact timestamps from the timedtext API.
+      // Post-process fragments based on track type:
+      // - ASR (auto-generated): B+ refine = sentence split + adjacent merge
+      // - Human captions: full optimizer for sentence-level segmentation
       const language = track.languageCode || 'en';
       const isAsr = track.kind === 'asr';
       this.fragments = isAsr
-        ? result.fragments
+        ? refineAsrFragments(result.fragments, language)
         : optimizeSubtitles(result.fragments, language);
 
       this.currentFragmentIndex = -1;
