@@ -3,324 +3,85 @@ import { parseScrollingAsrSubtitles } from '../../parsers/scrolling-asr';
 import type { TimedTextEvent } from '../../utils/types';
 
 describe('parseScrollingAsrSubtitles', () => {
-  describe('basic parsing', () => {
-    it('should parse simple subtitle events', () => {
+  describe('faithful event output', () => {
+    it('should turn each non-separator event into one fragment', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 2000,
-          segs: [{ utf8: 'Hello' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 2000,
-          dDurationMs: 2000,
-          segs: [{ utf8: 'World' }]
-        },
-        {
-          tStartMs: 4000,
-          aAppend: 1
-        }
+        { tStartMs: 1000, dDurationMs: 2000, segs: [{ utf8: 'Hello' }] },
+        { tStartMs: 3000, dDurationMs: 2000, segs: [{ utf8: 'World' }] },
       ];
 
-      // Without sentence-end punctuation or exceeding maxLength,
-      // short fragments are accumulated within the parser.
-      // Splitting into sentences is handled by the optimizer layer.
       const result = parseScrollingAsrSubtitles(events, 'en');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Hello World');
-      expect(result[0].start).toBe(0);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({ text: 'Hello', start: 1000, end: 3000 });
+      expect(result[1]).toEqual({ text: 'World', start: 3000, end: 5000 });
     });
 
-    it('should accumulate text across multiple events', () => {
+    it('should preserve YouTube original timing verbatim', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'This ' }]
-        },
-        {
-          tStartMs: 1000,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'is ' }]
-        },
-        {
-          tStartMs: 2000,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'a sentence.' }]
-        },
-        {
-          tStartMs: 3000,
-          aAppend: 1
-        }
+        { tStartMs: 4799, dDurationMs: 1581, segs: [{ utf8: 'also my hair got so' }] },
+        { tStartMs: 15640, dDurationMs: 3639, segs: [{ utf8: 'long need to get my' }] },
+        { tStartMs: 26560, dDurationMs: 2360, segs: [{ utf8: 'hair thank you to Lucan for sponsoring' }] },
       ];
 
-      const result = parseScrollingAsrSubtitles(events);
+      const result = parseScrollingAsrSubtitles(events, 'en');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('This is a sentence.');
+      expect(result).toEqual([
+        { text: 'also my hair got so', start: 4799, end: 6380 },
+        { text: 'long need to get my', start: 15640, end: 19279 },
+        { text: 'hair thank you to Lucan for sponsoring', start: 26560, end: 28920 },
+      ]);
     });
 
-    it('should handle multiple segments within an event', () => {
+    it('should skip separator events (aAppend) without text', () => {
+      const events: TimedTextEvent[] = [
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: 'Hello' }] },
+        { tStartMs: 1000, aAppend: 1 },
+        { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: 'World' }] },
+        { tStartMs: 2000, aAppend: 1 },
+      ];
+
+      const result = parseScrollingAsrSubtitles(events, 'en');
+
+      // Two text events => two fragments with original timing
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({ text: 'Hello', start: 0, end: 1000 });
+      expect(result[1]).toEqual({ text: 'World', start: 1000, end: 2000 });
+    });
+  });
+
+  describe('multi-segment events', () => {
+    it('should join segs within an event with spaces for English', () => {
       const events: TimedTextEvent[] = [
         {
-          tStartMs: 0,
-          dDurationMs: 2000,
+          tStartMs: 1000,
+          dDurationMs: 3000,
           segs: [
-            { utf8: 'Hello', tOffsetMs: 0 },
-            { utf8: ' ', tOffsetMs: 500 },
-            { utf8: 'World', tOffsetMs: 1000 }
-          ]
+            { utf8: 'this', tOffsetMs: 0 },
+            { utf8: 'is a', tOffsetMs: 500 },
+            { utf8: 'test', tOffsetMs: 1500 },
+          ],
         },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Hello World');
-    });
-  });
-
-  describe('separator handling', () => {
-    it('should split at sentence end punctuation', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'First sentence.' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 1000,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'Second sentence.' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events);
-
-      expect(result).toHaveLength(2);
-      expect(result[0].text).toBe('First sentence.');
-      expect(result[1].text).toBe('Second sentence.');
-    });
-
-    it('should respect CJK sentence endings', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 1000,
-          segs: [{ utf8: '这是第一句。' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 1000,
-          dDurationMs: 1000,
-          segs: [{ utf8: '这是第二句。' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'zh-CN');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].text).toBe('这是第一句。');
-      expect(result[1].text).toBe('这是第二句。');
-    });
-
-    it('should handle multiple punctuation types', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: 'Question?' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 1000,
-          segs: [{ utf8: 'Exclamation!' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 2000,
-          segs: [{ utf8: 'Comma,' }]
-        },
-        {
-          tStartMs: 3000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events);
-
-      expect(result).toHaveLength(3);
-      expect(result[0].text).toBe('Question?');
-      expect(result[1].text).toBe('Exclamation!');
-      expect(result[2].text).toBe('Comma,');
-    });
-  });
-
-  describe('CJK language support', () => {
-    it('should use character count for CJK languages', () => {
-      const longText = '这是一个非常长的中文句子，包含了很多很多的字符，超过了四十个字符的限制，应该被分割。';
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 5000,
-          segs: [{ utf8: longText }]
-        },
-        {
-          tStartMs: 5000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'zh-CN');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe(longText);
-    });
-
-    it('should detect Japanese language', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: 'これは日本語です。' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'ja');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('これは日本語です。');
-    });
-
-    it('should detect Korean language', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: '한국어 문장입니다.' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'ko');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('한국어 문장입니다.');
-    });
-
-    it('should use word count for English', () => {
-      const longText = 'This is a very long English sentence with many words that should be split when it exceeds eighty words which is the maximum length for non-CJK languages and this sentence is designed to test that behavior properly by having more than eighty words in total so we can verify the split happens correctly at the right boundary when processing scrolling ASR subtitles in English language mode.';
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 10000,
-          segs: [{ utf8: longText }]
-        },
-        {
-          tStartMs: 10000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'en');
-
-      expect(result.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('space handling for English', () => {
-    it('should add spaces when merging English text across events', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: 'Hello' }]
-        },
-        {
-          tStartMs: 1000,
-          segs: [{ utf8: 'World' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
       ];
 
       const result = parseScrollingAsrSubtitles(events, 'en');
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Hello World');
+      expect(result[0].text).toBe('this is a test');
+      expect(result[0].start).toBe(1000);
     });
 
-    it('should not add double spaces', () => {
+    it('should join segs without spaces for CJK languages', () => {
       const events: TimedTextEvent[] = [
         {
-          tStartMs: 0,
-          segs: [{ utf8: 'Hello ' }]
-        },
-        {
           tStartMs: 1000,
-          segs: [{ utf8: 'World' }]
+          dDurationMs: 3000,
+          segs: [
+            { utf8: '你', tOffsetMs: 0 },
+            { utf8: '好', tOffsetMs: 200 },
+            { utf8: '世界', tOffsetMs: 500 },
+          ],
         },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events, 'en');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Hello World');
-    });
-
-    it('should not add spaces for CJK languages', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: '你好' }]
-        },
-        {
-          tStartMs: 1000,
-          segs: [{ utf8: '世界' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
       ];
 
       const result = parseScrollingAsrSubtitles(events, 'zh-CN');
@@ -328,189 +89,126 @@ describe('parseScrollingAsrSubtitles', () => {
       expect(result).toHaveLength(1);
       expect(result[0].text).toBe('你好世界');
     });
-  });
 
-  describe('special tag filtering', () => {
-    it('should filter out special tags like [Music]', () => {
-      // In the real pipeline, noise-filter removes [Music] before the parser.
-      // When [Music] does reach the parser in a short sequence without triggering
-      // pendingSplit, it stays in the buffer. The isSpecialTag check only applies
-      // during flush. Test the realistic scenario where [Music] causes a pendingSplit.
+    it('should use explicit dDurationMs for end time', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 1000,
-          segs: [{ utf8: 'Hello world this is a test of filtering special tags in subtitles now.' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 1000,
-          segs: [{ utf8: '[Music]' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
+        { tStartMs: 5000, dDurationMs: 2500, segs: [{ utf8: 'hello' }] },
       ];
 
       const result = parseScrollingAsrSubtitles(events, 'en');
 
-      // The first fragment should be output, [Music] should be filtered
-      expect(result).toHaveLength(1);
-      expect(result[0].text).not.toContain('[Music]');
-    });
-
-    it('should filter out various special tags', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: '[Applause]' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        },
-        {
-          tStartMs: 1000,
-          segs: [{ utf8: '[Laughter]' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events);
-
-      expect(result).toHaveLength(0);
+      expect(result[0].start).toBe(5000);
+      expect(result[0].end).toBe(7500);
     });
   });
 
-  describe('timing accuracy', () => {
-    it('should use segment offset for start time', () => {
+  describe('whitespace normalization', () => {
+    it('should normalize whitespace within text', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 1000,
-          dDurationMs: 2000,
-          segs: [
-            { utf8: 'Word1', tOffsetMs: 100 },
-            { utf8: ' Word2', tOffsetMs: 500 }
-          ]
-        },
-        {
-          tStartMs: 3000,
-          aAppend: 1
-        }
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: 'hello    world' }] },
       ];
 
-      const result = parseScrollingAsrSubtitles(events);
+      const result = parseScrollingAsrSubtitles(events, 'en');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].start).toBe(1100); // 1000 + 100
+      expect(result[0].text).toBe('hello world');
     });
 
-    it('should fix overlapping end times', () => {
+    it('should trim leading and trailing whitespace', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: 'First.' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1,
-          dDurationMs: 500
-        },
-        {
-          tStartMs: 800,
-          segs: [{ utf8: 'Second.' }]
-        },
-        {
-          tStartMs: 2000,
-          aAppend: 1
-        }
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: '  hello world  ' }] },
       ];
 
-      const result = parseScrollingAsrSubtitles(events);
+      const result = parseScrollingAsrSubtitles(events, 'en');
 
-      expect(result).toHaveLength(2);
-      expect(result[0].end).toBe(800); // Fixed to not overlap with second
+      expect(result[0].text).toBe('hello world');
     });
   });
 
   describe('edge cases', () => {
-    it('should handle empty input', () => {
-      const result = parseScrollingAsrSubtitles([]);
-
+    it('should handle empty events array', () => {
+      const result = parseScrollingAsrSubtitles([], 'en');
       expect(result).toEqual([]);
     });
 
-    it('should handle events with no segments', () => {
+    it('should skip events with no segs', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          dDurationMs: 1000
-        },
-        {
-          tStartMs: 1000,
-          segs: []
-        }
+        { tStartMs: 0, dDurationMs: 1000 },
+        { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: 'Hi' }] },
       ];
 
-      const result = parseScrollingAsrSubtitles(events);
+      const result = parseScrollingAsrSubtitles(events, 'en');
 
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(1);
+      expect(result[0].text).toBe('Hi');
     });
 
-    it('should handle empty segments', () => {
+    it('should skip events with only empty segs', () => {
       const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: '' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        }
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: '' }] },
+        { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: '  ' }] },
+        { tStartMs: 2000, dDurationMs: 1000, segs: [{ utf8: 'Hello' }] },
       ];
 
-      const result = parseScrollingAsrSubtitles(events);
-
-      expect(result).toEqual([]);
-    });
-
-    it('should trim whitespace', () => {
-      const events: TimedTextEvent[] = [
-        {
-          tStartMs: 0,
-          segs: [{ utf8: '  Hello  ' }]
-        },
-        {
-          tStartMs: 1000,
-          aAppend: 1
-        }
-      ];
-
-      const result = parseScrollingAsrSubtitles(events);
+      const result = parseScrollingAsrSubtitles(events, 'en');
 
       expect(result).toHaveLength(1);
       expect(result[0].text).toBe('Hello');
     });
 
-    it('should handle remaining text without final separator', () => {
+    it('should assign minimal end time when duration is missing', () => {
+      const events: TimedTextEvent[] = [
+        { tStartMs: 5000, segs: [{ utf8: 'Hello' }] },
+      ];
+
+      const result = parseScrollingAsrSubtitles(events, 'en');
+
+      expect(result[0].start).toBe(5000);
+      expect(result[0].end).toBe(5001);
+    });
+
+    it('should fix overlapping end times between consecutive fragments', () => {
+      // First event ends after second starts (overlap)
+      const events: TimedTextEvent[] = [
+        { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: 'First' }] }, // 0-2000
+        { tStartMs: 1500, dDurationMs: 2000, segs: [{ utf8: 'Second' }] }, // 1500-3500
+      ];
+
+      const result = parseScrollingAsrSubtitles(events, 'en');
+
+      // First fragment's end clamped to second's start to avoid overlap
+      expect(result[0].end).toBe(1500);
+      expect(result[1].start).toBe(1500);
+      expect(result[1].end).toBe(3500);
+    });
+
+    it('should handle undefined language code as space-separated', () => {
       const events: TimedTextEvent[] = [
         {
           tStartMs: 0,
-          segs: [{ utf8: 'Final text' }]
-        }
+          dDurationMs: 1000,
+          segs: [{ utf8: 'hello' }, { utf8: 'world' }],
+        },
       ];
 
       const result = parseScrollingAsrSubtitles(events);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Final text');
+      expect(result[0].text).toBe('hello world');
+    });
+  });
+
+  describe('noise tags passthrough', () => {
+    it('should preserve [Music] text events (noise filtering happens upstream)', () => {
+      const events: TimedTextEvent[] = [
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: '[Music]' }] },
+        { tStartMs: 1000, dDurationMs: 2000, segs: [{ utf8: 'Hello' }] },
+      ];
+
+      const result = parseScrollingAsrSubtitles(events, 'en');
+
+      // Parser does not filter; filterNoiseFromEvents runs before the parser
+      expect(result).toHaveLength(2);
+      expect(result[0].text).toBe('[Music]');
+      expect(result[1].text).toBe('Hello');
     });
   });
 });

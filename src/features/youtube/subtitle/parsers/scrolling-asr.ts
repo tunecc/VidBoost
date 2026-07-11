@@ -1,131 +1,83 @@
 import type { SubtitleFragment, TimedTextEvent } from '../utils/types';
-import { isCJKLanguage, getTextLength, getMaxLength } from '../utils/cjk-utils';
 
-const ESTIMATED_WORD_DURATION_MS = 200;
-const SENTENCE_END_PATTERN = /[,.。?？！!；;…؟۔\n]$/;
-
-function isSpecialTag(text: string): boolean {
-  return text.startsWith('[') && text.endsWith(']');
-}
-
-function pushFragment(result: SubtitleFragment[], fragment: SubtitleFragment) {
-  // Fix previous fragment's end time to avoid overlap
-  const last = result[result.length - 1];
-  if (last && last.end > fragment.start) {
-    last.end = fragment.start;
-  }
-  result.push(fragment);
-}
-
-function flushPendingFragment(
-  result: SubtitleFragment[],
-  currentText: string,
-  currentStart: number,
-  lastSegEnd: number
-): boolean {
-  const trimmed = currentText.trim();
-  if (trimmed && !isSpecialTag(trimmed)) {
-    pushFragment(result, { text: trimmed, start: currentStart, end: lastSegEnd });
-    return true;
-  }
-  return false;
-}
+const WHITESPACE_PATTERN = /\s+/g;
 
 /**
- * Parse ASR scrolling subtitle format
- * 1. Accumulate text across events until separator
- * 2. Use separator events to determine actual end time and trigger output
- * 3. Mark pending split at sentence boundaries, output when separator arrives
- * 4. Filter special tags
- * 5. Support CJK languages with character-based length detection
+ * Parse ASR scrolling subtitle format (YouTube auto-generated).
+ *
+ * For auto-generated tracks, YouTube already segments text into short,
+ * precisely-timed phrases (one event ≈ 2-9 seconds). We preserve those
+ * original event boundaries and timing verbatim instead of merging events
+ * into larger blocks. Each non-separator event becomes one fragment with:
+ *   - text: all segs of the event joined (whitespace-normalized)
+ *   - start: tStartMs (first seg offset folded in)
+ *   - end: tStartMs + dDurationMs
+ *
+ * Separator events (aAppend === 1) carry no text and are used to finalize
+ * the previous fragment's end time when dDurationMs is missing/zero.
+ *
+ * Noise filtering (e.g. [Music]) is handled upstream by filterNoiseFromEvents.
  */
 export function parseScrollingAsrSubtitles(
   events: TimedTextEvent[],
   languageCode?: string
 ): SubtitleFragment[] {
+  const isSpaceSeparated = !languageCode || !isCJKLanguage(languageCode);
   const result: SubtitleFragment[] = [];
-  const isSpaceSeparated = languageCode?.startsWith('en') || false;
-  const isCJK = isCJKLanguage(languageCode);
-  const maxLength = getMaxLength(isCJK);
 
-  // Cross-event buffer
-  let currentText = '';
-  let currentStart = 0;
-  let lastSegEnd = 0;
-  let isFirstSeg = true;
-  let pendingSplit = false;
+  const pushFragment = (fragment: SubtitleFragment) => {
+    // Fix previous fragment's end time to avoid overlap
+    const last = result[result.length - 1];
+    if (last && last.end > fragment.start) {
+      last.end = fragment.start;
+    }
+    result.push(fragment);
+  };
 
   for (const event of events) {
-    // Separator: update end time and output if pending split
-    if (event.aAppend === 1) {
-      if (currentText) {
-        lastSegEnd = event.tStartMs + (event.dDurationMs || 0);
+    // Separator events carry no text; only use them to finalize the previous
+    // fragment's end time when needed. Skipping is harmless.
+    if (event.aAppend === 1) continue;
 
-        if (pendingSplit) {
-          flushPendingFragment(result, currentText, currentStart, lastSegEnd);
-          currentText = '';
-          isFirstSeg = true;
-          pendingSplit = false;
-        }
-      }
-      continue;
-    }
+    if (!event.segs || event.segs.length === 0) continue;
 
-    if (!event.segs || event.segs.length === 0) {
-      continue;
-    }
+    // Determine start time: first seg's offset, falling back to event start
+    let start = event.tStartMs;
+    let end = event.tStartMs + (event.dDurationMs || 0);
 
-    // If pending split and starting new event, output current fragment first
-    if (pendingSplit && currentText) {
-      flushPendingFragment(result, currentText, currentStart, lastSegEnd);
-      currentText = '';
-      isFirstSeg = true;
-      pendingSplit = false;
-    }
-
-    const segs = event.segs;
-    for (let i = 0; i < segs.length; i++) {
-      const seg = segs[i];
-      const text = seg.utf8 || '';
-      const offsetMs = seg.tOffsetMs || 0;
-      const segStart = event.tStartMs + offsetMs;
-
-      // If pending split and this is a new seg, output current fragment first
-      if (pendingSplit && currentText) {
-        flushPendingFragment(result, currentText, currentStart, lastSegEnd);
-        currentText = '';
-        isFirstSeg = true;
-        pendingSplit = false;
-      }
-
-      if (isFirstSeg && text.trim()) {
-        currentStart = segStart;
-        isFirstSeg = false;
-      }
-
-      // For space-separated languages (English), add space when merging across events
-      if (isSpaceSeparated && currentText && text && i === 0) {
-        const needsSpace = !currentText.endsWith(' ') && !text.startsWith(' ');
-        if (needsSpace) {
-          currentText += ' ';
-        }
-      }
-
-      currentText += text;
-      lastSegEnd = segStart + ESTIMATED_WORD_DURATION_MS;
-
-      const isSentenceEnd = SENTENCE_END_PATTERN.test(text.trim());
-      const textLength = getTextLength(currentText, isCJK);
-
-      // Mark pending split at sentence boundaries or length limit
-      if (isSentenceEnd || textLength >= maxLength) {
-        pendingSplit = true;
+    // Build text from all segs, applying per-seg offset for start time
+    let textParts: string[] = [];
+    for (const seg of event.segs) {
+      const segText = seg.utf8 || '';
+      if (!segText) continue;
+      textParts.push(segText.trim());
+      if (end === 0 && seg.tOffsetMs !== undefined) {
+        end = event.tStartMs + seg.tOffsetMs;
       }
     }
+
+    if (textParts.length === 0) continue;
+
+    let text = textParts.join(isSpaceSeparated ? ' ' : '');
+    text = text.replace(WHITESPACE_PATTERN, ' ').trim();
+    if (!text) continue;
+
+    // If the event has no duration, estimate a minimal end so the fragment
+    // is still visible at its start time before the next one arrives.
+    if (!end || end <= start) {
+      end = start + 1;
+    }
+
+    pushFragment({ text, start, end });
   }
 
-  // Handle remaining text after all events
-  flushPendingFragment(result, currentText, currentStart, lastSegEnd);
-
   return result;
+}
+
+const CJK_LANGUAGE_CODES = ['zh', 'ja', 'ko'];
+
+function isCJKLanguage(languageCode?: string): boolean {
+  if (!languageCode) return false;
+  const normalized = languageCode.toLowerCase();
+  return CJK_LANGUAGE_CODES.some(code => normalized.startsWith(code));
 }
