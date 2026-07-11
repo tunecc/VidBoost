@@ -8,6 +8,42 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [1.8.4] - 2026-07-11
+
+自 `v1.8.3` 以来，YouTube 自渲染字幕围绕 **ASR 自动字幕分段质量** 做了多轮迭代：先改进本地优化器参数，再保留 YouTube 原始时间边界，最后落地 **Scheme B+（先拆后并）** 并接到真正的生产渲染路径。
+
+### Added
+- **[新增] ASR 短句精炼器（Scheme B+）**（`processors/asr-merge.ts`）  
+  专为 YouTube 自动字幕设计：在尽量对齐原始 timedtext 时间的前提下，让屏幕上更像完整短句。
+  - **有标点 ASR**：先在 cue 内按 `. ? !` 等强句末切开（保护 `a.m.` / `p.m.` 等缩写），再合并未完成的相邻片段；句号结尾禁止再粘下一句。
+  - **无标点 ASR**：按时间间隙（≤300ms）、词数上限（约 18 词）、时长上限（约 7s）、未完成尾巴词、pause words 等进行相邻合并。
+  - **只合并不任意重切**（除有标点时的句内拆分外），时间取合并后首段 start / 末段 end。
+  - 短孤儿片段（如 `box down`）、不完整尾巴（如 `I'm` / `my` / `to`）可适度放宽上限，减少半句悬挂。
+- **[新增] ASR 精炼单元测试**（`processors/__tests__/asr-merge.test.ts`）  
+  覆盖有标点拆句、无标点合并、缩写保护、大间隙不合并、噪声标签独立、CJK 合并等场景。
+
+### Changed
+- **[生产路径接线]** 在真正渲染入口 `YouTubeSubtitleOverlay.fetchTrackFragments` 中，parse 后按轨道类型后处理：
+  - `track.kind === 'asr'` → `refineAsrFragments`（B+）
+  - 人工字幕 → `optimizeSubtitles`
+  - 此前 B+ 只改到 `SubtitleController`，而 content 实际使用的是 `YouTubeSubtitleOverlay`，导致 build 后界面仍无合并；本次修复该接线问题。
+- **scrolling-asr 解析器**改为忠实于 YouTube 原始 event 边界：每个非 separator event 对应一个 fragment，保留 `tStartMs` / `dDurationMs`，避免 parser 层过大 `maxLength` 把短句揉成超长段。
+- **CJK 工具与优化器常量对齐**：parser 层 `getMaxLength` 与优化器侧一致，减少解析阶段过度合并。
+- **字幕优化器参数调优**（相对 1.8.3 初版）：停顿阈值、句末标点集合、无标点 ASR 检测与 pause-word 二次处理等，改善英文无标点自动字幕的可读性（人工字幕与优化器路径仍保留）。
+- `SubtitleController` 与 overlay 对齐同一 ASR/人工字幕分支策略，避免测试路径与生产路径行为漂移。
+- 版本号升至 `1.8.4`（`package.json` / `package-lock.json` / `public/manifest.json`）。
+
+### Fixed
+- 修复 scrolling-asr 使用过大 `maxLength` 导致自动字幕在解析阶段过度合并、丢失精确时间边界的问题。
+- 修复「已实现 ASR 合并但界面无效」：合并逻辑未接入 `YouTubeSubtitleOverlay` 生产路径。
+- 修复有标点 ASR 中「一句 cue 内粘两句」（如 `to the airport. I'm flying to Korea`）仅靠合并无法处理的问题：B+ 会先拆再并。
+- 改善无标点 ASR 中半句悬挂（如 `from jet` / `lag.`）通过相邻合并拼成完整短语的能力。
+
+### Notes
+- `language = track.languageCode || 'en'` 仅表示缺少语言码时的默认值，**不是「仅英文启用」**；是否走 B+ 取决于 `track.kind === 'asr'`。
+- 中间曾短暂采用「ASR 完全原样显示」以保留 YouTube 时间；1.8.4 最终在原样解析基础上增加 B+ 精炼，兼顾时间与可读性。
+- 相关 commits（`v1.8.3` → HEAD）：`b7be56b`、`e037ebf`、`1399adf`、`3aec69d`。
+
 ## [1.8.3] - 2026-06-25
 
 ### Added
