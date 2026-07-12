@@ -81,7 +81,8 @@ describe('SubtitleController', () => {
 
       await controller.setTrack(mockTrack);
 
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      // Same vssId short-circuits before fetch
+      expect(fetchSpy).toHaveBeenCalledTimes(0);
     });
 
     it('should clear track when null', async () => {
@@ -223,6 +224,93 @@ describe('SubtitleController', () => {
       controller.updateTime(1500); // In gap
 
       expect(controller.getCurrentFragment()?.text).toContain('First');
+    });
+  });
+
+  describe('content-aware routing', () => {
+    beforeEach(async () => {
+      await controller.initialize('test123');
+    });
+
+    it('refines Chinese pseudo-manual short cues even without kind=asr', async () => {
+      const zhTrack: CaptionTrack = {
+        baseUrl: 'https://example.com/timedtext?v=test123&lang=zh-CN',
+        languageCode: 'zh-CN',
+        vssId: '.zh-CN',
+        trackName: 'Chinese (Simplified)',
+      };
+
+      const pseudoManual: SubtitleFragment[] = [
+        { text: '大家好今天', start: 32033, end: 33166 },
+        { text: '我们来聊一个小技巧', start: 33166, end: 35533 },
+        { text: '当然', start: 35833, end: 36466 },
+        { text: '这个方法看起来有点麻烦', start: 36466, end: 39633 },
+        { text: '咱们还是一步步来', start: 39833, end: 40833 },
+        { text: '首先打开设置页面', start: 42000, end: 44033 },
+        { text: '找到字幕相关选项', start: 44033, end: 45933 },
+        { text: '然后把它打开', start: 46033, end: 48300 },
+        { text: '啊如果没有看到', start: 49133, end: 51533 },
+        { text: '可以先刷新一下页面', start: 51533, end: 54800 },
+        { text: '就是这个位置', start: 54800, end: 56333 },
+        { text: '啊左边也好', start: 56500, end: 57833 },
+        { text: '右边也好', start: 57833, end: 59266 },
+        { text: '那就先选默认字体', start: 59266, end: 60966 },
+        { text: '啊大小也好', start: 61100, end: 62566 },
+        { text: '啊甚至于包括颜色设置', start: 62766, end: 64866 },
+        { text: '可能都要调一下', start: 64866, end: 66466 },
+        { text: '最好的效果就是背景半透明', start: 66866, end: 69966 },
+        { text: '字号适中', start: 69966, end: 71233 },
+        { text: '这样看起来会舒服很多', start: 71433, end: 73666 },
+      ];
+
+      vi.spyOn(mockFetcher, 'fetchWithFallback').mockResolvedValue({
+        fragments: pseudoManual,
+        track: zhTrack,
+        videoId: 'test123',
+      });
+
+      await controller.setTrack(zhTrack);
+
+      const fragments = controller.getFragments();
+      const maxLen = Math.max(
+        ...fragments.map(f => f.text.replace(/\s+/g, '').length)
+      );
+      const mega =
+        '大家好今天我们来聊一个小技巧当然这个方法看起来有点麻烦咱们还是一步步来';
+
+      // ASR refine path: merged but not into optimizer walls
+      expect(fragments.length).toBeGreaterThan(0);
+      expect(fragments.length).toBeLessThan(pseudoManual.length);
+      expect(maxLen).toBeLessThanOrEqual(40);
+      expect(fragments.some(f => f.text.replace(/\s+/g, '') === mega)).toBe(false);
+    });
+
+    it('still refines when kind=asr', async () => {
+      const asrTrack: CaptionTrack = {
+        baseUrl: 'https://example.com/timedtext?v=test123&lang=en&kind=asr',
+        languageCode: 'en',
+        vssId: 'a.en',
+        trackName: 'English (auto-generated)',
+        kind: 'asr',
+      };
+
+      const asrFragments: SubtitleFragment[] = Array.from({ length: 10 }, (_, i) => ({
+        text: `word${i} more text here`,
+        start: i * 800,
+        end: i * 800 + 600,
+      }));
+
+      vi.spyOn(mockFetcher, 'fetchWithFallback').mockResolvedValue({
+        fragments: asrFragments,
+        track: asrTrack,
+        videoId: 'test123',
+      });
+
+      await controller.setTrack(asrTrack);
+
+      const fragments = controller.getFragments();
+      expect(fragments.length).toBeGreaterThan(0);
+      expect(fragments.length).toBeLessThanOrEqual(asrFragments.length);
     });
   });
 

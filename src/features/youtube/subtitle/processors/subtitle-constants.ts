@@ -27,18 +27,22 @@ export const QUALITY_PERCENTAGE_THRESHOLD = 0.2; // 20%
  * Target length range for rebalancing (best-effort)
  * CJK languages are measured by character count
  * Non-CJK languages are measured by word count
+ *
+ * CJK targets stay readable on mobile overlays; hard max is tighter (see below)
+ * so rebalance cannot glue phrases into a wall of text.
  */
-export const TARGET_MIN_CJK = 15;
-export const TARGET_MAX_CJK = 25;
+export const TARGET_MIN_CJK = 12;
+export const TARGET_MAX_CJK = 24;
 export const TARGET_MIN_NON_CJK = 11;
 export const TARGET_MAX_NON_CJK = 20;
 
 /**
  * Maximum line length limits
  * Used to prevent excessively long single lines
+ * CJK char cap aligned with ASR soft merge limit (~32)
  * Non-CJK uses word count: 15 words ≈ one natural spoken sentence
  */
-export const MAX_LENGTH_CJK = 50;
+export const MAX_LENGTH_CJK = 32;
 export const MAX_LENGTH_NON_CJK = 15;
 
 /**

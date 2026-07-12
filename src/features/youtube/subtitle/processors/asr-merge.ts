@@ -93,6 +93,43 @@ const PAUSE_WORDS = new Set([
   'yesterday',
 ]);
 
+/**
+ * CJK discourse markers / weak break prefixes.
+ * Checked with startsWith (longest first) because Chinese cues have no spaces.
+ * Prefer clause-level connectors over ultra-common particles to avoid over-splitting.
+ */
+const CJK_PAUSE_PREFIXES = [
+  '也就是说',
+  '换句话说',
+  '比如说',
+  '总而言之',
+  '另一方面',
+  '首先',
+  '其次',
+  '最后',
+  '然后',
+  '所以',
+  '但是',
+  '可是',
+  '不过',
+  '因为',
+  '因此',
+  '如果',
+  '虽然',
+  '其实',
+  '那么',
+  '而且',
+  '另外',
+  '后来',
+  '比如',
+  '就是',
+  '还有',
+  '总之',
+].sort((a, b) => b.length - a.length);
+
+/** Min current length before allowing a CJK weak break (chars) */
+const CJK_PAUSE_MIN_CURRENT = 8;
+
 const INCOMPLETE_TAIL_WORDS = new Set([
   'a',
   'an',
@@ -363,12 +400,33 @@ function shouldStopAfterPunctuated(current: SubtitleFragment, isCJK: boolean): b
   return false;
 }
 
+function startsWithCjkPause(text: string): boolean {
+  const t = text.trim();
+  if (!t) {
+    return false;
+  }
+  return CJK_PAUSE_PREFIXES.some(prefix => t.startsWith(prefix));
+}
+
+/**
+ * Break before discourse markers on unpunctuated ASR.
+ * English: first-word pause list. CJK: prefix list (no spaces).
+ */
 function shouldBreakBeforeUnpunctuated(
   current: SubtitleFragment,
-  next: SubtitleFragment
+  next: SubtitleFragment,
+  isCJK: boolean
 ): boolean {
   if (isSign(next.text) || isNoiseTag(next.text)) {
     return true;
+  }
+
+  if (isCJK) {
+    if (!startsWithCjkPause(next.text)) {
+      return false;
+    }
+    // Only break once the current cue is already a readable phrase
+    return getTextLength(current.text, true) >= CJK_PAUSE_MIN_CURRENT;
   }
 
   const first = getFirstWord(next.text);
@@ -456,7 +514,7 @@ export function mergeAsrFragments(
       continue;
     }
 
-    if (shouldBreakBeforeUnpunctuated(current, nextFrag)) {
+    if (shouldBreakBeforeUnpunctuated(current, nextFrag, isCJK)) {
       flush();
       current = nextFrag;
       continue;

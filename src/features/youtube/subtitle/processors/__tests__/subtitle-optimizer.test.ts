@@ -98,6 +98,47 @@ describe('SubtitleOptimizer', () => {
       expect(result[0].text).toBe('안녕하세요오늘은좋은날이에요여러분');
       expect(result[1].text).toBe('저는프로그래머입니다반갑습니다');
     });
+
+    it('degrades CJK unpunctuated short cues to ASR refine (no mega-line walls)', () => {
+      // Even if optimizeSubtitles is called directly (bypass controller routing),
+      // CJK + punctuation-poor must not glue into a 40+ char wall.
+      const input: SubtitleFragment[] = [
+        { text: '大家好今天', start: 32033, end: 33166 },
+        { text: '我们来聊一个小技巧', start: 33166, end: 35533 },
+        { text: '当然', start: 35833, end: 36466 },
+        { text: '这个方法看起来有点麻烦', start: 36466, end: 39633 },
+        { text: '咱们还是一步步来', start: 39833, end: 40833 },
+        { text: '首先打开设置页面', start: 42000, end: 44033 },
+        { text: '找到字幕相关选项', start: 44033, end: 45933 },
+        { text: '然后把它打开', start: 46033, end: 48300 },
+        { text: '啊如果没有看到', start: 49133, end: 51533 },
+        { text: '可以先刷新一下页面', start: 51533, end: 54800 },
+      ];
+
+      const result = optimizeSubtitles(input, 'zh-CN');
+      const maxLen = Math.max(...result.map(f => f.text.replace(/\s+/g, '').length));
+      const mega =
+        '大家好今天我们来聊一个小技巧当然这个方法看起来有点麻烦咱们还是一步步来';
+
+      expect(result.length).toBeGreaterThan(1);
+      expect(result.length).toBeLessThan(input.length);
+      expect(maxLen).toBeLessThanOrEqual(40);
+      expect(result.some(f => f.text.replace(/\s+/g, '') === mega)).toBe(false);
+    });
+
+    it('still uses optimizer path for polished punctuated Chinese', () => {
+      const input: SubtitleFragment[] = [
+        { text: '大家好，今天我们来聊一个话题。', start: 0, end: 2500 },
+        { text: '这件事其实并不复杂。', start: 2600, end: 4500 },
+        { text: '关键在于我们如何理解它。', start: 4600, end: 7000 },
+        { text: '接下来分三点说明。', start: 7100, end: 9000 },
+        { text: '第一点是背景情况。', start: 9100, end: 11000 },
+      ];
+      const result = optimizeSubtitles(input, 'zh-CN');
+      // Punctuated CJK stays on optimizer; sentences remain separate
+      expect(result.length).toBeGreaterThanOrEqual(3);
+      expect(result.every(f => /[。！？]$/.test(f.text.trim()) || f.text.length > 0)).toBe(true);
+    });
   });
 
   describe('Time gap handling', () => {

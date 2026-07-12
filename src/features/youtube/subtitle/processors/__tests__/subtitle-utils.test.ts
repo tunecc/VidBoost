@@ -86,7 +86,7 @@ describe('SubtitleUtils', () => {
 
   describe('getMaxLength', () => {
     it('should return correct max length for CJK', () => {
-      expect(getMaxLength(true)).toBe(50);
+      expect(getMaxLength(true)).toBe(32);
     });
 
     it('should return correct max length for non-CJK', () => {
@@ -97,8 +97,8 @@ describe('SubtitleUtils', () => {
   describe('getTargetBounds', () => {
     it('should return correct bounds for CJK', () => {
       const bounds = getTargetBounds(true);
-      expect(bounds.min).toBe(15);
-      expect(bounds.max).toBe(25);
+      expect(bounds.min).toBe(12);
+      expect(bounds.max).toBe(24);
     });
 
     it('should return correct bounds for non-CJK', () => {

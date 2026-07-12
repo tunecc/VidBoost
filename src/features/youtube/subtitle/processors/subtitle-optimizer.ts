@@ -4,6 +4,7 @@
  */
 
 import type { SubtitleFragment } from '../utils/types';
+import { isPunctuationPoor, refineAsrFragments } from './asr-merge';
 import {
   CHEVRON_PATTERN,
   LEADING_CHEVRON_PATTERN,
@@ -293,6 +294,13 @@ export function optimizeSubtitles(
   }
 
   try {
+    // Phase 2 safety net: even if caller routes CJK unpunctuated content here
+    // (e.g. mislabeled manual track, or direct API use), degrade to ASR refine.
+    // Aggressive English-style merging turns Chinese short cues into walls of text.
+    if (isCJKLanguage(language) && isPunctuationPoor(fragments)) {
+      return refineAsrFragments(fragments, language);
+    }
+
     // Detect if input lacks punctuation (YouTube ASR auto-captions)
     const noPunctuation = isNoPunctuationASR(fragments);
 

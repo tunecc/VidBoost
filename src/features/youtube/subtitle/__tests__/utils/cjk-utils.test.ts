@@ -234,8 +234,8 @@ describe('cjk-utils', () => {
   });
 
   describe('getMaxLength', () => {
-    it('should return 50 for CJK languages', () => {
-      expect(getMaxLength(true)).toBe(50);
+    it('should return 32 for CJK languages', () => {
+      expect(getMaxLength(true)).toBe(32);
     });
 
     it('should return 15 for non-CJK languages', () => {
@@ -254,7 +254,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(10);
-      expect(maxLength).toBe(50);
+      expect(maxLength).toBe(32);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -268,7 +268,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(10);
-      expect(maxLength).toBe(50);
+      expect(maxLength).toBe(32);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -282,7 +282,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBe(13);
-      expect(maxLength).toBe(50);
+      expect(maxLength).toBe(32);
       expect(length).toBeLessThan(maxLength);
     });
 
@@ -323,7 +323,7 @@ describe('cjk-utils', () => {
 
       expect(isCJK).toBe(true);
       expect(length).toBeGreaterThan(maxLength);
-      expect(length).toBeGreaterThan(50);
+      expect(length).toBeGreaterThan(32);
     });
 
     it('should detect when text exceeds max length for non-CJK', () => {

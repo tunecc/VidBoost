@@ -178,6 +178,43 @@ describe('refineAsrFragments unpunctuated (sample 1 style)', () => {
   });
 });
 
+describe('CJK weak pause prefixes', () => {
+  it('breaks before Chinese discourse markers when current cue is long enough', () => {
+    const input: SubtitleFragment[] = [
+      { text: '这件事其实并不复杂', start: 0, end: 1500 },
+      { text: '所以我们先看背景', start: 1500, end: 3000 },
+      { text: '然后讲具体做法', start: 3000, end: 4500 },
+    ];
+    const result = refineAsrFragments(input, 'zh-CN');
+    expect(result.map(r => r.text)).toEqual([
+      '这件事其实并不复杂',
+      '所以我们先看背景',
+      '然后讲具体做法',
+    ]);
+  });
+
+  it('does not break on CJK pause prefix when current cue is still very short', () => {
+    // "就是" is a pause prefix, but current length < 8 chars → keep merging
+    const input: SubtitleFragment[] = [
+      { text: '一个东西', start: 0, end: 800 },
+      { text: '就是很重要', start: 800, end: 1600 },
+    ];
+    const result = refineAsrFragments(input, 'zh-CN');
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('一个东西就是很重要');
+  });
+
+  it('matches longer CJK prefixes before shorter ones', () => {
+    const input: SubtitleFragment[] = [
+      { text: '前面讲了很多细节内容', start: 0, end: 1800 },
+      { text: '也就是说核心只有一点', start: 1800, end: 3600 },
+    ];
+    const result = refineAsrFragments(input, 'zh-CN');
+    expect(result).toHaveLength(2);
+    expect(result[1].text.startsWith('也就是说')).toBe(true);
+  });
+});
+
 describe('guards', () => {
   it('never merges across large gaps', () => {
     const input: SubtitleFragment[] = [
