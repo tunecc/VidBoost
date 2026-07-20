@@ -192,6 +192,14 @@ const strings = {
         h5_key_fullscreen: "Fullscreen",
         h5_key_seek_forward: "Seek forward",
         h5_key_seek_back: "Seek back",
+        h5CompatMode: "Compatibility mode",
+        h5CompatModeDesc: "How aggressively VidBoost holds playback speed on stubborn sites.",
+        h5CompatSafe: "Safe (legacy)",
+        h5CompatSafeDesc: "Isolated writes only. Least site interference.",
+        h5CompatCompat: "Compatible (recommended)",
+        h5CompatCompatDesc: "Page-world control with short sticky hold after you change speed.",
+        h5CompatStrict: "Strict",
+        h5CompatStrictDesc: "Keeps your speed until you change it again. More aggressive.",
 
         // Fast Pause Settings
         fast_pause_title: "Fast Pause Settings",
@@ -399,6 +407,14 @@ const strings = {
         h5_key_fullscreen: "全屏",
         h5_key_seek_forward: "快进",
         h5_key_seek_back: "快退",
+        h5CompatMode: "兼容模式",
+        h5CompatModeDesc: "在会回写倍速的站点上，如何稳住播放速度。",
+        h5CompatSafe: "安全（旧行为）",
+        h5CompatSafeDesc: "仅隔离世界直写，对页面干扰最小。",
+        h5CompatCompat: "兼容（推荐）",
+        h5CompatCompatDesc: "页面世界调速，并在改速后短时守住。",
+        h5CompatStrict: "强兼容",
+        h5CompatStrictDesc: "一直守住当前倍速直到你再次修改，更激进。",
 
         // Fast Pause Settings
         fast_pause_title: "极速暂停设置",

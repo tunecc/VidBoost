@@ -6,6 +6,7 @@
         getSettings,
         setSettings,
         DEFAULT_SETTINGS,
+        type H5CompatMode,
         type Settings,
     } from "../lib/settings";
     import { hasStorageApi } from "../lib/webext";
@@ -25,11 +26,19 @@
     let seekForward = 5;
     let seekRewind = 3;
     let zxcControlsEnabled = true;
+    let compatMode: H5CompatMode = "compat";
     let loaded = false;
     const SAVE_DEBOUNCE_MS = 180;
     let saveTimer: number | null = null;
     let pendingSettings: Partial<Settings> | null = null;
     // blockNumKeys removed as requested
+
+    $: compatModeDesc =
+        compatMode === "safe"
+            ? t("h5CompatSafeDesc")
+            : compatMode === "strict"
+              ? t("h5CompatStrictDesc")
+              : t("h5CompatCompatDesc");
 
     onMount(() => {
         getSettings(["h5_config"]).then((res) => {
@@ -45,6 +54,13 @@
             zxcControlsEnabled =
                 conf.zxcControlsEnabled ??
                 DEFAULT_SETTINGS.h5_config.zxcControlsEnabled!;
+            const nextCompatMode = conf.compatMode ?? DEFAULT_SETTINGS.h5_config.compatMode!;
+            compatMode =
+                nextCompatMode === "safe" ||
+                nextCompatMode === "compat" ||
+                nextCompatMode === "strict"
+                    ? nextCompatMode
+                    : "compat";
             loaded = true;
         });
     });
@@ -59,6 +75,7 @@
                     seekForward,
                     seekRewind,
                     zxcControlsEnabled,
+                    compatMode,
                 },
             };
             if (saveTimer) clearTimeout(saveTimer);
@@ -501,6 +518,29 @@
                     compact={true}
                     onClick={() => (zxcControlsEnabled = !zxcControlsEnabled)}
                 />
+                <div class="pt-1 space-y-1.5">
+                    <label
+                        class="block text-sm font-medium text-gray-800 dark:text-white/90"
+                        for="h5-compat-mode"
+                    >
+                        {t("h5CompatMode")}
+                    </label>
+                    <p class="text-[10px] text-gray-500 dark:text-white/40">
+                        {t("h5CompatModeDesc")}
+                    </p>
+                    <select
+                        id="h5-compat-mode"
+                        bind:value={compatMode}
+                        class="w-full bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-900 dark:text-white focus:bg-black/10 dark:focus:bg-white/20 focus:border-blue-500/50 dark:focus:border-blue-400/50 outline-none transition-all hover:bg-black/10 dark:hover:bg-white/20 focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
+                    >
+                        <option value="safe">{t("h5CompatSafe")}</option>
+                        <option value="compat">{t("h5CompatCompat")}</option>
+                        <option value="strict">{t("h5CompatStrict")}</option>
+                    </select>
+                    <p class="text-[11px] text-gray-600 dark:text-white/60">
+                        {compatModeDesc}
+                    </p>
+                </div>
                 <p class="text-[11px] text-gray-600 dark:text-white/60">
                     {t("h5_shortcuts_desc")}
                 </p>

@@ -11,6 +11,8 @@ import {
     normalizeBilibiliQualityValue
 } from './bilibiliQuality';
 
+export type H5CompatMode = 'safe' | 'compat' | 'strict';
+
 export type H5Config = {
     speedStep?: number;
     maxSpeed?: number;
@@ -19,6 +21,8 @@ export type H5Config = {
     seekRewind?: number;
     zxcControlsEnabled?: boolean;
     blockNumKeys?: boolean;
+    /** safe=isolated only; compat=MAIN sticky; strict=MAIN strong sticky */
+    compatMode?: H5CompatMode;
 };
 
 export type YTConfig = {
@@ -163,6 +167,7 @@ export type SettingsKey = keyof Settings;
 export const CONTENT_SETTINGS_KEYS = [
     'enabled',
     'h5_enabled',
+    'h5_config',
     'stats_speed_converter',
     'ap_enabled',
     'bnd_enabled',
@@ -180,7 +185,6 @@ export const CONTENT_SETTINGS_KEYS = [
 
 export const POPUP_SETTINGS_KEYS = [
     ...CONTENT_SETTINGS_KEYS,
-    'h5_config',
     'ui_state',
     'bb_cdn',
     'bb_cdn_test',
@@ -268,7 +272,8 @@ export const DEFAULT_SETTINGS: Settings = {
         restoreSpeed: 1.0,
         seekForward: 5,
         seekRewind: 3,
-        zxcControlsEnabled: true
+        zxcControlsEnabled: true,
+        compatMode: 'compat'
     },
     ui_state: { general: true, youtube: true, bilibili: true },
     ap_scope: 'all',
