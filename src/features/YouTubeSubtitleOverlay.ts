@@ -43,8 +43,7 @@ import {
     type YouTubeTimedText
 } from './youtube/subtitleOverlay.shared';
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
-import { refineAsrFragments } from './youtube/subtitle/processors/asr-merge';
-import { optimizeSubtitles } from './youtube/subtitle/processors/subtitle-optimizer';
+import { postProcessSubtitles } from './youtube/subtitle/processors/subtitle-style';
 import type { SubtitleFragment } from './youtube/subtitle/utils/types';
 
 type PotToken = {
@@ -871,12 +870,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         const fragments = parseYouTubeSubtitleEvents(events, track.languageCode);
         const language = track.languageCode || 'en';
 
-        // ASR auto-captions: B+ refine (sentence split + adjacent merge).
-        // Human captions: sentence optimizer.
-        // This is the real production path — SubtitleController is not used by the overlay.
-        return track.kind === 'asr'
-            ? refineAsrFragments(fragments, language)
-            : optimizeSubtitles(fragments, language);
+        // Shape-based post-process (author + ASR share the same gate):
+        // polished phrase tracks pass through; only fragmented cues refine.
+        return postProcessSubtitles(fragments, language);
     }
 
     private async requestPlayerDataWithRetries(expectedVideoId: string, signal: AbortSignal) {
