@@ -33,12 +33,24 @@
     let pendingSettings: Partial<Settings> | null = null;
     // blockNumKeys removed as requested
 
+    const COMPAT_MODES: H5CompatMode[] = ["safe", "compat", "strict"];
+
     $: compatModeDesc =
         compatMode === "safe"
             ? t("h5CompatSafeDesc")
             : compatMode === "strict"
               ? t("h5CompatStrictDesc")
               : t("h5CompatCompatDesc");
+
+    function compatModeLabel(mode: H5CompatMode): string {
+        if (mode === "safe") return t("h5CompatSafe");
+        if (mode === "strict") return t("h5CompatStrict");
+        return t("h5CompatCompat");
+    }
+
+    function selectCompatMode(mode: H5CompatMode) {
+        compatMode = mode;
+    }
 
     onMount(() => {
         getSettings(["h5_config"]).then((res) => {
@@ -498,6 +510,60 @@
             </div>
         </section>
 
+        <!-- Site compatibility (separate from shortcuts) -->
+        <section class="space-y-2">
+            <div class="flex items-center gap-2 ml-1">
+                <span class="h-[10px] w-[2px] rounded-full bg-blue-500/60"
+                ></span>
+                <h3
+                    class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-white/50"
+                >
+                    {t("h5_site_compat")}
+                </h3>
+            </div>
+            <div class="glass-panel rounded-xl overflow-hidden p-3 space-y-2.5">
+                <div>
+                    <p
+                        class="text-sm font-medium text-gray-800 dark:text-white/90"
+                    >
+                        {t("h5CompatMode")}
+                    </p>
+                    <p class="text-[10px] text-gray-500 dark:text-white/40 mt-0.5">
+                        {t("h5CompatModeDesc")}
+                    </p>
+                </div>
+
+                <div
+                    class="compat-segment p-0.5 rounded-xl border border-black/10 dark:border-white/15 bg-black/5 dark:bg-white/10 backdrop-blur-sm"
+                    role="radiogroup"
+                    aria-label={t("h5CompatMode")}
+                >
+                    <div class="grid grid-cols-3 gap-0.5">
+                        {#each COMPAT_MODES as mode (mode)}
+                            <button
+                                type="button"
+                                role="radio"
+                                aria-checked={compatMode === mode}
+                                class="compat-segment__btn relative px-1.5 py-1.5 rounded-[10px] text-[12px] font-medium transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 {compatMode ===
+                                mode
+                                    ? 'compat-segment__btn--active'
+                                    : 'compat-segment__btn--idle'}"
+                                on:click={() => selectCompatMode(mode)}
+                            >
+                                {compatModeLabel(mode)}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+
+                <p
+                    class="text-[11px] leading-relaxed text-gray-600 dark:text-white/60 px-0.5"
+                >
+                    {compatModeDesc}
+                </p>
+            </div>
+        </section>
+
         <!-- Shortcuts -->
         <section class="space-y-2">
             <div class="flex items-center gap-2 ml-1">
@@ -518,29 +584,6 @@
                     compact={true}
                     onClick={() => (zxcControlsEnabled = !zxcControlsEnabled)}
                 />
-                <div class="pt-1 space-y-1.5">
-                    <label
-                        class="block text-sm font-medium text-gray-800 dark:text-white/90"
-                        for="h5-compat-mode"
-                    >
-                        {t("h5CompatMode")}
-                    </label>
-                    <p class="text-[10px] text-gray-500 dark:text-white/40">
-                        {t("h5CompatModeDesc")}
-                    </p>
-                    <select
-                        id="h5-compat-mode"
-                        bind:value={compatMode}
-                        class="w-full bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-900 dark:text-white focus:bg-black/10 dark:focus:bg-white/20 focus:border-blue-500/50 dark:focus:border-blue-400/50 outline-none transition-all hover:bg-black/10 dark:hover:bg-white/20 focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
-                    >
-                        <option value="safe">{t("h5CompatSafe")}</option>
-                        <option value="compat">{t("h5CompatCompat")}</option>
-                        <option value="strict">{t("h5CompatStrict")}</option>
-                    </select>
-                    <p class="text-[11px] text-gray-600 dark:text-white/60">
-                        {compatModeDesc}
-                    </p>
-                </div>
                 <p class="text-[11px] text-gray-600 dark:text-white/60">
                     {t("h5_shortcuts_desc")}
                 </p>
@@ -620,5 +663,44 @@
     :global(.num-input::-webkit-inner-spin-button) {
         -webkit-appearance: none;
         margin: 0;
+    }
+
+    .compat-segment__btn--idle {
+        color: #4b5563;
+    }
+
+    .compat-segment__btn--idle:hover {
+        color: #111827;
+        background: rgba(0, 0, 0, 0.04);
+    }
+
+    :global(.dark) .compat-segment__btn--idle,
+    :global(html.dark) .compat-segment__btn--idle {
+        color: rgba(255, 255, 255, 0.55);
+    }
+
+    :global(.dark) .compat-segment__btn--idle:hover,
+    :global(html.dark) .compat-segment__btn--idle:hover {
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .compat-segment__btn--active {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(59, 130, 246, 0.28);
+        box-shadow:
+            0 1px 2px rgba(15, 23, 42, 0.06),
+            0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+        color: #1d4ed8;
+    }
+
+    :global(.dark) .compat-segment__btn--active,
+    :global(html.dark) .compat-segment__btn--active {
+        background: rgba(59, 130, 246, 0.22);
+        border: 1px solid rgba(147, 197, 253, 0.28);
+        box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.25),
+            0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+        color: #dbeafe;
     }
 </style>
