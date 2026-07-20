@@ -232,7 +232,7 @@ describe('SubtitleController', () => {
       await controller.initialize('test123');
     });
 
-    it('refines Chinese pseudo-manual short cues even without kind=asr', async () => {
+    it('passes through Chinese pseudo-manual phrase cues without forced merge', async () => {
       const zhTrack: CaptionTrack = {
         baseUrl: 'https://example.com/timedtext?v=test123&lang=zh-CN',
         languageCode: 'zh-CN',
@@ -272,36 +272,58 @@ describe('SubtitleController', () => {
       await controller.setTrack(zhTrack);
 
       const fragments = controller.getFragments();
-      const maxLen = Math.max(
-        ...fragments.map(f => f.text.replace(/\s+/g, '').length)
-      );
-      const mega =
-        '大家好今天我们来聊一个小技巧当然这个方法看起来有点麻烦咱们还是一步步来';
-
-      // ASR refine path: merged but not into optimizer walls
-      expect(fragments.length).toBeGreaterThan(0);
-      expect(fragments.length).toBeLessThan(pseudoManual.length);
-      expect(maxLen).toBeLessThanOrEqual(40);
-      expect(fragments.some(f => f.text.replace(/\s+/g, '') === mega)).toBe(false);
+      // Phrase-level unpunctuated Chinese: passthrough (no cross-cue merge)
+      expect(fragments.length).toBe(pseudoManual.length);
+      expect(fragments.map(f => f.text)).toEqual(pseudoManual.map(f => f.text));
     });
 
-    it('still refines when kind=asr', async () => {
-      const asrTrack: CaptionTrack = {
-        baseUrl: 'https://example.com/timedtext?v=test123&lang=en&kind=asr',
+    it('refines word-level crumbs even when kind is missing', async () => {
+      const crumbTrack: CaptionTrack = {
+        baseUrl: 'https://example.com/timedtext?v=test123&lang=en',
         languageCode: 'en',
-        vssId: 'a.en',
-        trackName: 'English (auto-generated)',
-        kind: 'asr',
+        vssId: 'en.crumbs',
+        trackName: 'English',
       };
 
-      const asrFragments: SubtitleFragment[] = Array.from({ length: 10 }, (_, i) => ({
-        text: `word${i} more text here`,
-        start: i * 800,
-        end: i * 800 + 600,
+      const crumbs: SubtitleFragment[] = Array.from({ length: 12 }, (_, i) => ({
+        text: `w${i}`,
+        start: i * 180,
+        end: i * 180 + 120,
       }));
 
       vi.spyOn(mockFetcher, 'fetchWithFallback').mockResolvedValue({
-        fragments: asrFragments,
+        fragments: crumbs,
+        track: crumbTrack,
+        videoId: 'test123',
+      });
+
+      await controller.setTrack(crumbTrack);
+
+      const fragments = controller.getFragments();
+      expect(fragments.length).toBeGreaterThan(0);
+      expect(fragments.length).toBeLessThan(crumbs.length);
+    });
+
+    it('passes through phrase-level kind=asr without forced merge', async () => {
+      const asrTrack: CaptionTrack = {
+        baseUrl: 'https://example.com/timedtext?v=test123&lang=zh&kind=asr',
+        languageCode: 'zh-CN',
+        vssId: 'a.zh',
+        trackName: 'Chinese (auto-generated)',
+        kind: 'asr',
+      };
+
+      const phrases: SubtitleFragment[] = [
+        { text: '他是中共历史上唯一的三朝帝师', start: 3700, end: 6800 },
+        { text: '是三任总书记的幕后智囊', start: 6966, end: 9500 },
+        { text: '充当党的理论的操盘手', start: 9733, end: 12433 },
+        { text: '他也是中共历史上唯一的没有主政过一方', start: 12866, end: 16300 },
+        { text: '仅仅是依靠智囊身份', start: 16400, end: 18000 },
+        { text: '进入最高权力圈', start: 18000, end: 19733 },
+      ];
+
+      vi.spyOn(mockFetcher, 'fetchWithFallback').mockResolvedValue({
+        fragments: phrases,
         track: asrTrack,
         videoId: 'test123',
       });
@@ -309,8 +331,8 @@ describe('SubtitleController', () => {
       await controller.setTrack(asrTrack);
 
       const fragments = controller.getFragments();
-      expect(fragments.length).toBeGreaterThan(0);
-      expect(fragments.length).toBeLessThanOrEqual(asrFragments.length);
+      expect(fragments.length).toBe(phrases.length);
+      expect(fragments.map(f => f.text)).toEqual(phrases.map(f => f.text));
     });
   });
 

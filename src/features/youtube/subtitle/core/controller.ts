@@ -1,9 +1,7 @@
 import { SubtitleFetcher } from './fetcher';
 import type { SubtitleResult } from './fetcher';
 import type { CaptionTrack, SubtitleFragment } from '../utils/types';
-import { optimizeSubtitles } from '../processors/subtitle-optimizer';
-import { refineAsrFragments } from '../processors/asr-merge';
-import { shouldUseAsrRefine } from '../processors/subtitle-style';
+import { postProcessSubtitles } from '../processors/subtitle-style';
 
 export type ControllerState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -66,20 +64,10 @@ export class SubtitleController {
         this.playerData
       );
 
-      // Post-process by content shape, not only track.kind:
-      // - True ASR (kind=asr) and ASR-like pseudo-manual uploads → refine
-      // - Polished human captions → full optimizer
-      // Authors often upload raw ASR fragments as "manual" tracks; kind alone
-      // would over-merge Chinese short cues into 40–50 char walls.
+      // Shape-based post-process (author + ASR share the same gate):
+      // polished phrase tracks pass through; only fragmented cues refine.
       const language = track.languageCode || 'en';
-      const useAsrRefine = shouldUseAsrRefine(
-        result.fragments,
-        language,
-        track.kind
-      );
-      this.fragments = useAsrRefine
-        ? refineAsrFragments(result.fragments, language)
-        : optimizeSubtitles(result.fragments, language);
+      this.fragments = postProcessSubtitles(result.fragments, language);
 
       this.currentFragmentIndex = -1;
       this.setState('ready');
