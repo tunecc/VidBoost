@@ -49,6 +49,33 @@ const PUNCT_ZH: SubtitleFragment[] = [
   { text: '第一点是背景情况。', start: 9100, end: 11000 },
 ];
 
+/** 2–3 word English polished phrases (not single-word crumbs). */
+const SHORT_PHRASE_EN: SubtitleFragment[] = [
+  { text: 'Hello world', start: 0, end: 1200 },
+  { text: 'Good morning', start: 1300, end: 2500 },
+  { text: 'Thank you so', start: 2600, end: 3800 },
+  { text: 'See you later', start: 3900, end: 5100 },
+  { text: 'Not right now', start: 5200, end: 6400 },
+  { text: 'All right then', start: 6500, end: 7700 },
+];
+
+/** Complete short Chinese phrases (~4 chars), not 1-char crumbs. */
+const SHORT_PHRASE_CJK: SubtitleFragment[] = [
+  { text: '打开设置', start: 0, end: 1200 },
+  { text: '点击确认', start: 1300, end: 2500 },
+  { text: '保存更改', start: 2600, end: 3800 },
+  { text: '返回首页', start: 3900, end: 5100 },
+  { text: '重新加载', start: 5200, end: 6400 },
+  { text: '关闭窗口', start: 6500, end: 7700 },
+];
+
+/** ~6-char CJK cues with flash duration (~400ms); phrase-level, not word crumbs. */
+const FLASH_MID_CJK: SubtitleFragment[] = Array.from({ length: 8 }, (_, i) => ({
+  text: '这个方法不错',
+  start: i * 500,
+  end: i * 500 + 400,
+}));
+
 describe('needsResegment', () => {
   it('passes through polished unpunctuated Chinese phrases', () => {
     expect(needsResegment(POLISHED_UNPUNCT_ZH, 'zh-CN')).toBe(false);
@@ -72,6 +99,27 @@ describe('needsResegment', () => {
       { text: '词', start: 100, end: 200 },
     ];
     expect(needsResegment(few, 'zh-CN')).toBe(false);
+  });
+
+  // I1: 2–3 word EN phrases must not be treated as crumbs
+  it('passes through 2-3 word English polished phrases', () => {
+    expect(needsResegment(SHORT_PHRASE_EN, 'en')).toBe(false);
+  });
+
+  // I2: flash + mid-length CJK phrases should not force refine
+  it('passes through ~6-char CJK cues with flash duration when not word-level', () => {
+    expect(needsResegment(FLASH_MID_CJK, 'zh-CN')).toBe(false);
+  });
+
+  // I3: complete short CJK phrases (3–4 chars) are not tiny crumbs
+  it('passes through short complete Chinese phrases (3-4 chars)', () => {
+    expect(needsResegment(SHORT_PHRASE_CJK, 'zh-CN')).toBe(false);
+  });
+
+  // I4: content script overrides mislabeled languageCode
+  it('treats CJK-heavy content as CJK even when language is en', () => {
+    expect(needsResegment(POLISHED_UNPUNCT_ZH, 'en')).toBe(false);
+    expect(needsResegment(SHORT_PHRASE_CJK, 'en')).toBe(false);
   });
 });
 
@@ -115,5 +163,15 @@ describe('postProcessSubtitles', () => {
     const out = postProcessSubtitles(WORD_LEVEL_EN, 'en');
     expect(out.length).toBeLessThan(WORD_LEVEL_EN.length);
     expect(out.length).toBeGreaterThan(0);
+  });
+
+  // I4: mislabeled language must not force refine or space-join Chinese
+  it('passthrough Chinese phrases when language is en without space-joining', () => {
+    const out = postProcessSubtitles(POLISHED_UNPUNCT_ZH, 'en');
+    expect(out.length).toBe(POLISHED_UNPUNCT_ZH.length);
+    expect(out.map(f => f.text)).toEqual(POLISHED_UNPUNCT_ZH.map(f => f.text));
+    for (const f of out) {
+      expect(f.text).not.toMatch(/[一-鿿]\s+[一-鿿]/);
+    }
   });
 });

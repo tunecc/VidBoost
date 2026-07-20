@@ -18,8 +18,9 @@ import { getTextLength, isCJKLanguage } from './subtitle-utils';
 export type SubtitleStyle = 'polished' | 'asr-like';
 
 // CJK：字符数；非 CJK：词数（经 getTextLength）
-const TINY_CUE_CJK = 4; // ≤4 字视为「词级碎」
-const TINY_CUE_NON_CJK = 3; // ≤3 词
+// Only true crumbs count as tiny (1–2 CJK chars / 1 non-CJK word).
+const TINY_CUE_CJK = 2;
+const TINY_CUE_NON_CJK = 1;
 const TINY_RATIO = 0.5; // ≥50% 为 tiny → resegment
 const LOW_AVG_CJK = 5; // 均长很低
 const LOW_AVG_NON_CJK = 3;
@@ -29,6 +30,34 @@ const FLASH_RATIO = 0.5;
 const FLASH_AVG_CJK = 6; // 闪现多且均长仍偏低 → resegment
 const FLASH_AVG_NON_CJK = 4;
 const MIN_SAMPLES = 5; // 样本太少 → 透传（拿不准不合并）
+const CJK_SCRIPT_RATIO = 0.5; // content mostly Han/Kana/Hangul → treat as CJK
+
+/** CJK Unified Ideographs + extensions A + Hiragana/Katakana + Hangul. */
+const CJK_SCRIPT_RE = /[ぁ-ヿ㐀-鿿豈-﫿가-힯]/g;
+
+/**
+ * Prefer content script over languageCode when track is mislabeled (e.g. zh text + en).
+ */
+function isContentMostlyCJK(texts: string[]): boolean {
+  let cjk = 0;
+  let total = 0;
+  for (const t of texts) {
+    const cleaned = t.replace(/\s+/g, '');
+    total += cleaned.length;
+    const matches = cleaned.match(CJK_SCRIPT_RE);
+    cjk += matches ? matches.length : 0;
+  }
+  if (total === 0) return false;
+  return cjk / total >= CJK_SCRIPT_RATIO;
+}
+
+function resolveIsCJK(fragments: SubtitleFragment[], language: string): boolean {
+  if (isCJKLanguage(language)) return true;
+  const texts = fragments
+    .map(f => f.text)
+    .filter((t): t is string => !!t && t.trim().length > 0);
+  return isContentMostlyCJK(texts);
+}
 
 /**
  * Whether fragments look word-level / fragmented enough to resegment.
@@ -43,7 +72,7 @@ export function needsResegment(
     return false;
   }
 
-  const isCJK = isCJKLanguage(language);
+  const isCJK = resolveIsCJK(usable, language);
   const tinyThreshold = isCJK ? TINY_CUE_CJK : TINY_CUE_NON_CJK;
   const lengths = usable.map(f => getTextLength(f.text, isCJK));
   const avgLen = lengths.reduce((a, b) => a + b, 0) / lengths.length;
@@ -67,9 +96,13 @@ export function needsResegment(
     return true;
   }
 
-  // 3) 大量闪现 + 均长仍偏低（词级 ASR 时间特征）
+  // 3) 大量闪现 + 均长仍偏低 + tiny 也偏高（避免完整短句因时长被误判）
   const flashAvg = isCJK ? FLASH_AVG_CJK : FLASH_AVG_NON_CJK;
-  if (flashRatio >= FLASH_RATIO && avgLen <= flashAvg) {
+  if (
+    flashRatio >= FLASH_RATIO &&
+    avgLen <= flashAvg &&
+    tinyRatio >= LOW_AVG_TINY_RATIO
+  ) {
     return true;
   }
 
@@ -104,7 +137,12 @@ export function postProcessSubtitles(
 ): SubtitleFragment[] {
   if (fragments.length === 0) return [];
   if (needsResegment(fragments, language)) {
-    return refineAsrFragments(fragments, language);
+    // Avoid EN space-join when content is CJK-heavy but languageCode is wrong.
+    const effectiveLang =
+      !isCJKLanguage(language) && resolveIsCJK(fragments, language)
+        ? 'zh'
+        : language;
+    return refineAsrFragments(fragments, effectiveLang);
   }
   return lightCleanFragments(fragments);
 }
