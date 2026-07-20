@@ -31,7 +31,8 @@
             "js": [
                 "assets/content.js"
             ],
-            "run_at": "document_start"
+            "run_at": "document_start",
+            "all_frames": true
         },
         {
             "matches": [
@@ -51,6 +52,17 @@
                 "assets/douyin-playback-rate.page.js"
             ],
             "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "assets/media-kernel.page.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true,
             "world": "MAIN"
         }
     ],

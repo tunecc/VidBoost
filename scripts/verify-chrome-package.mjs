@@ -13,6 +13,7 @@ const REQUIRED_FILES = [
     'assets/content.js',
     'assets/bb-cdn.page.js',
     'assets/douyin-playback-rate.page.js',
+    'assets/media-kernel.page.js',
     'assets/yt-cdn-status.page.js',
     'assets/yt-member-prefilter.page.js',
     'assets/yt-subtitle-overlay.page.js',
@@ -59,6 +60,22 @@ async function main() {
         Array.isArray(entry?.js) && entry.js.includes('assets/content.js')
     );
     assert(mainContentEntry, 'Chrome content_scripts 缺少 assets/content.js');
+    assert(
+        mainContentEntry.all_frames === true,
+        'Chrome assets/content.js 条目必须设置 all_frames: true'
+    );
+    const mediaKernelEntry = contentScripts.find((entry) =>
+        Array.isArray(entry?.js) && entry.js.includes('assets/media-kernel.page.js')
+    );
+    assert(mediaKernelEntry, 'Chrome content_scripts 缺少 assets/media-kernel.page.js');
+    assert(
+        mediaKernelEntry.world === 'MAIN',
+        'Chrome assets/media-kernel.page.js 必须使用 world: MAIN'
+    );
+    assert(
+        mediaKernelEntry.all_frames === true,
+        'Chrome assets/media-kernel.page.js 必须设置 all_frames: true'
+    );
     assert(
         !contentScripts.some((entry) => Array.isArray(entry?.js) && entry.js.includes('assets/content-firefox.js')),
         'Chrome manifest 不应引用 assets/content-firefox.js'
