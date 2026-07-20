@@ -1,8 +1,13 @@
 import { InputManager } from '../lib/InputManager';
+import { MediaBridge } from '../lib/MediaBridge';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
 import { getPlaybackRateConfigForHost, isSiteHost } from '../lib/siteProfiles';
 import { DEFAULT_SETTINGS, type Settings } from '../lib/settings-content';
+import {
+    normalizeH5CompatMode,
+    type H5CompatMode
+} from './media-kernel/protocol';
 import {
     installDouyinPlaybackRateGuardBridge,
     pushDouyinPlaybackRateGuardConfig
@@ -16,14 +21,19 @@ type H5Config = {
     seekForward: number;
     seekRewind: number;
     zxcControlsEnabled: boolean;
+    compatMode?: H5CompatMode;
 };
 
 export class H5Enhancer implements Feature {
     private input = InputManager.getInstance();
     private videoCtrl = VideoController.getInstance();
     private osd = OSD.getInstance();
+    private bridge = MediaBridge.getInstance();
     private enabled = false;
     private douyinStickyAbove = 3;
+    private compatMode: H5CompatMode = 'compat';
+    /** Last rate we intentionally applied; null until first applySpeed. */
+    private lastAppliedRate: number | null = null;
 
     // Config
     private config: H5Config = {
@@ -32,7 +42,8 @@ export class H5Enhancer implements Feature {
         restoreSpeed: 1.0,
         seekForward: 5,
         seekRewind: 3,
-        zxcControlsEnabled: true
+        zxcControlsEnabled: true,
+        compatMode: 'compat'
     };
 
     // State for Number Key Accumulation
@@ -54,6 +65,7 @@ export class H5Enhancer implements Feature {
         this.enabled = true;
         this.installSitePlaybackBridge();
         this.registerShortcuts();
+        void this.bridge.ensureReady().then(() => this.pushKernelConfig());
     }
 
     unmount() {
@@ -65,6 +77,7 @@ export class H5Enhancer implements Feature {
         }
         this.seekAccumulator = 0;
         this.resetSitePlaybackBridge();
+        this.pushKernelConfig();
     }
 
     updateSettings(settings: unknown) {
@@ -72,8 +85,57 @@ export class H5Enhancer implements Feature {
         this.updateLocalConfig(payload?.h5_config ?? DEFAULT_SETTINGS.h5_config);
     }
 
-    private updateLocalConfig(newConf: Partial<H5Config>) {
+    private updateLocalConfig(newConf: Partial<H5Config> & { compatMode?: unknown }) {
         this.config = { ...this.config, ...newConf };
+        this.compatMode = normalizeH5CompatMode(
+            newConf.compatMode ?? this.config.compatMode ?? this.compatMode
+        );
+        this.config.compatMode = this.compatMode;
+        this.pushKernelConfig();
+    }
+
+    private isDouyinHost(): boolean {
+        return isSiteHost('douyin');
+    }
+
+    private pushKernelConfig() {
+        const ownsRate = !this.isDouyinHost();
+        const mode = this.compatMode;
+        this.bridge.configure({
+            mode,
+            stickyMs: 3000,
+            maxRate: this.config.maxSpeed,
+            rateEpsilon: 0.05,
+            ownsRate,
+            enabled: this.enabled && mode !== 'safe'
+        });
+    }
+
+    private hasMediaPresence(): boolean {
+        if (this.videoCtrl.video) return true;
+        if (this.bridge.hasKernel) return true;
+        if (this.bridge.cachedState?.hasVideo) return true;
+        return false;
+    }
+
+    private getCurrentRate(): number {
+        // Prefer lastAppliedRate so Z/step work when isolated reads a site-locked 1x.
+        if (
+            this.lastAppliedRate !== null &&
+            Number.isFinite(this.lastAppliedRate) &&
+            this.lastAppliedRate > 0
+        ) {
+            return this.lastAppliedRate;
+        }
+        const cached = this.bridge.cachedState?.rate;
+        if (typeof cached === 'number' && Number.isFinite(cached) && cached > 0) {
+            return cached;
+        }
+        const v = this.videoCtrl.video;
+        if (v && Number.isFinite(v.playbackRate) && v.playbackRate > 0) {
+            return v.playbackRate;
+        }
+        return 1.0;
     }
 
     private showFeedback(text: string) {
@@ -104,12 +166,20 @@ export class H5Enhancer implements Feature {
 
     private applySpeed(rate: number) {
         this.syncSitePlaybackGuard(rate);
-        this.videoCtrl.setSpeed(rate);
+        this.lastAppliedRate = rate;
+        // Douyin keeps MAIN guard + isolated VideoController path (ownsRate false).
+        // safe mode also stays on isolated VideoController only.
+        if (this.compatMode === 'safe' || this.isDouyinHost()) {
+            this.videoCtrl.setSpeed(rate);
+            return;
+        }
+        void this.bridge.setPlaybackRate(rate).then((ok) => {
+            if (!ok) this.videoCtrl.setSpeed(rate);
+        });
     }
 
     private setPlaybackRatePlus(num: number) {
-        const v = this.videoCtrl.video;
-        if (!v) return false;
+        if (!this.hasMediaPresence()) return false;
 
         const now = Date.now();
         if (!this.plusInfo[num]) {
@@ -136,9 +206,17 @@ export class H5Enhancer implements Feature {
     }
 
     private handleSeek(seconds: number) {
-        // Perform seek
-        const success = this.videoCtrl.seek(seconds);
-        if (!success) return false;
+        if (!this.hasMediaPresence()) return false;
+
+        // Prefer kernel seek; fall back to VideoController on timeout / no kernel / douyin / safe.
+        if (this.compatMode === 'safe' || this.isDouyinHost()) {
+            const success = this.videoCtrl.seek(seconds);
+            if (!success) return false;
+        } else {
+            void this.bridge.seek(seconds).then((ok) => {
+                if (!ok) this.videoCtrl.seek(seconds);
+            });
+        }
 
         // Visual accumulation
         this.seekAccumulator += seconds;
@@ -180,19 +258,18 @@ export class H5Enhancer implements Feature {
             if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'c') {
-                const v = this.videoCtrl.video;
-                if (v) {
-                    let newRate = v.playbackRate + this.config.speedStep;
-                    if (newRate > this.config.maxSpeed) newRate = this.config.maxSpeed;
+                if (!this.hasMediaPresence()) return false;
 
-                    // Round to 1 decimal to avoid floating point issues
-                    newRate = parseFloat(newRate.toFixed(1));
+                let newRate = this.getCurrentRate() + this.config.speedStep;
+                if (newRate > this.config.maxSpeed) newRate = this.config.maxSpeed;
 
-                    this.applySpeed(newRate);
-                    const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
-                    this.showFeedback(txt);
-                    return true;
-                }
+                // Round to 1 decimal to avoid floating point issues
+                newRate = parseFloat(newRate.toFixed(1));
+
+                this.applySpeed(newRate);
+                const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
+                this.showFeedback(txt);
+                return true;
             }
             return false;
         });
@@ -206,19 +283,18 @@ export class H5Enhancer implements Feature {
             if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'x') {
-                const v = this.videoCtrl.video;
-                if (v) {
-                    let newRate = v.playbackRate - this.config.speedStep;
-                    if (newRate < 0.1) newRate = 0.1;
+                if (!this.hasMediaPresence()) return false;
 
-                    // Round to 1 decimal
-                    newRate = parseFloat(newRate.toFixed(1));
+                let newRate = this.getCurrentRate() - this.config.speedStep;
+                if (newRate < 0.1) newRate = 0.1;
 
-                    this.applySpeed(newRate);
-                    const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
-                    this.showFeedback(txt);
-                    return true;
-                }
+                // Round to 1 decimal
+                newRate = parseFloat(newRate.toFixed(1));
+
+                this.applySpeed(newRate);
+                const txt = Number.isInteger(newRate) ? `${newRate}x` : `${newRate.toFixed(1)}x`;
+                this.showFeedback(txt);
+                return true;
             }
             return false;
         });
@@ -232,21 +308,21 @@ export class H5Enhancer implements Feature {
             if (!this.config.zxcControlsEnabled) return false;
 
             if (ke.key.toLowerCase() === 'z') {
-                const v = this.videoCtrl.video;
-                if (v) {
-                    if (v.playbackRate === 1.0) {
-                        // Restore
-                        this.applySpeed(this.lastSpeed);
-                        const txt = Number.isInteger(this.lastSpeed) ? `${this.lastSpeed}x` : `${this.lastSpeed.toFixed(1)}x`;
-                        this.showFeedback(txt);
-                    } else {
-                        // Reset
-                        this.lastSpeed = v.playbackRate;
-                        this.applySpeed(1.0);
-                        this.showFeedback('1x');
-                    }
-                    return true;
+                if (!this.hasMediaPresence()) return false;
+
+                const current = this.getCurrentRate();
+                if (Math.abs(current - 1.0) < 0.001) {
+                    // Restore
+                    this.applySpeed(this.lastSpeed);
+                    const txt = Number.isInteger(this.lastSpeed) ? `${this.lastSpeed}x` : `${this.lastSpeed.toFixed(1)}x`;
+                    this.showFeedback(txt);
+                } else {
+                    // Reset
+                    this.lastSpeed = current;
+                    this.applySpeed(1.0);
+                    this.showFeedback('1x');
                 }
+                return true;
             }
             return false;
         });
@@ -260,12 +336,6 @@ export class H5Enhancer implements Feature {
             }
             return false;
         });
-
-        // Low priority seek (arrows) - let YouTube handle it if focused?
-        // Actually original script handles arrow keys.
-        // But we want to avoid conflicts if Shift+Arrow means "Select text" or "Fine seek"?
-        // Original script: case 'arrowright': handled = changeTime(SEEK_STEP_FORWARD); break;
-        // It prevents default if handled.
 
         // Seek Forward (Right Arrow)
         this.input.on('keydown', 'h5-seek-forward', (e) => {
