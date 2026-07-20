@@ -25,7 +25,8 @@
         "check": "svelte-check --tsconfig ./tsconfig.json",
         "release:notes": "node scripts/generate-release-notes.mjs",
         "check:yt-member-selectors": "node scripts/member-selector-snapshot.mjs",
-        "update:yt-member-selectors": "node scripts/member-selector-snapshot.mjs --update"
+        "update:yt-member-selectors": "node scripts/member-selector-snapshot.mjs --update",
+        "test:media-kernel": "npx --yes tsx --test src/features/media-kernel/__tests__/*.test.ts"
     },
     "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^3.0.0",
