@@ -253,7 +253,7 @@ export class RateController {
 
   /**
    * Optional rAF/interval reconcile while sticky is active.
-   * Ends sticky + notifies Escalator on detach or primary switch (换片).
+   * Ends sticky + notifies Escalator on detach, primary null/switch, or resolver throw.
    */
   tick(): void {
     if (!this.isStickyActive()) {
@@ -267,16 +267,18 @@ export class RateController {
       return;
     }
 
-    // Primary switched while sticky on old video → end sticky + disarm (do not retarget).
+    // Primary gone/switched while sticky → end sticky + disarm (do not retarget).
+    // Resolver throw also ends lifecycle so a bad resolver cannot pin sticky forever.
     if (this.primaryResolver) {
       try {
         const primary = this.primaryResolver();
-        if (primary && primary !== video) {
+        if (!primary || primary !== video) {
           this.endStickyLifecycle();
           return;
         }
       } catch {
-        // Resolver failures should not keep a stale sticky loop running forever.
+        this.endStickyLifecycle();
+        return;
       }
     }
 
@@ -287,6 +289,7 @@ export class RateController {
     this.stickyUntil = 0;
     this.continuousSticky = false;
     this.reconcileCount = 0;
+    this.activeVideo = null;
     this.stopTick();
   }
 

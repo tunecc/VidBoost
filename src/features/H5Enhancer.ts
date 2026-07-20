@@ -112,11 +112,9 @@ export class H5Enhancer implements Feature {
     }
 
     private hasMediaPresence(): boolean {
-        // Do not treat bare hasKernel as media presence — kernel may be ready
-        // with no video yet, which would steal arrow keys / speed shortcuts.
-        if (this.videoCtrl.video) return true;
-        if (this.bridge.cachedState?.hasVideo === true) return true;
-        return false;
+        // Local video only — never use cached hasVideo (stale after SPA / detach).
+        // Kernel-ready without a local element must not steal keys or show fake OSD.
+        return Boolean(this.videoCtrl.video);
     }
 
     private getCurrentRate(): number {
@@ -207,16 +205,16 @@ export class H5Enhancer implements Feature {
     }
 
     private handleSeek(seconds: number) {
+        // Require a real local video before stealing keys or showing OSD.
+        // Async bridge-first was returning true + fake feedback before success.
         if (!this.hasMediaPresence()) return false;
 
-        // Prefer kernel seek; fall back to VideoController on timeout / no kernel / douyin / safe.
-        if (this.compatMode === 'safe' || this.isDouyinHost()) {
-            const success = this.videoCtrl.seek(seconds);
-            if (!success) return false;
-        } else {
-            void this.bridge.seek(seconds).then((ok) => {
-                if (!ok) this.videoCtrl.seek(seconds);
-            });
+        const success = this.videoCtrl.seek(seconds);
+        if (!success) return false;
+
+        // Best-effort MAIN sticky alignment; local seek already applied.
+        if (this.compatMode !== 'safe' && !this.isDouyinHost()) {
+            void this.bridge.seek(seconds);
         }
 
         // Visual accumulation
@@ -332,6 +330,8 @@ export class H5Enhancer implements Feature {
         this.input.on('keydown', 'h5-fullscreen', (e) => {
             if (!this.enabled) return false;
             if ((e as KeyboardEvent).key === 'Enter') {
+                // Do not steal Enter without a local video element.
+                if (!this.hasMediaPresence()) return false;
                 this.videoCtrl.toggleFullscreen();
                 return true;
             }
