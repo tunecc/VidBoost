@@ -82,12 +82,20 @@ function readDeltaSec(payload: Record<string, unknown> | undefined): number | nu
   const registry = new MediaRegistry();
   const rateController = new RateController();
   const escalator = new Escalator(rateController);
+
+  // Keep sticky lifecycle and Escalator.armed in sync (detach / primary switch / reconcile cap).
+  rateController.wireLifecycle({
+    resolvePrimary: () => registry.getPrimary(),
+    onStickyEnd: () => escalator.disarm()
+  });
+
   registry.start();
 
   const buildState = (): MediaKernelStatePayload => {
     const primary = registry.getPrimary();
     if (!primary) {
-      if (escalator.shouldStaySticky()) {
+      // No primary: if sticky/arm was active, fully disarm.
+      if (rateController.isStickyActive() || escalator.shouldStaySticky()) {
         escalator.onVideoGone();
       }
       return {
@@ -97,6 +105,17 @@ function readDeltaSec(payload: Record<string, unknown> | undefined): number | nu
         mode: rateController.getMode()
       };
     }
+
+    // Primary switched while sticky on a different activeVideo → end sticky + disarm.
+    const active = rateController.getActiveVideo();
+    if (
+      rateController.isStickyActive() &&
+      active &&
+      active !== primary
+    ) {
+      escalator.disarm();
+    }
+
     return {
       hasVideo: true,
       rate: rateController.getNativeRate(primary),
@@ -163,8 +182,9 @@ function readDeltaSec(payload: Record<string, unknown> | undefined): number | nu
         const cfg = parseConfigure(payload);
         rateController.applyConfigure(cfg);
         escalator.setMode(cfg.mode);
+        // Control lost: clear sticky AND disarm Escalator (armed=false).
         if (!cfg.enabled || !cfg.ownsRate || cfg.mode === 'safe') {
-          rateController.clearSticky();
+          escalator.disarm();
         }
         postToIsolated(
           buildPageMessage('ack', reqId, {

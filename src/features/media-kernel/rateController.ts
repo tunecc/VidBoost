@@ -22,6 +22,10 @@ function clampRate(rate: number, maxRate: number): number {
 /**
  * MAIN-world rate control: write via captured native descriptors + L1 sticky.
  * Does not install Object.defineProperty hooks (L3 out of scope).
+ *
+ * Sticky lifecycle end reasons (video gone, primary switch, reconcile cap, control lost)
+ * invoke `stickyEndHandler` (typically Escalator.disarm) so L2 arm stays in sync.
+ * Strategy for primary change: end sticky + disarm (换片 ends L2); do not retarget.
  */
 export class RateController {
   private readonly playbackRateDesc: PropDesc;
@@ -44,6 +48,15 @@ export class RateController {
   private applyingDepth = 0;
   private tickHandle = 0;
 
+  /** Resolves current registry primary (for sticky primary-switch detection). */
+  private primaryResolver: (() => HTMLVideoElement | null) | null = null;
+  /**
+   * Called when sticky lifecycle ends for control-loss reasons.
+   * Wired to Escalator.disarm (armed=false + clearSticky).
+   * Must be idempotent and safe if it re-enters clearSticky.
+   */
+  private stickyEndHandler: (() => void) | null = null;
+
   constructor() {
     const proto =
       typeof HTMLMediaElement !== 'undefined' ? HTMLMediaElement.prototype : null;
@@ -56,6 +69,18 @@ export class RateController {
     this.currentTimeDesc = proto
       ? Object.getOwnPropertyDescriptor(proto, 'currentTime')
       : undefined;
+  }
+
+  /**
+   * Wire primary resolver + sticky-end handler (Escalator.disarm).
+   * Called once from page boot.
+   */
+  wireLifecycle(options: {
+    resolvePrimary?: () => HTMLVideoElement | null;
+    onStickyEnd?: () => void;
+  }): void {
+    this.primaryResolver = options.resolvePrimary ?? null;
+    this.stickyEndHandler = options.onStickyEnd ?? null;
   }
 
   applyConfigure(cfg: MediaKernelConfigurePayload): void {
@@ -78,6 +103,7 @@ export class RateController {
     this.enabled = Boolean(cfg.enabled);
 
     if (!this.canControlRate()) {
+      // Control lost: clear sticky locally; page also calls Escalator.disarm.
       this.clearSticky();
     } else if (this.mode === 'compat' && this.continuousSticky) {
       // Leaving continuous arm when mode is no longer strict.
@@ -113,6 +139,11 @@ export class RateController {
 
   getReconcileCount(): number {
     return this.reconcileCount;
+  }
+
+  /** Active sticky target video (for primary-switch checks). */
+  getActiveVideo(): HTMLVideoElement | null {
+    return this.activeVideo;
   }
 
   isStickyActive(): boolean {
@@ -222,6 +253,7 @@ export class RateController {
 
   /**
    * Optional rAF/interval reconcile while sticky is active.
+   * Ends sticky + notifies Escalator on detach or primary switch (换片).
    */
   tick(): void {
     if (!this.isStickyActive()) {
@@ -231,8 +263,21 @@ export class RateController {
 
     const video = this.activeVideo;
     if (!video || !video.isConnected) {
-      this.clearSticky();
+      this.endStickyLifecycle();
       return;
+    }
+
+    // Primary switched while sticky on old video → end sticky + disarm (do not retarget).
+    if (this.primaryResolver) {
+      try {
+        const primary = this.primaryResolver();
+        if (primary && primary !== video) {
+          this.endStickyLifecycle();
+          return;
+        }
+      } catch {
+        // Resolver failures should not keep a stale sticky loop running forever.
+      }
     }
 
     this.reconcileVideo(video);
@@ -245,6 +290,22 @@ export class RateController {
     this.stopTick();
   }
 
+  /**
+   * End sticky and notify Escalator (disarm armed).
+   * Handler is expected to call clearSticky (idempotent).
+   */
+  private endStickyLifecycle(): void {
+    if (this.stickyEndHandler) {
+      try {
+        this.stickyEndHandler();
+      } catch {
+        this.clearSticky();
+      }
+    } else {
+      this.clearSticky();
+    }
+  }
+
   private reconcileVideo(video: HTMLVideoElement): void {
     if (!this.canControlRate()) return;
     if (!this.playbackRateDesc?.set) return;
@@ -254,8 +315,8 @@ export class RateController {
 
     const nextCount = clampReconcileCount(this.reconcileCount + 1, this.reconcileCap);
     if (nextCount <= this.reconcileCount) {
-      // Hit cap — stop sticky to avoid a death loop.
-      this.clearSticky();
+      // Hit cap — stop sticky and disarm Escalator to avoid a death loop.
+      this.endStickyLifecycle();
       return;
     }
     this.reconcileCount = nextCount;

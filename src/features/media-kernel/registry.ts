@@ -40,6 +40,10 @@ function isVideoVisible(video: HTMLVideoElement): boolean {
 
 /**
  * MAIN-world media registry: discover videos (open shadow only), pick primary.
+ *
+ * Open shadow dynamic discovery (MVP): when walking the tree, each discovered
+ * open shadowRoot is observed with its own MutationObserver so late-mounted
+ * shadow videos are registered. Observers are disconnected on stop / prune.
  */
 export class MediaRegistry {
   private videos = new Set<HTMLVideoElement>();
@@ -49,6 +53,7 @@ export class MediaRegistry {
 
   private started = false;
   private mutationObserver: MutationObserver | null = null;
+  private shadowObservers = new Map<ShadowRoot, MutationObserver>();
   private scanScheduled = false;
 
   private readonly onMediaEvent = (event: Event) => {
@@ -99,6 +104,7 @@ export class MediaRegistry {
 
     this.mutationObserver?.disconnect();
     this.mutationObserver = null;
+    this.disconnectAllShadowObservers();
     this.scanScheduled = false;
     this.videos.clear();
   }
@@ -234,6 +240,7 @@ export class MediaRegistry {
         this.videos.delete(video);
       }
     }
+    this.pruneShadowObservers();
   }
 
   private scheduleScan(): void {
@@ -259,6 +266,58 @@ export class MediaRegistry {
     this.pruneDisconnected();
   }
 
+  /**
+   * Observe an open shadowRoot so late mutations inside it are discovered.
+   * Document-level MO does not see into shadow trees.
+   */
+  private observeShadowRoot(shadowRoot: ShadowRoot): void {
+    if (!this.started) return;
+    if (this.shadowObservers.has(shadowRoot)) return;
+    if (typeof MutationObserver === 'undefined') return;
+
+    try {
+      const observer = new MutationObserver(this.onMutation);
+      observer.observe(shadowRoot, {
+        childList: true,
+        subtree: true
+      });
+      this.shadowObservers.set(shadowRoot, observer);
+    } catch {
+      // Restricted or already detached shadow roots — skip.
+    }
+  }
+
+  private pruneShadowObservers(): void {
+    for (const [shadowRoot, observer] of [...this.shadowObservers.entries()]) {
+      let connected = false;
+      try {
+        const host = shadowRoot.host;
+        connected = Boolean(host && host.isConnected);
+      } catch {
+        connected = false;
+      }
+      if (!connected) {
+        try {
+          observer.disconnect();
+        } catch {
+          // ignore
+        }
+        this.shadowObservers.delete(shadowRoot);
+      }
+    }
+  }
+
+  private disconnectAllShadowObservers(): void {
+    for (const observer of this.shadowObservers.values()) {
+      try {
+        observer.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    this.shadowObservers.clear();
+  }
+
   /** Open-shadow-aware video walk (no attachShadow monkey-patch). */
   private collectVideosFromNode(root: Node): HTMLVideoElement[] {
     const visited = new Set<Node>();
@@ -275,6 +334,8 @@ export class MediaRegistry {
       }
 
       if (node instanceof Element && node.shadowRoot) {
+        // MVP: observe every discovered open shadowRoot for late video mounts.
+        this.observeShadowRoot(node.shadowRoot);
         stack.push(node.shadowRoot);
       }
 

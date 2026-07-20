@@ -11,6 +11,9 @@ import type { RateController } from './rateController';
  * | safe   | MAIN rate lock disabled (page / controller) |
  * | compat | stickyMs window via RateController          |
  * | strict | continuous until user change / disable / gone |
+ *
+ * Sticky lifecycle ends (control lost, video gone, primary switch, reconcile cap)
+ * must call `disarm()` so `armed` and RateController sticky stay in sync.
  */
 export class Escalator {
   private mode: H5CompatMode = 'compat';
@@ -25,11 +28,15 @@ export class Escalator {
     this.mode = next;
 
     if (next !== 'strict') {
+      // Leaving strict always clears L2 arm.
       this.armed = false;
-      // RateController owns the compat window; only clear continuous arm.
+      // RateController owns the compat window; only clear continuous arm fully when control is lost.
       if (prev === 'strict') {
-        // Drop continuous sticky; leave any finite stickyUntil alone if compat.
-        if (next === 'safe' || !this.rateController.getOwnsRate() || !this.rateController.getEnabled()) {
+        if (
+          next === 'safe' ||
+          !this.rateController.getOwnsRate() ||
+          !this.rateController.getEnabled()
+        ) {
           this.rateController.clearSticky();
         }
       }
@@ -40,6 +47,15 @@ export class Escalator {
     if (this.armed && this.rateController.canControlRate()) {
       this.rateController.armContinuousSticky();
     }
+  }
+
+  /**
+   * Unified disarm: clear L2 arm AND sticky window/continuous.
+   * Used when control is lost, primary switches, video gone, or reconcile cap hits.
+   */
+  disarm(): void {
+    this.armed = false;
+    this.rateController.clearSticky();
   }
 
   /**
@@ -64,8 +80,7 @@ export class Escalator {
   }
 
   onVideoGone(): void {
-    this.armed = false;
-    this.rateController.clearSticky();
+    this.disarm();
   }
 
   /**
