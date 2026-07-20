@@ -8,6 +8,51 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [1.8.5] - 2026-07-20
+
+自 `v1.8.4` 以来，主线从 YouTube 字幕精炼转向 **通用 H5 倍速通杀**：落地 MAIN 世界轻量媒体内核（方案 E），让多数会回写倍速的网站也能稳住你设的速度；并补齐设置区分、文案与选择器 UI。
+
+相对上一版 Release（`v1.8.4`）用户可感知的变化：
+
+1. **更多网站能稳定调倍速** — 不再几乎只在 YouTube / B 站 / 抖音好用。
+2. **新增「稳住倍速」三档** — 安全 / 均衡（默认）/ 强力，可按站点难度切换。
+3. **设置更清晰** — 站点兼容与 Z/X/C 快捷键拆开，避免「到底在改什么」的困惑。
+
+### Added
+- **[新增] MAIN 媒体内核（`media-kernel`）**  
+  在页面世界登记视频、选中主视频，并用 `HTMLMediaElement` 原生 descriptor 写入 `playbackRate` / seek，避免仅在扩展隔离世界改速后被站点立刻刷回。
+- **[新增] Isolated ↔ MAIN 桥接（`MediaBridge`）**  
+  H5 快捷键意图经 postMessage 交给内核；超时、失败时自动降级到原有 `VideoController` 直写，保证安全模式与注入失败时仍可用。
+- **[新增] 稳住倍速三档（`h5_config.compatMode`）**  
+  - **安全**：只改一次，最少干预（≈旧行为）。  
+  - **均衡（默认 / 推荐）**：改速后短时（约 3s）守住，适合大多数会回写倍速的站。  
+  - **强力**：持续守住当前倍速，直到你再次修改、换片或关闭功能。  
+  设置项写入 content 可读配置（`h5_config` 进入 `CONTENT_SETTINGS_KEYS`），改完即可生效。
+- **[新增] 全 frame 注入**  
+  content script 与 media-kernel 开启 `all_frames: true`，改善 iframe / 嵌套播放器内视频的控制能力；无本地 video 时不抢快捷键。
+- **[新增] 媒体内核纯逻辑单测与回归清单**  
+  protocol / 选主视频 / sticky 策略单元测试；`docs/regression/h5-media-kernel-manual-checklist.md` 供手测 YT / B 站 / 抖音 / 其它站 / iframe。
+
+### Changed
+- **H5 倍速主路径改道**：兼容 / 强力模式下优先走 MAIN 内核；抖音仍 `ownsRate: false`，继续使用既有高倍速 guard，避免双重锁冲突。
+- **H5 设置页信息架构**：将「站点兼容 / 稳住倍速」与「Z/X/C 快捷键」拆成独立区块。
+- **兼容模式文案重写**（中英）：去掉难懂的 legacy / 页面世界术语，改为安全 / 均衡 / 强力及白话说明。
+- **兼容模式控件**：原生 `<select>` 改为与 popup glass 主题一致的三段式 segment 选择器。
+- 构建链路增加 `vite.mediakernel.config.ts`，产出 `assets/media-kernel.page.js`；Chrome 包校验同步要求该产物与 MAIN / `all_frames` 配置。
+- 版本号升至 `1.8.5`（`package.json` / `package-lock.json` / `public/manifest.json`）。
+
+### Fixed
+- 修复通用站「能改一下倍速又被刷回 1x」的主因：隔离世界直写无法对抗站点 MAIN 逻辑。
+- 修复 sticky 生命周期不同步：换片 / 卸视频 / 关闭控制 / 纠正次数封顶时正确 disarm，避免幽灵强锁。
+- 修复桥接竞态：`ensureReady` 不会因 ping 超时把已就绪状态打回 false；kernel 晚启动时自动重推最近一次 configure。
+- 修复 `all_frames` 下误抢键：presence 仅认本地 video；Enter 全屏无视频时不处理；seek 本地优先成功后再反馈，避免假 OSD / 双 seek。
+
+### Notes
+- **默认「均衡」**：升级后未单独改过配置的用户会使用新默认，以改善通杀体验；若遇异常可在 H5 设置里切回「安全」。
+- **抖音**：通用内核不对 rate 强锁，高倍速仍走原有 guard。
+- **第一期未做**：closed Shadow 强制 open、全局 `defineProperty` 反锁（L3）、截图 / 下载 / 滤镜等原版 h5player 大包能力。
+- 相关 commits（`v1.8.4` → HEAD）：`d3aade2`、`748f812`、`eaa333b`、`1ac7136`、`29ec95c`、`4cf5a6f`、`7c23b3a`、`89a873f`、`3721432` 等。
+
 ## [1.8.4] - 2026-07-11
 
 自 `v1.8.3` 以来，YouTube 自渲染字幕围绕 **ASR 自动字幕分段质量** 做了多轮迭代：先改进本地优化器参数，再保留 YouTube 原始时间边界，最后落地 **Scheme B+（先拆后并）** 并接到真正的生产渲染路径。
