@@ -266,8 +266,11 @@ function rebalanceToTargetRange(
 }
 
 /**
- * Optimize subtitles: merge word-level fragments into sentence-level segments
- * This is the main entry point for subtitle optimization
+ * Optimize subtitles: merge word-level fragments into sentence-level segments.
+ *
+ * Not the production display path — controller overlay uses postProcessSubtitles()
+ * (shape gate → lightClean or refineAsrFragments). Keep this for direct callers
+ * and mid-tier experiments.
  *
  * @param fragments - Input subtitle fragments (typically word-level from YouTube API)
  * @param language - Language code (e.g., "en", "zh-CN", "ja")
