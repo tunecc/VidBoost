@@ -112,9 +112,10 @@ export class H5Enhancer implements Feature {
     }
 
     private hasMediaPresence(): boolean {
+        // Do not treat bare hasKernel as media presence — kernel may be ready
+        // with no video yet, which would steal arrow keys / speed shortcuts.
         if (this.videoCtrl.video) return true;
-        if (this.bridge.hasKernel) return true;
-        if (this.bridge.cachedState?.hasVideo) return true;
+        if (this.bridge.cachedState?.hasVideo === true) return true;
         return false;
     }
 

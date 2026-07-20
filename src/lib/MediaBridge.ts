@@ -27,25 +27,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
 
-function parseStatePayload(payload: Record<string, unknown> | null): MediaKernelStatePayload | null {
-  if (!payload) return null;
-  if (typeof payload.hasVideo !== 'boolean') return null;
-  if (typeof payload.rate !== 'number' || !Number.isFinite(payload.rate)) return null;
-  if (typeof payload.escalated !== 'boolean') return null;
-  return {
-    hasVideo: payload.hasVideo,
-    rate: payload.rate,
-    escalated: payload.escalated,
-    mode: normalizeH5CompatMode(payload.mode)
-  };
-}
-
 export class MediaBridge {
   private static instance: MediaBridge | null = null;
 
   private pending = new Map<string, PendingEntry>();
   private kernelReady = false;
   private lastState: MediaKernelStatePayload | null = null;
+  private lastConfigure: MediaKernelConfigurePayload | null = null;
   private listenerInstalled = false;
 
   private constructor() {
@@ -74,6 +62,33 @@ export class MediaBridge {
     this.listenerInstalled = true;
   }
 
+  private parseStatePayload(payload: Record<string, unknown> | null): MediaKernelStatePayload | null {
+    if (!payload) return null;
+    if (typeof payload.hasVideo !== 'boolean') return null;
+    if (typeof payload.rate !== 'number' || !Number.isFinite(payload.rate)) return null;
+
+    // pong may omit escalated/mode — fill defaults so presence/rate hints still work.
+    const escalated = typeof payload.escalated === 'boolean' ? payload.escalated : false;
+    const modeFallback = this.lastConfigure?.mode ?? 'compat';
+    const mode = normalizeH5CompatMode(payload.mode, modeFallback);
+
+    return {
+      hasVideo: payload.hasVideo,
+      rate: payload.rate,
+      escalated,
+      mode
+    };
+  }
+
+  private reconfigureIfCached(): void {
+    if (!this.lastConfigure) return;
+    void this.request(
+      'configure',
+      this.lastConfigure as unknown as Record<string, unknown>,
+      CONFIGURE_TIMEOUT_MS
+    );
+  }
+
   private onMessage = (event: MessageEvent): void => {
     if (event.source !== window) return;
     if (!isMediaKernelEnvelope(event.data, MEDIA_KERNEL_PAGE_SOURCE)) return;
@@ -88,11 +103,17 @@ export class MediaBridge {
     const payload = isRecord(data.payload) ? data.payload : {};
 
     if (type === 'kernel-ready' || type === 'pong') {
+      const wasReady = this.kernelReady;
       this.kernelReady = true;
+      // Late boot: mount may have timed out before kernel was alive — re-push config.
+      // Also re-push when first readiness arrives via pong (kernel-ready missed).
+      if (type === 'kernel-ready' || !wasReady) {
+        this.reconfigureIfCached();
+      }
     }
 
     if (type === 'state' || type === 'pong') {
-      const state = parseStatePayload(payload);
+      const state = this.parseStatePayload(payload);
       if (state) this.lastState = state;
     }
 
@@ -143,14 +164,19 @@ export class MediaBridge {
     });
   }
 
+  /**
+   * Promote-only ready: never clear kernelReady after a successful ready
+   * (kernel-ready / pong may race with a later ping timeout).
+   */
   async ensureReady(timeoutMs: number = ENSURE_READY_TIMEOUT_MS): Promise<boolean> {
     if (this.kernelReady) return true;
     const res = await this.request('ping', {}, timeoutMs);
-    this.kernelReady = Boolean(res);
+    if (res) this.kernelReady = true;
     return this.kernelReady;
   }
 
   configure(payload: MediaKernelConfigurePayload): void {
+    this.lastConfigure = payload;
     void this.request(
       'configure',
       payload as unknown as Record<string, unknown>,
@@ -160,21 +186,17 @@ export class MediaBridge {
 
   async setPlaybackRate(rate: number): Promise<boolean> {
     const res = await this.request('setPlaybackRate', { rate }, COMMAND_TIMEOUT_MS);
-    if (!res) return false;
-    if (res.ok === false) return false;
-    return true;
+    return Boolean(res && res.ok === true);
   }
 
   async seek(deltaSec: number): Promise<boolean> {
     const res = await this.request('seek', { deltaSec }, COMMAND_TIMEOUT_MS);
-    if (!res) return false;
-    if (res.ok === false) return false;
-    return true;
+    return Boolean(res && res.ok === true);
   }
 
   async getState(): Promise<MediaKernelStatePayload | null> {
     const res = await this.request('getState', {}, COMMAND_TIMEOUT_MS);
-    const state = parseStatePayload(res);
+    const state = this.parseStatePayload(res);
     if (state) this.lastState = state;
     return state;
   }
