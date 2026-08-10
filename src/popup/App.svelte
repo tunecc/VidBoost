@@ -1484,6 +1484,7 @@
 
 <main
   class="w-[360px] h-[600px] glass-card text-primary font-sans select-none overflow-hidden relative flex flex-col"
+  class:popup-main-density={currentView === "main"}
 >
   {#if currentView === "main"}
     <div

@@ -169,6 +169,16 @@ body {
     box-shadow: var(--glass-shadow);
   }
 
+  .popup-main-density {
+    --popup-main-header-height: 50px;
+    --popup-main-content-x: 12px;
+    --popup-main-section-gap: 8px;
+    --popup-main-section-header-height: 36px;
+    --popup-main-row-height: 45px;
+    --popup-main-icon-size: 28px;
+    --popup-main-footer-height: 32px;
+  }
+
   .settings-panel {
     border-radius: 12px;
     border: 1px solid rgba(15, 23, 42, 0.07);
