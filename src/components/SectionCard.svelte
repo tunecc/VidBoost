@@ -6,6 +6,7 @@
   export let isOpen: boolean = true;
   export let enabled: boolean = true;
   export let onToggle: () => void;
+  export let density: "default" | "main" = "default";
 
   function getDotClasses(color: string, isEnabled: boolean) {
     if (!isEnabled) {
@@ -39,9 +40,12 @@
 <div
   class="rounded-xl overflow-hidden glass-panel transition-opacity duration-300"
   class:opacity-50={!enabled}
+  class:popup-main-card={density === "main"}
 >
   <button
-    class="w-full px-4 py-3 flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer outline-none"
+    class="w-full flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer outline-none {density === 'main'
+      ? 'px-3 py-2'
+      : 'px-4 py-3'}"
     on:click={onToggle}
   >
     <div class="flex items-center gap-2">
@@ -77,7 +81,7 @@
   {#if isOpen}
     <div
       class="p-2 space-y-2 border-t border-black/5 dark:border-white/10"
-      transition:slide|local={{ duration: 300 }}
+      transition:slide|local={{ duration: density === "main" ? 200 : 300 }}
     >
       <slot />
     </div>

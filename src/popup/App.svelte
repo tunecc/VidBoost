@@ -1535,6 +1535,7 @@
         <SectionCard
           title={t("general")}
           iconColor="blue"
+          density="main"
           isOpen={sectionOpen["general"]}
           enabled={globalEnabled}
           onToggle={() => toggleSection("general")}
@@ -1545,6 +1546,7 @@
             desc={t("enhancer_desc")}
             checked={h5Enabled}
             iconColor="blue"
+            density="main"
             disabled={!globalEnabled}
             onClick={() => globalEnabled && (h5Enabled = !h5Enabled)}
             onSettings={() => navigate("h5-settings")}
@@ -1573,6 +1575,7 @@
             desc={t("stats_speed_converter_desc")}
             checked={statsSpeedConverter}
             iconColor="blue"
+            density="main"
             disabled={!globalEnabled}
             onClick={() =>
               globalEnabled && (statsSpeedConverter = !statsSpeedConverter)}
@@ -1603,6 +1606,7 @@
             desc={t("autopause_desc")}
             checked={autoPauseEnabled}
             iconColor="pink"
+            density="main"
             disabled={!globalEnabled}
             onClick={() =>
               globalEnabled && (autoPauseEnabled = !autoPauseEnabled)}
@@ -1632,6 +1636,7 @@
             title={t("fast_pause_master")}
             desc={t("fast_pause_desc")}
             iconColor="indigo"
+            density="main"
             isOpen={fastPauseOpen}
             masterChecked={fastPauseMaster}
             disabled={!globalEnabled}
@@ -1662,6 +1667,7 @@
                 title="Bilibili"
                 checked={bndEnabled}
                 iconColor="indigo"
+                density="main"
                 compact={true}
                 disabled={!globalEnabled || !fastPauseMaster}
                 onClick={() =>
@@ -1693,6 +1699,7 @@
                 title="YouTube"
                 checked={ytFastPause}
                 iconColor="indigo"
+                density="main"
                 compact={true}
                 disabled={!globalEnabled || !fastPauseMaster}
                 onClick={() =>
@@ -1728,6 +1735,7 @@
         <SectionCard
           title="YouTube"
           iconColor="red"
+          density="main"
           isOpen={sectionOpen["youtube"]}
           enabled={globalEnabled}
           onToggle={() => toggleSection("youtube")}
@@ -1738,6 +1746,7 @@
             desc={t("block_seek_desc")}
             checked={ytBlockNative}
             iconColor="red"
+            density="main"
             disabled={!globalEnabled}
             onClick={() => globalEnabled && (ytBlockNative = !ytBlockNative)}
           >
@@ -1765,6 +1774,7 @@
             desc={t("yt_original_audio_desc")}
             checked={ytAlwaysUseOriginalAudio}
             iconColor="red"
+            density="main"
             disabled={!globalEnabled}
             onClick={() =>
               globalEnabled &&
@@ -1797,6 +1807,7 @@
             desc={t("yt_cdn_status_desc")}
             checked={ytShowCdnCountry}
             iconColor="red"
+            density="main"
             disabled={!globalEnabled}
             onClick={() =>
               globalEnabled && (ytShowCdnCountry = !ytShowCdnCountry)}
@@ -1826,6 +1837,7 @@
             title={t("yt_subtitle_remember_native_toggle")}
             desc={t("yt_subtitle_remember_native_toggle_desc")}
             iconColor="red"
+            density="main"
             isOpen={ytSubtitleRememberOpen}
             masterChecked={ytSubtitleRememberEnabled}
             disabled={!globalEnabled}
@@ -1887,6 +1899,7 @@
             title={t("yt_bottom_progress")}
             desc={t("yt_bottom_progress_desc")}
             iconColor="red"
+            density="main"
             isOpen={ytBottomProgressOpen}
             masterChecked={ytBottomProgressEnabled}
             disabled={!globalEnabled}
@@ -1960,6 +1973,7 @@
             title={t("yt_subtitle_overlay")}
             desc={t("yt_subtitle_overlay_desc")}
             iconColor="red"
+            density="main"
             isOpen={ytSubtitleOpen}
             masterChecked={ytSubtitleEnabled}
             disabled={!globalEnabled}
@@ -2461,6 +2475,7 @@
             title={t("yt_member_block")}
             desc={t("yt_member_block_desc")}
             iconColor="red"
+            density="main"
             isOpen={ytMemberOpen}
             masterChecked={ytMemberBlock}
             disabled={!globalEnabled}
@@ -2701,6 +2716,7 @@
         <SectionCard
           title="Bilibili"
           iconColor="cyan"
+          density="main"
           isOpen={sectionOpen["bilibili"]}
           enabled={globalEnabled}
           onToggle={() => toggleSection("bilibili")}
@@ -2709,6 +2725,7 @@
             title={t("bb_subtitle")}
             desc={t("bb_subtitle_desc")}
             iconColor="cyan"
+            density="main"
             isOpen={bbSubtitleOpen}
             masterChecked={bbSubtitleEnabled}
             disabled={!globalEnabled}
@@ -2876,6 +2893,7 @@
             title={t("bb_quality")}
             desc={t("bb_quality_desc")}
             iconColor="cyan"
+            density="main"
             isOpen={bbQualityOpen}
             masterChecked={bbQualityEnabled}
             disabled={!globalEnabled}
@@ -3047,6 +3065,7 @@
             desc={t("bb_block_space_desc")}
             checked={bbBlockSpace}
             iconColor="cyan"
+            density="main"
             disabled={!globalEnabled}
             onClick={() => globalEnabled && (bbBlockSpace = !bbBlockSpace)}
           >
@@ -3074,6 +3093,7 @@
             title={t("bb_cdn_title")}
             desc={t("bb_cdn_desc")}
             iconColor="cyan"
+            density="main"
             isOpen={bbCdnOpen}
             masterChecked={bbCdnEnabled}
             disabled={!globalEnabled}

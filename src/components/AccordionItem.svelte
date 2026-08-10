@@ -12,6 +12,7 @@
     export let onToggleOpen: () => void = () => {};
     export let onToggleMaster: () => void = () => {};
     export let disabled: boolean = false;
+    export let density: "default" | "main" = "default";
 
     const iconPalettes: Record<string, { background: string; border: string; color: string }> = {
         blue: {
@@ -52,17 +53,24 @@
     class="rounded-lg transition-colors group {isOpen
         ? 'bg-indigo-500/5 dark:bg-indigo-500/10'
         : 'hover:bg-black/5 dark:hover:bg-white/10'}"
+    class:popup-main-accordion={density === "main"}
 >
-    <div class="flex items-center gap-2 p-1.5">
+    <div
+        class="flex items-center {density === 'main' ? 'gap-1 p-1' : 'gap-2 p-1.5'}"
+    >
         <button
             type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 text-left outline-none transition-colors hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-400/25 dark:hover:bg-white/[0.04]"
+            class="flex min-w-0 flex-1 items-center {density === 'main'
+                ? 'gap-2 px-1 py-1'
+                : 'gap-3 px-1 py-1.5'} rounded-lg text-left outline-none transition-colors hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-400/25 dark:hover:bg-white/[0.04]"
             aria-expanded={isOpen}
             on:click={onToggleOpen}
         >
             <!-- Icon -->
             <div
-                class="w-8 h-8 shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                class="shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] {density === 'main'
+                    ? 'w-7 h-7'
+                    : 'w-8 h-8'}"
                 class:feature-icon-muted={iconMuted}
                 style="
             background-color: {iconPalette.background};
@@ -146,7 +154,10 @@
     </div>
 
     {#if isOpen}
-        <div class="px-2 pb-2 space-y-2" transition:slide|local>
+        <div
+            class="px-2 pb-2 space-y-2"
+            transition:slide|local={{ duration: density === "main" ? 200 : 300 }}
+        >
             <slot name="content" />
         </div>
     {/if}

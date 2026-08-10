@@ -7,6 +7,7 @@
   export let onSettings: (() => void) | undefined = undefined;
   export let disabled: boolean = false;
   export let compact: boolean = false;
+  export let density: "default" | "main" = "default";
 
   const iconPalettes: Record<string, { background: string; border: string; color: string }> = {
     blue: {
@@ -54,9 +55,11 @@
 </script>
 
 <div
-  class="flex items-center justify-between rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors group cursor-pointer"
-  class:p-2={!compact}
-  class:p-1.5={compact}
+  class="flex items-center justify-between rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors group cursor-pointer {compact
+    ? 'p-1.5'
+    : density === 'main'
+      ? 'min-h-11 p-1.5'
+      : 'p-2'}"
   class:opacity-60={disabled}
   class:grayscale={disabled || !checked}
   role="button"
@@ -71,15 +74,15 @@
     }
   }}
 >
-  <div class="flex items-center gap-3">
+  <div class="flex min-w-0 items-center {compact || density === 'main' ? 'gap-2' : 'gap-3'}">
     <!-- Icon Placeholder -->
     <div
-      class="shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+      class="shrink-0 rounded-[10px] flex items-center justify-center border transition-colors duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] {compact
+        ? 'w-6 h-6'
+        : density === 'main'
+          ? 'w-7 h-7'
+          : 'w-8 h-8'}"
       class:feature-icon-muted={iconMuted}
-      class:w-8={!compact}
-      class:h-8={!compact}
-      class:w-6={compact}
-      class:h-6={compact}
       style="
         background-color: {iconPalette.background};
         border-color: {iconPalette.border};
@@ -98,9 +101,10 @@
       </slot>
     </div>
 
-    <div>
+    <div class="min-w-0">
       <h4
         class="font-medium text-gray-800 dark:text-white/90"
+        class:truncate={density === "main"}
         class:text-sm={!compact}
         class:text-xs={compact}
       >
@@ -109,6 +113,7 @@
       {#if desc}
         <p
           class="text-gray-500 dark:text-white/50"
+          class:truncate={density === "main"}
           class:text-[10px]={!compact}
           class:text-[9px]={compact}
         >
