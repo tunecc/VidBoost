@@ -1469,6 +1469,7 @@
 
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
+      showLangMenu = false;
       closeBilibiliSubtitleTargetsTooltip();
       closeBilibiliQualityTargetsTooltip();
       closeYtSubtitleFollowNativeTooltip();
@@ -1492,44 +1493,122 @@
       in:fade={{ duration: 300, easing: quintOut }}
     >
       <!-- Header -->
-      <header class="relative z-10 px-5 pt-6 pb-4">
-        <div class="flex items-center justify-between mb-1">
-          <div class="flex flex-col justify-center">
-            <h1
-              class="text-2xl font-light tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-white/70 drop-shadow-sm"
-              style="font-family: 'Outfit', sans-serif;"
+      <header
+        class="relative z-30 flex shrink-0 items-center border-b border-black/5 px-4 dark:border-white/10"
+        style="height: var(--popup-main-header-height);"
+      >
+        <h1
+          class="text-xl font-light tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-white/70 drop-shadow-sm"
+          style="font-family: 'Outfit', sans-serif;"
+        >
+          {t("title")}
+        </h1>
+
+        <div class="ml-auto flex items-center gap-1.5">
+          <div class="relative">
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/40 text-gray-500 shadow-sm transition-colors hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/30 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:bg-white/10"
+              type="button"
+              aria-label={t("language")}
+              aria-expanded={showLangMenu}
+              title={t("language")}
+              on:click|stopPropagation={() => (showLangMenu = !showLangMenu)}
             >
-              {t("title")}
-            </h1>
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
+                />
+              </svg>
+            </button>
+
+            {#if showLangMenu}
+              <div
+                class="absolute right-0 top-full z-50 mt-2 flex origin-top-right flex-col gap-1 rounded-xl p-1 glass-card"
+                transition:slide|local={{ duration: 200 }}
+              >
+                <button
+                  class="whitespace-nowrap rounded-md px-2 py-1 text-center text-[12px] transition-colors {language ===
+                  'auto'
+                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
+                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
+                  on:click={() => {
+                    language = "auto";
+                    showLangMenu = false;
+                  }}
+                >
+                  <span class="relative z-10">{t("lang_auto")}</span>
+                </button>
+                <button
+                  class="whitespace-nowrap rounded-md px-2 py-1 text-center text-[12px] transition-colors {language ===
+                  'en'
+                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
+                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
+                  on:click={() => {
+                    language = "en";
+                    showLangMenu = false;
+                  }}
+                >
+                  <span class="relative z-10">{t("lang_en")}</span>
+                </button>
+                <button
+                  class="whitespace-nowrap rounded-md px-2 py-1 text-center text-[12px] transition-colors {language ===
+                  'zh'
+                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
+                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
+                  on:click={() => {
+                    language = "zh";
+                    showLangMenu = false;
+                  }}
+                >
+                  <span class="relative z-10">{t("lang_zh")}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
+                aria-label={t("close_language_menu")}
+                on:click={() => (showLangMenu = false)}
+              ></button>
+            {/if}
           </div>
 
-          <!-- Master Switch -->
           <button
-            class="group relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 focus:outline-none cursor-pointer border border-black/5 dark:border-white/20 shadow-lg backdrop-blur-md {globalEnabled
-              ? 'bg-emerald-500'
-              : 'bg-black/5 dark:bg-white/10'}"
-            style={globalEnabled
-              ? "background: rgba(16, 185, 129, 0.8); box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);"
-              : ""}
+            class="group relative inline-flex h-8 w-12 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30"
+            type="button"
+            aria-pressed={globalEnabled}
             on:click={() => (globalEnabled = !globalEnabled)}
             title="Master Switch"
           >
-            <div
-              class="inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-300 ease-in-out"
-              class:translate-x-7={globalEnabled}
-              class:translate-x-1={!globalEnabled}
-            />
+            <span
+              class="relative inline-flex h-6 w-11 items-center rounded-full border border-black/5 shadow-lg backdrop-blur-md transition-all duration-300 dark:border-white/20 {globalEnabled
+                ? 'bg-emerald-500'
+                : 'bg-black/5 dark:bg-white/10'}"
+              style={globalEnabled
+                ? "background: rgba(16, 185, 129, 0.8); box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);"
+                : ""}
+            >
+              <span
+                class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out"
+                class:translate-x-5={globalEnabled}
+              ></span>
+            </span>
           </button>
         </div>
       </header>
 
-      <div
-        class="h-[1px] w-full bg-gradient-to-r from-transparent via-gray-200 dark:via-white/10 to-transparent mb-2"
-      ></div>
-
       <!-- Content -->
       <div
-        class="relative z-10 px-4 py-2 space-y-3 flex-1 overflow-y-auto no-scrollbar pb-6"
+        class="relative z-10 flex-1 space-y-2 overflow-y-auto px-3 py-1.5 pb-3 no-scrollbar"
       >
         <!-- SECTION: GENERAL -->
         <SectionCard
@@ -3197,17 +3276,10 @@
             </div></AccordionItem
           >
         </SectionCard>
-      </div>
-
-      <!-- Footer -->
-      <footer
-        class="relative z-10 w-full px-5 py-3 flex items-center justify-center mt-auto bg-gradient-to-t from-white/40 to-transparent dark:from-black/40"
-      >
-        <!-- Gradient Border Top (Simulated) -->
         <div
-          class="absolute top-0 left-0 w-full h-[1px]"
-          style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);"
-        ></div>
+          class="popup-main-inline-footer relative z-10 flex shrink-0 items-center justify-center gap-1.5"
+          style="min-height: var(--popup-main-footer-height);"
+        >
 
         <!-- Centered Project Links -->
         <div class="flex items-center gap-1.5">
@@ -3250,86 +3322,8 @@
           </a>
         </div>
 
-        <!-- Right-aligned Compact Language Selector (Custom Glass Dropdown) -->
-        <div class="absolute right-6 flex items-center">
-          <div class="relative">
-            <button
-              class="flex items-center justify-center w-7 h-7 rounded-full bg-white/40 dark:bg-white/5 border border-white/40 dark:border-white/10 shadow-sm hover:bg-white/60 dark:hover:bg-white/10 transition-colors cursor-pointer outline-none"
-              on:click|stopPropagation={() => (showLangMenu = !showLangMenu)}
-              title={t("language")}
-            >
-              <!-- Translate Icon (A/文) - Universal -->
-              <svg
-                class="w-4 h-4 text-gray-500 dark:text-white/60"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                />
-              </svg>
-            </button>
-
-            {#if showLangMenu}
-              <!-- Enhanced Glass Dropdown: centered, native glass-card style -->
-              <!-- Use p-1 and gap-0.5 for a clean, pill-based list -->
-              <div
-                class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 p-1 gap-1 rounded-xl glass-card flex flex-col z-50 origin-bottom"
-                transition:slide|local={{ duration: 250 }}
-              >
-                <button
-                  class="text-[12px] py-1 px-2 text-center rounded-md transition-colors whitespace-nowrap {language ===
-                  'auto'
-                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
-                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
-                  on:click={() => {
-                    language = "auto";
-                    showLangMenu = false;
-                  }}
-                >
-                  <span class="relative z-10">{t("lang_auto")}</span>
-                </button>
-                <button
-                  class="text-[12px] py-1 px-2 text-center rounded-md transition-colors whitespace-nowrap {language ===
-                  'en'
-                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
-                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
-                  on:click={() => {
-                    language = "en";
-                    showLangMenu = false;
-                  }}
-                >
-                  <span class="relative z-10">{t("lang_en")}</span>
-                </button>
-                <button
-                  class="text-[12px] py-1 px-2 text-center rounded-md transition-colors whitespace-nowrap {language ===
-                  'zh'
-                    ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-500/5 dark:bg-blue-400/10'
-                    : 'text-gray-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10'}"
-                  on:click={() => {
-                    language = "zh";
-                    showLangMenu = false;
-                  }}
-                >
-                  <span class="relative z-10">{t("lang_zh")}</span>
-                </button>
-              </div>
-
-              <!-- Backdrop to close menu -->
-              <button
-                type="button"
-                class="fixed inset-0 z-40 cursor-default bg-transparent border-0 p-0 m-0"
-                aria-label={t("close_language_menu")}
-                on:click={() => (showLangMenu = false)}
-              ></button>
-            {/if}
-          </div>
         </div>
-      </footer>
+      </div>
     </div>
   {:else if currentView === "h5-settings"}
     <div
