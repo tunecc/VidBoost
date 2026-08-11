@@ -2149,6 +2149,33 @@
                   </button>
                 </div>
 
+                <div class="settings-field setting-line">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="setting-label">{t("yt_subtitle_compatible_it")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                      ytSubtitleConfig.compatibleWithImmersiveTranslate
+                        ? "bg-red-500"
+                        : "bg-gray-300 dark:bg-white/15"
+                    } ${ytSubtitleStyleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                    aria-pressed={ytSubtitleConfig.compatibleWithImmersiveTranslate}
+                    disabled={ytSubtitleStyleDisabled}
+                    on:click={() =>
+                      !ytSubtitleStyleDisabled &&
+                      updateYtSubtitleConfig({
+                        compatibleWithImmersiveTranslate: !ytSubtitleConfig.compatibleWithImmersiveTranslate,
+                      })}
+                  >
+                    <span
+                      class={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                        ytSubtitleConfig.compatibleWithImmersiveTranslate ? "left-[22px]" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 <div class="settings-grid mt-2">
                   <label class="settings-field settings-field-wide space-y-2">
                     <div class="setting-line">
