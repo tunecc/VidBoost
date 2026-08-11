@@ -97,6 +97,30 @@ export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPage
     enabled: false
 };
 
+/**
+ * 检测 Immersive Translate 是否在页面中活跃。
+ * 双检测：全局 API 标记 + DOM 渲染容器。
+ */
+export function isImmersiveTranslateActive(): boolean {
+    if (typeof globalThis !== 'undefined') {
+        const globalApi = (globalThis as Record<string, unknown>).immersiveTranslateBrowserAPI;
+        if (globalApi) return true;
+    }
+    if (typeof document !== 'undefined') {
+        const container = document.querySelector('.imt-caption-container');
+        if (container) return true;
+    }
+    return false;
+}
+
+/**
+ * 判断语言代码是否为中文。
+ * 匹配 zh / zh-Hans / zh-Hant / zh-CN 等所有以 zh 开头的语言代码。
+ */
+export function isChineseLanguageCode(languageCode: string): boolean {
+    return languageCode.startsWith('zh');
+}
+
 export function cloneYouTubeSubtitleOverlayPageConfig(
     config: YouTubeSubtitleOverlayPageConfig
 ): YouTubeSubtitleOverlayPageConfig {
