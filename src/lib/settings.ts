@@ -87,6 +87,7 @@ export type YTSubtitleConfig = {
     followNativeToggle: boolean;
     rememberNativeToggle: boolean;
     rememberNativeToggleByChannel: boolean;
+    preferredLanguageCode: string;
     position: YTSubtitlePosition;
     style: YTSubtitleStyle;
     /** 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果 */
@@ -250,6 +251,7 @@ export const DEFAULT_SETTINGS: Settings = {
         followNativeToggle: true,
         rememberNativeToggle: false,
         rememberNativeToggleByChannel: true,
+        preferredLanguageCode: '',
         position: {
             percent: 10,
             anchor: 'bottom'
@@ -487,6 +489,9 @@ export function cloneYTSubtitleConfig(
         rememberNativeToggleByChannel: typeof config?.rememberNativeToggleByChannel === 'boolean'
             ? config.rememberNativeToggleByChannel
             : fallback.rememberNativeToggleByChannel,
+        preferredLanguageCode: typeof config?.preferredLanguageCode === 'string'
+            ? config.preferredLanguageCode.trim()
+            : fallback.preferredLanguageCode,
         position: cloneYTSubtitlePosition(config?.position),
         style: cloneYTSubtitleStyle(config?.style),
         compatibleWithImmersiveTranslate: typeof config?.compatibleWithImmersiveTranslate === 'boolean'
