@@ -8,6 +8,37 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [1.9.0] - 2026-08-11
+
+1. **可让沉浸式翻译渲染非中文字幕** — 开启兼容后，非中文字幕交给 IT 显示翻译结果，VidBoost 不再叠加渲染；中文字幕仍由 VidBoost 强化渲染。
+2. **字幕优化更聪明** — 不再依赖不可靠的 `track.kind` 标签，改为按内容形态判断：精修短语直接透传，只有碎 cue 才做重切精炼。
+3. **Popup 主页面更紧凑** — 头部压缩、间距收紧，同屏信息密度更高。
+
+### Added
+- **[新增] 兼容沉浸式翻译（`compatibleWithImmersiveTranslate`）**  
+  YouTube 字幕设置新增开关：开启后，当所选字幕为非中文（`languageCode` 不以 `zh` 开头）时，停止 VidBoost 自渲染并恢复原生字幕，让 Immersive Translate 渲染翻译结果；中文字幕仍由 VidBoost 渲染。含设置、i18n（中英）、tooltip 与说明文案。
+- **[新增] Immersive Translate 检测工具**（`isImmersiveTranslateActive` / `isChineseLanguageCode`）  
+  以 IT 字幕容器 `.imt-caption-container` 作为活跃信号（IT 全局 API 在隔离世界、`imt-state` 属性在 YouTube 不出现，故以容器为准）。
+
+### Changed
+- **字幕后处理改为按内容形态路由**（`postProcessSubtitles`）  
+  废弃按 `track.kind === 'asr'` 强分支 + 标点判定的旧逻辑；改为 `needsResegment` 形状门（tiny / flash 占比、均长），精修短语走 `lightCleanFragments` 透传，碎 cue 才走 `refineAsrFragments` 重切。`detectSubtitleStyle` / `shouldUseAsrRefine` 同步统一到形状门。
+- **原生字幕隐藏态收拢为幂等`setNativeSubtitlesHidden`**  
+  统一在此之前散落的 `hideNativeSubtitles` / `showNativeSubtitles` 调用，并补上 Immersive Translate 字幕窗口（`#immersive-translate-caption-window`）的隐藏。
+- **Immersive Translate 检测历次调整**  
+  从「MAIN world 内联脚本检测」→「`imt-state` 属性」→ 最终「IT 渲染容器 + 语言码」；关闭不可靠的 IT 检测门，改为开启开关后非中文字幕一律让位 IT，容器在 VB 渲染中文时一并隐藏。
+- **Popup 主页面紧凑布局**  
+  头部从大标题区改为通栏窄条（`--popup-main-header-height`），整体间距收紧，并通过 `popup-main-density` scope 限定只影响主视图，其它视图与组件不受影响。
+- 版本号升至 `1.9.0`（`package.json` / `package-lock.json` / `public/manifest.json`）。
+
+### Fixed
+- 修复开启兼容 IT 后，中文字幕仍被 VidBoost 隐藏的问题（隐藏规则现同时覆盖 IT 字幕容器）。
+- 修复以 `track.kind` 判定导致「精修人工字幕被过度重切」与「ASR 被误判为精修」的两类误路由。
+
+### Notes
+- **IT 兼容默认关闭**；开启后仅影响非中文字幕路径，中文字幕功能不变。
+- 相关 commits（`v1.8.5` → HEAD）：`54ebbb6`、`6480b75`、`28fc024`、`a48e5a0`、`39c7d2a`、`fad9020`、`d0f7ec7`、`f444462`、`8828d99`、`1e053ae`、`47369a2`、`104aab9`、`b97f0d3`、`bd8ec21`、`5a0b961`、`1ce24d8` 等。
+
 ## [1.8.5] - 2026-07-20
 
 自 `v1.8.4` 以来，主线从 YouTube 字幕精炼转向 **通用 H5 倍速通杀**：落地 MAIN 世界轻量媒体内核（方案 E），让多数会回写倍速的网站也能稳住你设的速度；并补齐设置区分、文案与选择器 UI。
