@@ -40,7 +40,9 @@ import {
     type YouTubeSubtitleAudioCaptionTrack,
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
-    type YouTubeTimedText
+    type YouTubeTimedText,
+    isImmersiveTranslateActive,
+    isChineseLanguageCode
 } from './youtube/subtitleOverlay.shared';
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
 import { postProcessSubtitles } from './youtube/subtitle/processors/subtitle-style';
@@ -785,6 +787,17 @@ export class YouTubeSubtitleOverlay implements Feature {
                 return;
             }
 
+            // 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果
+            if (this.shouldYieldToImmersiveTranslate(track.languageCode)) {
+                this.abortPendingLoad();
+                this.stopRenderer();
+                this.clearSubtitleState();
+                this.renderSubtitleText('');
+                this.destroyOverlay();
+                this.showNativeSubtitles();
+                return;
+            }
+
             const loaded = await this.fetchTrackWithFallback(track, playerData, abortController.signal);
             if (!this.isLoadActive(loadId, abortController)) {
                 return;
@@ -922,6 +935,19 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!response?.success || !response.data) return;
 
         const track = selectTrack(response.data);
+        // 兼容 Immersive Translate：非中文字幕时让 IT 渲染
+        if (track && this.shouldYieldToImmersiveTranslate(track.languageCode)) {
+            if (this.currentTrackKey) {
+                // 之前正在渲染，现在需要退出
+                this.abortPendingLoad();
+                this.stopRenderer();
+                this.clearSubtitleState();
+                this.renderSubtitleText('');
+                this.destroyOverlay();
+                this.showNativeSubtitles();
+            }
+            return;
+        }
         const nextTrackKey = track ? buildTrackKey(response.data.videoId, track) : '';
 
         if (
@@ -1422,6 +1448,13 @@ export class YouTubeSubtitleOverlay implements Feature {
 
     private shouldRenderOverlay() {
         return this.config.enabled === true;
+    }
+
+    private shouldYieldToImmersiveTranslate(trackLanguageCode: string): boolean {
+        if (!this.config.compatibleWithImmersiveTranslate) return false;
+        if (!isImmersiveTranslateActive()) return false;
+        if (isChineseLanguageCode(trackLanguageCode)) return false;
+        return true;
     }
 
     private shouldRememberNativeToggle() {
