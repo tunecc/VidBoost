@@ -30,7 +30,6 @@ import {
     type SubtitleFontAssetGetResponse
 } from '../lib/subtitleFontAssets';
 import {
-    ensureImmersiveTranslateDetectorInjected,
     ensureYouTubeSubtitleOverlayScriptInjected,
     installYouTubeSubtitleOverlayBridge,
     requestYouTubeSubtitleEnsureEnabled,
@@ -707,7 +706,6 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         installYouTubeSubtitleOverlayBridge();
         ensureYouTubeSubtitleOverlayScriptInjected();
-        ensureImmersiveTranslateDetectorInjected();
         this.rebindVideo(this.videoCtrl.video);
         this.bindNativeSubtitleButtonObserver();
 
