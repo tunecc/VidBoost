@@ -7,10 +7,19 @@ export type YouTubeSubtitleCaptionTrack = {
     languageCode: string;
     kind?: string;
     vssId: string;
-    name?: {
-        simpleText?: string;
-    };
+    name?: YouTubeTextValue;
     trackName?: string;
+    isTranslatable?: boolean;
+};
+
+export type YouTubeTextValue = {
+    simpleText?: string;
+    runs?: Array<{ text: string }>;
+};
+
+export type YouTubeSubtitleTranslationLanguage = {
+    languageCode: string;
+    languageName: YouTubeTextValue;
 };
 
 export type YouTubeSubtitleAudioCaptionTrack = {
@@ -30,6 +39,7 @@ export type YouTubeSubtitlePlayerData = {
     videoId: string;
     channelKey: string | null;
     captionTracks: YouTubeSubtitleCaptionTrack[];
+    translationLanguages: YouTubeSubtitleTranslationLanguage[];
     audioCaptionTracks: YouTubeSubtitleAudioCaptionTrack[];
     device: string | null;
     cver: string | null;

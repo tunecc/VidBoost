@@ -14,6 +14,7 @@ import {
     type YouTubeSubtitlePlayerData,
     type YouTubeSubtitleSelectedTrack
 } from './subtitleOverlay.shared';
+import { normalizeYouTubeSubtitleTracklistRenderer } from './subtitle/selector/playerData';
 
 type BridgeRequest = {
     source: string;
@@ -87,13 +88,6 @@ function setupTimedtextObserver() {
         });
         return originalXhrSend.apply(this, args as Parameters<XMLHttpRequest['send']>);
     };
-}
-
-function normalizeTracks(tracks: YouTubeSubtitleCaptionTrack[]): YouTubeSubtitleCaptionTrack[] {
-    return tracks.map((track) => ({
-        ...track,
-        baseUrl: track.baseUrl?.includes('://') ? track.baseUrl : `${location.origin}${track.baseUrl}`
-    }));
 }
 
 function parseAudioTracks(tracks?: unknown[]): YouTubeSubtitleAudioCaptionTrack[] {
@@ -196,12 +190,16 @@ function getPlayerData(expectedVideoId: string | null): YouTubeSubtitlePlayerDat
     if (!videoId) return null;
     if (expectedVideoId && expectedVideoId !== videoId) return null;
 
+    const normalizedTracklist = normalizeYouTubeSubtitleTracklistRenderer(
+        playerResponse?.captions?.playerCaptionsTracklistRenderer,
+        location.origin
+    );
+
     return {
         videoId,
         channelKey: extractChannelKey(playerResponse),
-        captionTracks: normalizeTracks(
-            playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
-        ),
+        captionTracks: normalizedTracklist.captionTracks,
+        translationLanguages: normalizedTracklist.translationLanguages,
         audioCaptionTracks: parseAudioTracks(player.getAudioTrack?.()?.captionTracks),
         device: window.ytcfg?.get?.('DEVICE') ?? null,
         cver: player.getWebPlayerContextConfig?.()?.innertubeContextClientVersion ?? null,
