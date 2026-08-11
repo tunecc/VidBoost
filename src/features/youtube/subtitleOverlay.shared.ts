@@ -99,18 +99,14 @@ export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPage
 
 /**
  * 检测 Immersive Translate 是否在页面中活跃。
- * 检测依据：IT 在 MAIN 世界设置的 DOM 属性（跨隔离世界可见）和 IT 字幕渲染容器。
- * IT 的 `globalThis.immersiveTranslateBrowserAPI` 仅在 IT 自己的隔离世界可见，
- * 因此不能直接检测；但 IT 在 documentElement 上设置了 `imt-state` 等属性（MAIN 世界），
- * 跨隔离世界可读。
+ * 检测 IT 字幕渲染容器 `.imt-caption-container`，该容器在 IT 渲染字幕时出现。
+ * 注意：IT 的全局 API 在隔离世界，content script 检测不到；`imt-state` 属性
+ * 在 YouTube 上不出现。因此以 IT 字幕容器作为主要信号。
  */
 export function isImmersiveTranslateActive(): boolean {
     if (typeof document !== 'undefined') {
-        const html = document.documentElement;
-        // IT 在 documentElement 上设置 imt-state 属性（MAIN 世界），跨隔离世界可见
-        if (html?.hasAttribute('imt-state')) return true;
-        // IT 字幕渲染后出现 .imt-caption-container（延迟检测）
-        if (document.querySelector('.imt-caption-container')) return true;
+        const container = document.querySelector('.imt-caption-container');
+        if (container) return true;
     }
     return false;
 }

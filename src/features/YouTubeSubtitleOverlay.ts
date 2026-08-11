@@ -41,7 +41,6 @@ import {
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
     type YouTubeTimedText,
-    isImmersiveTranslateActive,
     isChineseLanguageCode
 } from './youtube/subtitleOverlay.shared';
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
@@ -789,7 +788,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
             // 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果
             if (this.shouldYieldToImmersiveTranslate(track.languageCode)) {
-                this.yieldToImmersiveTranslate();
+                this.showNativeSubtitlesForImmersiveTranslate();
                 return;
             }
 
@@ -929,7 +928,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         const track = selectTrack(response.data);
         // 兼容 Immersive Translate：非中文字幕时让 IT 渲染
         if (track && this.shouldYieldToImmersiveTranslate(track.languageCode)) {
-            this.yieldToImmersiveTranslate();
+            this.showNativeSubtitlesForImmersiveTranslate();
             return;
         }
 
@@ -1446,9 +1445,28 @@ export class YouTubeSubtitleOverlay implements Feature {
 
     private shouldYieldToImmersiveTranslate(trackLanguageCode: string): boolean {
         if (!this.config.compatibleWithImmersiveTranslate) return false;
-        if (!isImmersiveTranslateActive()) return false;
         if (isChineseLanguageCode(trackLanguageCode)) return false;
         return true;
+    }
+
+    /**
+     * 恢复原生字幕显示，并确保 IT 的翻译字幕容器可见。
+     * 当 VidBoost 停止渲染（非中文字轨交给 IT 翻译）时调用。
+     * 注意：必须在 overlay 尚未挂载时也能工作，因此不能依赖 `showNativeSubtitles()`
+     * 的 `nativeHidden` 守卫——直接移除隐藏 style。
+     */
+    private showNativeSubtitlesForImmersiveTranslate() {
+        this.abortPendingLoad();
+        this.stopRenderer();
+        this.clearSubtitleState();
+        this.renderSubtitleText('');
+        this.destroyOverlay();
+        // 直接移除隐藏 style，不依赖 nativeHidden 状态
+        const style = document.getElementById(NATIVE_STYLE_ID);
+        if (style) {
+            style.remove();
+        }
+        this.nativeHidden = false;
     }
 
     private yieldToImmersiveTranslate() {
