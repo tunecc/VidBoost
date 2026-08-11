@@ -126,6 +126,31 @@ export function ensureYouTubeSubtitleOverlayScriptInjected() {
     scriptInjected = true;
 }
 
+/**
+ * 注入同步 inline script 到页面 MAIN 世界，检测 Immersive Translate 的
+ * 全局 API 标记（content script 隔离世界不可见），并设置 DOM 标记供后续检测。
+ */
+let imtDetectorInjected = false;
+
+export function ensureImmersiveTranslateDetectorInjected() {
+    if (typeof document === 'undefined') return;
+    if (imtDetectorInjected) return;
+    if (document.getElementById('vb-imt-detector')) return;
+
+    const script = document.createElement('script');
+    script.id = 'vb-imt-detector';
+    script.textContent = `
+        (function() {
+            if (typeof window.immersiveTranslateBrowserAPI !== 'undefined') {
+                document.documentElement.dataset.vbImmersiveTranslate = '1';
+            }
+        })();
+    `;
+    (document.documentElement || document.head).appendChild(script);
+    script.remove();
+    imtDetectorInjected = true;
+}
+
 export async function requestYouTubeSubtitlePlayerData(expectedVideoId: string | null) {
     return await postBridgeRequest<YouTubeSubtitlePlayerDataResponse>(
         YT_SUBTITLE_OVERLAY_PLAYER_DATA_REQUEST,

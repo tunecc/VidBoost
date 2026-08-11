@@ -30,6 +30,7 @@ import {
     type SubtitleFontAssetGetResponse
 } from '../lib/subtitleFontAssets';
 import {
+    ensureImmersiveTranslateDetectorInjected,
     ensureYouTubeSubtitleOverlayScriptInjected,
     installYouTubeSubtitleOverlayBridge,
     requestYouTubeSubtitleEnsureEnabled,
@@ -706,6 +707,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         installYouTubeSubtitleOverlayBridge();
         ensureYouTubeSubtitleOverlayScriptInjected();
+        ensureImmersiveTranslateDetectorInjected();
         this.rebindVideo(this.videoCtrl.video);
         this.bindNativeSubtitleButtonObserver();
 
@@ -1415,6 +1417,12 @@ export class YouTubeSubtitleOverlay implements Feature {
         style.textContent = `
             .ytp-caption-window-container,
             .ytp-caption-window-container * {
+                display: none !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+            }
+            .imt-caption-container,
+            .imt-caption-container * {
                 display: none !important;
                 opacity: 0 !important;
                 visibility: hidden !important;

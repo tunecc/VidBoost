@@ -99,17 +99,13 @@ export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPage
 
 /**
  * 检测 Immersive Translate 是否在页面中活跃。
- * 双检测：全局 API 标记 + DOM 渲染容器。
- * 注意：content script 运行在隔离世界，页面全局 `immersiveTranslateBrowserAPI`
- * 通常不可见，因此全局 API 检查只是尽力而为；DOM `.imt-caption-container`
- * 检测才是主要信号。
+ * 检测顺序：VidBoost 注入的 DOM 标记（同步 inline script 在 MAIN 世界写入，
+ * 优先，因为 content script 隔离世界看不到页面全局 API）→ IT 渲染容器。
  */
 export function isImmersiveTranslateActive(): boolean {
-    if (typeof globalThis !== 'undefined') {
-        const globalApi = (globalThis as Record<string, unknown>).immersiveTranslateBrowserAPI;
-        if (globalApi) return true;
-    }
     if (typeof document !== 'undefined') {
+        const html = document.documentElement;
+        if (html?.dataset.vbImmersiveTranslate === '1') return true;
         const container = document.querySelector('.imt-caption-container');
         if (container) return true;
     }
