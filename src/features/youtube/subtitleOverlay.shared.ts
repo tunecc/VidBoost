@@ -100,6 +100,9 @@ export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPage
 /**
  * 检测 Immersive Translate 是否在页面中活跃。
  * 双检测：全局 API 标记 + DOM 渲染容器。
+ * 注意：content script 运行在隔离世界，页面全局 `immersiveTranslateBrowserAPI`
+ * 通常不可见，因此全局 API 检查只是尽力而为；DOM `.imt-caption-container`
+ * 检测才是主要信号。
  */
 export function isImmersiveTranslateActive(): boolean {
     if (typeof globalThis !== 'undefined') {

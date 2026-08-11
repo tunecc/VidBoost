@@ -119,6 +119,7 @@
   let bbQualityOpen = false;
   let bbQualityTargetsTooltipOpen = false;
   let ytSubtitleFollowNativeTooltipOpen = false;
+  let ytSubtitleCompatibleItTooltipOpen = false;
   let bbQualityAddCurrentPending = false;
   let bbQualityAddCurrentStatus = "";
   let bbQualityAddCurrentTone: "neutral" | "success" | "error" = "neutral";
@@ -1440,6 +1441,7 @@
     bbSubtitleTargetsTooltipOpen = false;
     bbQualityTargetsTooltipOpen = false;
     ytSubtitleFollowNativeTooltipOpen = false;
+    ytSubtitleCompatibleItTooltipOpen = false;
     sectionOpen[section] = !sectionOpen[section];
   }
 
@@ -1467,12 +1469,21 @@
     ytSubtitleFollowNativeTooltipOpen = false;
   }
 
+  function toggleYtSubtitleCompatibleItTooltip() {
+    ytSubtitleCompatibleItTooltipOpen = !ytSubtitleCompatibleItTooltipOpen;
+  }
+
+  function closeYtSubtitleCompatibleItTooltip() {
+    ytSubtitleCompatibleItTooltipOpen = false;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       showLangMenu = false;
       closeBilibiliSubtitleTargetsTooltip();
       closeBilibiliQualityTargetsTooltip();
       closeYtSubtitleFollowNativeTooltip();
+      closeYtSubtitleCompatibleItTooltip();
     }
   }
 
@@ -2152,6 +2163,37 @@
                 <div class="settings-field setting-line">
                   <div class="flex min-w-0 items-center gap-1.5">
                     <span class="setting-label">{t("yt_subtitle_compatible_it")}</span>
+
+                    <div class="relative flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        aria-controls="yt-subtitle-compatible-it-tooltip"
+                        aria-expanded={ytSubtitleCompatibleItTooltipOpen}
+                        class="relative z-50 flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-black/5 text-[10px] font-bold text-gray-400 outline-none transition-colors hover:bg-black/10 hover:text-gray-600 focus:bg-cyan-500/10 focus:text-cyan-600 dark:bg-white/10 dark:text-white/40 dark:hover:bg-white/20 dark:hover:text-white/70 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300"
+                        on:click|stopPropagation={toggleYtSubtitleCompatibleItTooltip}
+                      >
+                        ?
+                      </button>
+
+                      {#if ytSubtitleCompatibleItTooltipOpen}
+                        <div
+                          id="yt-subtitle-compatible-it-tooltip"
+                          role="tooltip"
+                          class="absolute left-1/2 top-full z-50 mt-2 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                          in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                          out:fade|local={{ duration: 120 }}
+                        >
+                          {t("yt_subtitle_compatible_it_desc")}
+                        </div>
+
+                        <button
+                          type="button"
+                          class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
+                          aria-label={t("yt_subtitle_compatible_it_desc")}
+                          on:click={closeYtSubtitleCompatibleItTooltip}
+                        ></button>
+                      {/if}
+                    </div>
                   </div>
                   <button
                     type="button"

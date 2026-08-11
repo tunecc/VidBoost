@@ -789,12 +789,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
             // 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果
             if (this.shouldYieldToImmersiveTranslate(track.languageCode)) {
-                this.abortPendingLoad();
-                this.stopRenderer();
-                this.clearSubtitleState();
-                this.renderSubtitleText('');
-                this.destroyOverlay();
-                this.showNativeSubtitles();
+                this.yieldToImmersiveTranslate();
                 return;
             }
 
@@ -925,9 +920,6 @@ export class YouTubeSubtitleOverlay implements Feature {
             return;
         }
 
-        this.ensureOverlayMounted();
-        this.applyOverlayPosition();
-
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId) return;
 
@@ -937,17 +929,13 @@ export class YouTubeSubtitleOverlay implements Feature {
         const track = selectTrack(response.data);
         // 兼容 Immersive Translate：非中文字幕时让 IT 渲染
         if (track && this.shouldYieldToImmersiveTranslate(track.languageCode)) {
-            if (this.currentTrackKey) {
-                // 之前正在渲染，现在需要退出
-                this.abortPendingLoad();
-                this.stopRenderer();
-                this.clearSubtitleState();
-                this.renderSubtitleText('');
-                this.destroyOverlay();
-                this.showNativeSubtitles();
-            }
+            this.yieldToImmersiveTranslate();
             return;
         }
+
+        this.ensureOverlayMounted();
+        this.applyOverlayPosition();
+
         const nextTrackKey = track ? buildTrackKey(response.data.videoId, track) : '';
 
         if (
@@ -1455,6 +1443,15 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!isImmersiveTranslateActive()) return false;
         if (isChineseLanguageCode(trackLanguageCode)) return false;
         return true;
+    }
+
+    private yieldToImmersiveTranslate() {
+        this.abortPendingLoad();
+        this.stopRenderer();
+        this.clearSubtitleState();
+        this.renderSubtitleText('');
+        this.destroyOverlay();
+        this.showNativeSubtitles();
     }
 
     private shouldRememberNativeToggle() {
