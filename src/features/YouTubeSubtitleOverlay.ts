@@ -1418,8 +1418,7 @@ export class YouTubeSubtitleOverlay implements Feature {
                 opacity: 0 !important;
                 visibility: hidden !important;
             }
-            .imt-caption-container,
-            .imt-caption-container * {
+            #immersive-translate-caption-window {
                 display: none !important;
                 opacity: 0 !important;
                 visibility: hidden !important;
