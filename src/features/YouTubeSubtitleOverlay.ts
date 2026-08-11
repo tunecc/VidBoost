@@ -478,7 +478,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.stopRenderer();
         this.clearSubtitleState();
         this.renderSubtitleText('');
-        this.showNativeSubtitles();
+        this.setNativeSubtitlesHidden(false);
         this.lastNativeToggleRestoreKey = '';
     };
 
@@ -654,7 +654,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.unsubscribeVideo?.();
         this.unsubscribeVideo = null;
         this.destroyOverlay();
-        this.showNativeSubtitles();
+        this.setNativeSubtitlesHidden(false);
         this.clearSubtitleState();
         this.loadSerial += 1;
         this.lastFallbackNoticeKey = '';
@@ -716,7 +716,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.clearSubtitleState();
             this.renderSubtitleText('');
             this.destroyOverlay();
-            this.showNativeSubtitles();
+            this.setNativeSubtitlesHidden(false);
             return;
         }
 
@@ -815,7 +815,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.currentIndex = -1;
 
             this.ensureOverlayMounted();
-            this.hideNativeSubtitles();
+            this.setNativeSubtitlesHidden(true);
             this.renderAtCurrentTime(true);
             this.startRenderer();
         } catch (error) {
@@ -1402,36 +1402,29 @@ export class YouTubeSubtitleOverlay implements Feature {
         };
     }
 
-    private hideNativeSubtitles() {
-        if (this.nativeHidden) return;
-        if (document.getElementById(NATIVE_STYLE_ID)) {
-            this.nativeHidden = true;
-            return;
+    private setNativeSubtitlesHidden(hidden: boolean) {
+        const style = document.getElementById(NATIVE_STYLE_ID);
+        if (hidden && !style) {
+            const el = document.createElement('style');
+            el.id = NATIVE_STYLE_ID;
+            el.textContent = `
+                .ytp-caption-window-container,
+                .ytp-caption-window-container * {
+                    display: none !important;
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                }
+                #immersive-translate-caption-window {
+                    display: none !important;
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                }
+            `;
+            document.head.appendChild(el);
+        } else if (!hidden && style) {
+            style.remove();
         }
-
-        const style = document.createElement('style');
-        style.id = NATIVE_STYLE_ID;
-        style.textContent = `
-            .ytp-caption-window-container,
-            .ytp-caption-window-container * {
-                display: none !important;
-                opacity: 0 !important;
-                visibility: hidden !important;
-            }
-            #immersive-translate-caption-window {
-                display: none !important;
-                opacity: 0 !important;
-                visibility: hidden !important;
-            }
-        `;
-        document.head.appendChild(style);
-        this.nativeHidden = true;
-    }
-
-    private showNativeSubtitles() {
-        if (!this.nativeHidden) return;
-        document.getElementById(NATIVE_STYLE_ID)?.remove();
-        this.nativeHidden = false;
+        this.nativeHidden = hidden;
     }
 
     private shouldFollowNativeToggle() {
@@ -1449,10 +1442,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     }
 
     /**
-     * 恢复原生字幕显示，并确保 IT 的翻译字幕容器可见。
-     * 当 VidBoost 停止渲染（非中文字轨交给 IT 翻译）时调用。
-     * 注意：必须在 overlay 尚未挂载时也能工作，因此不能依赖 `showNativeSubtitles()`
-     * 的 `nativeHidden` 守卫——直接移除隐藏 style。
+     * 停止 VidBoost 字幕渲染并恢复原生字幕显示，让 IT 渲染翻译结果。
      */
     private showNativeSubtitlesForImmersiveTranslate() {
         this.abortPendingLoad();
@@ -1460,21 +1450,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.destroyOverlay();
-        // 直接移除隐藏 style，不依赖 nativeHidden 状态
-        const style = document.getElementById(NATIVE_STYLE_ID);
-        if (style) {
-            style.remove();
-        }
-        this.nativeHidden = false;
-    }
-
-    private yieldToImmersiveTranslate() {
-        this.abortPendingLoad();
-        this.stopRenderer();
-        this.clearSubtitleState();
-        this.renderSubtitleText('');
-        this.destroyOverlay();
-        this.showNativeSubtitles();
+        this.setNativeSubtitlesHidden(false);
     }
 
     private shouldRememberNativeToggle() {
@@ -1615,7 +1591,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.stopRenderer();
         this.clearSubtitleState();
         this.renderSubtitleText('');
-        this.showNativeSubtitles();
+        this.setNativeSubtitlesHidden(false);
     }
 
     private bindNativeSubtitleButtonObserver() {
@@ -1753,7 +1729,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.stopRenderer();
         this.clearSubtitleState();
         this.renderSubtitleText('');
-        this.showNativeSubtitles();
+        this.setNativeSubtitlesHidden(false);
 
         if (!showNotice) return;
 
