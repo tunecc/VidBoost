@@ -46,6 +46,24 @@ import {
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
 import { postProcessSubtitles } from './youtube/subtitle/processors/subtitle-style';
 import type { SubtitleFragment } from './youtube/subtitle/utils/types';
+import { buildSubtitleCatalog } from './youtube/subtitle/selector/catalog';
+import { canonicalizeLanguageCode } from './youtube/subtitle/selector/language';
+import {
+    applySubtitleOptionTarget,
+    buildSubtitleOptionKey,
+    getSubtitleOptionLanguage,
+    shouldKeepCurrentSubtitleOnFailure
+} from './youtube/subtitle/selector/request';
+import { resolveSubtitleOption } from './youtube/subtitle/selector/resolver';
+import {
+    SubtitleSelector,
+    type SubtitleSelectorCopy
+} from './youtube/subtitle/selector/SubtitleSelector';
+import type {
+    SubtitleCatalog,
+    SubtitleLoadTrigger,
+    SubtitleOption
+} from './youtube/subtitle/selector/types';
 
 type PotToken = {
     pot: string | null;
@@ -274,10 +292,6 @@ function isHttpStatusError(error: unknown, status: number) {
     return error instanceof Error && error.message === `http:${status}`;
 }
 
-function buildTrackKey(videoId: string, track: YouTubeSubtitleCaptionTrack) {
-    return `${videoId}:${track.languageCode}:${track.kind ?? ''}:${track.vssId}`;
-}
-
 function extractPotToken(
     selectedTrack: YouTubeSubtitleCaptionTrack,
     playerData: YouTubeSubtitlePlayerData
@@ -337,11 +351,11 @@ function extractPotToken(
 }
 
 function buildSubtitleUrl(
-    track: YouTubeSubtitleCaptionTrack,
+    option: SubtitleOption,
     playerData: YouTubeSubtitlePlayerData,
     potToken: PotToken
 ) {
-    const url = new URL(track.baseUrl);
+    const url = new URL(option.sourceTrack.baseUrl);
 
     Object.entries(FIXED_TIMEDTEXT_PARAMS).forEach(([key, value]) => {
         url.searchParams.set(key, value);
@@ -369,43 +383,7 @@ function buildSubtitleUrl(
         url.searchParams.set('potc', potToken.potc);
     }
 
-    return url.toString();
-}
-
-function selectTrack(playerData: YouTubeSubtitlePlayerData) {
-    const tracks = playerData.captionTracks;
-    if (tracks.length === 0) return null;
-
-    if (playerData.selectedTrack.vssId) {
-        const selectedById = tracks.find((track) => track.vssId === playerData.selectedTrack.vssId);
-        if (selectedById) return selectedById;
-    }
-
-    if (playerData.selectedTrack.languageCode && playerData.selectedTrack.kind) {
-        const selectedByLanguageAndKind = tracks.find((track) =>
-            track.languageCode === playerData.selectedTrack.languageCode
-            && (track.kind ?? null) === playerData.selectedTrack.kind
-        );
-        if (selectedByLanguageAndKind) return selectedByLanguageAndKind;
-    }
-
-    if (playerData.selectedTrack.languageCode) {
-        const selectedByLanguage = tracks.find(
-            (track) => track.languageCode === playerData.selectedTrack.languageCode
-        );
-        if (selectedByLanguage) return selectedByLanguage;
-    }
-
-    const humanExact = tracks.find((track) => track.kind !== 'asr' && !track.name?.simpleText);
-    if (humanExact) return humanExact;
-
-    const humanTrack = tracks.find((track) => track.kind !== 'asr');
-    if (humanTrack) return humanTrack;
-
-    const asrTrack = tracks.find((track) => track.kind === 'asr');
-    if (asrTrack) return asrTrack;
-
-    return tracks[0];
+    return applySubtitleOptionTarget(url, option).toString();
 }
 
 async function fetchTimedTextEvents(url: string, signal: AbortSignal) {
@@ -442,9 +420,12 @@ export class YouTubeSubtitleOverlay implements Feature {
     private loadSerial = 0;
 
     private currentVideoId = '';
-    private currentTrackKey = '';
+    private currentOptionKey = '';
     private currentFragments: SubtitleFragment[] = [];
     private currentIndex = -1;
+    private subtitleCatalog: SubtitleCatalog | null = null;
+    private activeOption: SubtitleOption | null = null;
+    private subtitleSelector: SubtitleSelector | null = null;
     private routeKey = '';
     private lastFallbackNoticeKey = '';
     private lastNativeToggleRestoreKey = '';
@@ -476,6 +457,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.unbindNativeSubtitleButtonObserver();
         this.abortPendingLoad();
         this.stopRenderer();
+        this.subtitleSelector?.detach();
+        this.subtitleCatalog = null;
+        this.activeOption = null;
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.setNativeSubtitlesHidden(false);
@@ -598,6 +582,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         this.enabled = true;
         this.routeKey = this.getRouteKey();
+        this.ensureSubtitleSelector();
 
         installYouTubeSubtitleOverlayBridge();
         this.unsubscribeVideo = this.videoCtrl.subscribe(() => {
@@ -654,6 +639,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.unsubscribeVideo?.();
         this.unsubscribeVideo = null;
         this.destroyOverlay();
+        this.subtitleSelector?.destroy();
+        this.subtitleSelector = null;
+        this.subtitleCatalog = null;
         this.setNativeSubtitlesHidden(false);
         this.clearSubtitleState();
         this.loadSerial += 1;
@@ -664,21 +652,26 @@ export class YouTubeSubtitleOverlay implements Feature {
     updateSettings(settings: unknown) {
         const record = settings as Partial<Settings> | undefined;
         if (!record) return;
+        let shouldSync = false;
 
         if (record.yt_subtitle) {
-            this.config = cloneYTSubtitleConfig(record.yt_subtitle);
+            const nextConfig = cloneYTSubtitleConfig(record.yt_subtitle);
+            shouldSync = JSON.stringify(nextConfig) !== JSON.stringify(this.config);
+            this.config = nextConfig;
         }
 
         if (typeof record.language === 'string') {
+            shouldSync = shouldSync || record.language !== this.language;
             this.language = record.language;
         }
 
         this.applyOverlayStyles();
         this.applyOverlayPosition();
+        this.syncSubtitleSelectorView();
 
         if (this.enabled) {
             this.preloadCurrentImportedFont();
-            this.scheduleSync(0);
+            if (shouldSync) this.scheduleSync(0);
         }
     }
 
@@ -711,6 +704,8 @@ export class YouTubeSubtitleOverlay implements Feature {
         void this.restoreNativeToggleForCurrentPage();
 
         if (!this.shouldRenderOverlay()) {
+            this.subtitleSelector?.detach();
+            this.subtitleCatalog = null;
             this.abortPendingLoad();
             this.stopRenderer();
             this.clearSubtitleState();
@@ -735,10 +730,104 @@ export class YouTubeSubtitleOverlay implements Feature {
         void this.loadSubtitlesForCurrentPage();
     }
 
-    private async loadSubtitlesForCurrentPage(preloadedData?: YouTubeSubtitlePlayerData) {
+    private ensureSubtitleSelector(): SubtitleSelector {
+        if (!this.subtitleSelector) {
+            this.subtitleSelector = new SubtitleSelector((languageCode) => {
+                void this.handleSubtitleLanguageSelection(languageCode);
+            });
+        }
+        return this.subtitleSelector;
+    }
+
+    private getSubtitleSelectorCopy(): SubtitleSelectorCopy {
+        return {
+            buttonLabel: i18n('yt_subtitle_selector', this.language),
+            searchPlaceholder: i18n('yt_subtitle_search_language', this.language),
+            providedHeading: i18n('yt_subtitle_group_provided', this.language),
+            translatedHeading: i18n('yt_subtitle_group_translated', this.language),
+            authorBadge: i18n('yt_subtitle_badge_author', this.language),
+            asrBadge: i18n('yt_subtitle_badge_asr', this.language),
+            translatedBadge: i18n('yt_subtitle_badge_translated', this.language),
+            preferredBadge: i18n('yt_subtitle_badge_preferred', this.language)
+        };
+    }
+
+    private syncSubtitleSelectorView() {
+        if (!this.subtitleCatalog || !this.shouldRenderOverlay() || !this.isSupportedPage()) {
+            this.subtitleSelector?.detach();
+            return;
+        }
+
+        const selector = this.ensureSubtitleSelector();
+        selector.update({
+            groups: this.subtitleCatalog.menuGroups,
+            activeOptionId: this.activeOption?.id || '',
+            preferredLanguageCode: this.config.preferredLanguageCode,
+            copy: this.getSubtitleSelectorCopy()
+        });
+        selector.ensureMounted();
+    }
+
+    private resolvePlayerSubtitleState(playerData: YouTubeSubtitlePlayerData) {
+        const catalog = buildSubtitleCatalog(playerData);
+        const option = resolveSubtitleOption(
+            catalog,
+            this.config.preferredLanguageCode,
+            playerData.selectedTrack
+        );
+        this.subtitleCatalog = catalog;
+        this.syncSubtitleSelectorView();
+        return option;
+    }
+
+    private async handleSubtitleLanguageSelection(languageCode: string) {
+        const normalized = canonicalizeLanguageCode(languageCode);
+        if (!normalized) return;
+
+        this.config = cloneYTSubtitleConfig({
+            ...this.config,
+            preferredLanguageCode: normalized
+        });
+        this.syncSubtitleSelectorView();
+        void setSettings({ yt_subtitle: cloneYTSubtitleConfig(this.config) });
+        await this.loadSubtitlesForCurrentPage(undefined, 'user-selection');
+    }
+
+    private handleSubtitleLoadFailure(
+        expectedVideoId: string,
+        trigger: SubtitleLoadTrigger,
+        failedOption: SubtitleOption | null
+    ) {
+        if (shouldKeepCurrentSubtitleOnFailure(
+            trigger,
+            this.currentVideoId,
+            expectedVideoId,
+            this.currentFragments.length > 0
+        )) {
+            const template = i18n('yt_subtitle_language_load_failed', this.language);
+            const language = failedOption?.label || failedOption?.targetLanguageCode || '';
+            this.osd.show(
+                template.replace('{language}', language),
+                this.videoCtrl.video || undefined
+            );
+            this.setNativeSubtitlesHidden(true);
+            this.syncSubtitleSelectorView();
+            return;
+        }
+
+        this.fallbackToNative(true);
+    }
+
+    private async loadSubtitlesForCurrentPage(
+        preloadedData?: YouTubeSubtitlePlayerData,
+        trigger: SubtitleLoadTrigger = 'sync'
+    ) {
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId || !this.enabled || !this.isSupportedPage()) return;
-        if (!this.shouldRenderOverlay()) return;
+        if (!this.shouldRenderOverlay()) {
+            this.subtitleSelector?.detach();
+            return;
+        }
 
         if (this.shouldPauseForNativeToggleOff()) {
             this.pauseOverlayForNativeToggleOff();
@@ -756,6 +845,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.abortPendingLoad();
         const abortController = new AbortController();
         this.loadAbortController = abortController;
+        let failedOption: SubtitleOption | null = null;
 
         try {
             let playerData: YouTubeSubtitlePlayerData | null = preloadedData ?? null;
@@ -763,7 +853,11 @@ export class YouTubeSubtitleOverlay implements Feature {
                 playerData = await this.requestPlayerDataWithRetries(expectedVideoId, abortController.signal);
             }
 
-            if (!playerData || !this.isLoadActive(loadId, abortController)) {
+            if (!this.isLoadActive(loadId, abortController)) {
+                return;
+            }
+            if (!playerData) {
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null);
                 return;
             }
 
@@ -780,28 +874,30 @@ export class YouTubeSubtitleOverlay implements Feature {
                 }
             }
 
-            let track = selectTrack(playerData);
-            if (!track) {
-                this.fallbackToNative(true);
+            let option = this.resolvePlayerSubtitleState(playerData);
+            failedOption = option;
+            if (!option) {
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null);
                 return;
             }
 
             // 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果
-            if (this.shouldYieldToImmersiveTranslate(track.languageCode)) {
+            if (this.shouldYieldToImmersiveTranslate(getSubtitleOptionLanguage(option))) {
                 this.showNativeSubtitlesForImmersiveTranslate();
                 return;
             }
 
-            const loaded = await this.fetchTrackWithFallback(track, playerData, abortController.signal);
+            const loaded = await this.fetchOptionWithFallback(option, playerData, abortController.signal);
             if (!this.isLoadActive(loadId, abortController)) {
                 return;
             }
 
-            track = loaded.track;
+            option = loaded.option;
+            failedOption = option;
             playerData = loaded.playerData;
 
             if (loaded.fragments.length === 0) {
-                this.fallbackToNative(true);
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, option);
                 return;
             }
 
@@ -810,17 +906,19 @@ export class YouTubeSubtitleOverlay implements Feature {
             }
 
             this.currentVideoId = playerData.videoId;
-            this.currentTrackKey = buildTrackKey(playerData.videoId, track);
+            this.currentOptionKey = buildSubtitleOptionKey(playerData.videoId, option);
             this.currentFragments = loaded.fragments;
             this.currentIndex = -1;
+            this.activeOption = option;
 
             this.ensureOverlayMounted();
             this.setNativeSubtitlesHidden(true);
+            this.syncSubtitleSelectorView();
             this.renderAtCurrentTime(true);
             this.startRenderer();
         } catch (error) {
             if (isAbortError(error)) return;
-            this.fallbackToNative(true);
+            this.handleSubtitleLoadFailure(expectedVideoId, trigger, failedOption);
         } finally {
             if (this.loadAbortController === abortController) {
                 this.loadAbortController = null;
@@ -828,16 +926,16 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
     }
 
-    private async fetchTrackWithFallback(
-        track: YouTubeSubtitleCaptionTrack,
+    private async fetchOptionWithFallback(
+        option: SubtitleOption,
         playerData: YouTubeSubtitlePlayerData,
         signal: AbortSignal
     ) {
         try {
             return {
-                track,
+                option,
                 playerData,
-                fragments: await this.fetchTrackFragments(track, playerData, signal)
+                fragments: await this.fetchOptionFragments(option, playerData, signal)
             };
         } catch (error) {
             if (!isHttpStatusError(error, 403)) {
@@ -854,28 +952,39 @@ export class YouTubeSubtitleOverlay implements Feature {
                 throw error;
             }
 
-            const ensuredTrack = selectTrack(ensuredData);
-            if (!ensuredTrack) {
+            const refreshedCatalog = buildSubtitleCatalog(ensuredData);
+            const ensuredOption = resolveSubtitleOption(
+                refreshedCatalog,
+                option.targetLanguageCode,
+                ensuredData.selectedTrack
+            );
+            this.subtitleCatalog = refreshedCatalog;
+            this.syncSubtitleSelectorView();
+            if (!ensuredOption) {
                 throw error;
             }
 
             return {
-                track: ensuredTrack,
+                option: ensuredOption,
                 playerData: ensuredData,
-                fragments: await this.fetchTrackFragments(ensuredTrack, ensuredData, signal)
+                fragments: await this.fetchOptionFragments(ensuredOption, ensuredData, signal)
             };
         }
     }
 
-    private async fetchTrackFragments(
-        track: YouTubeSubtitleCaptionTrack,
+    private async fetchOptionFragments(
+        option: SubtitleOption,
         playerData: YouTubeSubtitlePlayerData,
         signal: AbortSignal
     ) {
-        const url = buildSubtitleUrl(track, playerData, extractPotToken(track, playerData));
+        const url = buildSubtitleUrl(
+            option,
+            playerData,
+            extractPotToken(option.sourceTrack, playerData)
+        );
         const events = await fetchTimedTextEvents(url, signal);
-        const fragments = parseYouTubeSubtitleEvents(events, track.languageCode);
-        const language = track.languageCode || 'en';
+        const language = getSubtitleOptionLanguage(option) || 'en';
+        const fragments = parseYouTubeSubtitleEvents(events, language);
 
         // Shape-based post-process (author + ASR share the same gate):
         // polished phrase tracks pass through; only fragmented cues refine.
@@ -912,7 +1021,10 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.bindNativeSubtitleButtonObserver();
         void this.restoreNativeToggleForCurrentPage();
 
-        if (!this.shouldRenderOverlay()) return;
+        if (!this.shouldRenderOverlay()) {
+            this.subtitleSelector?.detach();
+            return;
+        }
 
         if (this.shouldPauseForNativeToggleOff()) {
             this.pauseOverlayForNativeToggleOff();
@@ -925,21 +1037,24 @@ export class YouTubeSubtitleOverlay implements Feature {
         const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
         if (!response?.success || !response.data) return;
 
-        const track = selectTrack(response.data);
+        const option = this.resolvePlayerSubtitleState(response.data);
         // 兼容 Immersive Translate：非中文字幕时让 IT 渲染
-        if (track && this.shouldYieldToImmersiveTranslate(track.languageCode)) {
+        if (option && this.shouldYieldToImmersiveTranslate(getSubtitleOptionLanguage(option))) {
             this.showNativeSubtitlesForImmersiveTranslate();
             return;
         }
 
         this.ensureOverlayMounted();
         this.applyOverlayPosition();
+        this.subtitleSelector?.ensureMounted();
 
-        const nextTrackKey = track ? buildTrackKey(response.data.videoId, track) : '';
+        const nextOptionKey = option
+            ? buildSubtitleOptionKey(response.data.videoId, option)
+            : '';
 
         if (
             response.data.videoId !== this.currentVideoId
-            || nextTrackKey !== this.currentTrackKey
+            || nextOptionKey !== this.currentOptionKey
             || this.currentFragments.length === 0
         ) {
             void this.loadSubtitlesForCurrentPage(response.data);
@@ -1742,9 +1857,11 @@ export class YouTubeSubtitleOverlay implements Feature {
 
     private clearSubtitleState() {
         this.currentVideoId = '';
-        this.currentTrackKey = '';
+        this.currentOptionKey = '';
         this.currentFragments = [];
         this.currentIndex = -1;
+        this.activeOption = null;
+        this.syncSubtitleSelectorView();
     }
 
     private isSupportedPage() {
