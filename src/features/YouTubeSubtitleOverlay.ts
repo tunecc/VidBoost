@@ -766,7 +766,17 @@ export class YouTubeSubtitleOverlay implements Feature {
             preferredLanguageCode: this.config.preferredLanguageCode,
             copy: this.getSubtitleSelectorCopy()
         });
-        selector.ensureMounted();
+        this.ensureSubtitleSelectorMounted();
+    }
+
+    private ensureSubtitleSelectorMounted() {
+        try {
+            return this.subtitleSelector?.ensureMounted() ?? false;
+        } catch (error) {
+            this.subtitleSelector?.detach();
+            console.warn('[VidBoost] Failed to mount the YouTube subtitle selector.', error);
+            return false;
+        }
     }
 
     private resolvePlayerSubtitleState(playerData: YouTubeSubtitlePlayerData) {
@@ -1047,7 +1057,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         this.ensureOverlayMounted();
         this.applyOverlayPosition();
-        this.subtitleSelector?.ensureMounted();
+        this.ensureSubtitleSelectorMounted();
 
         const nextOptionKey = option
             ? buildSubtitleOptionKey(response.data.videoId, option)

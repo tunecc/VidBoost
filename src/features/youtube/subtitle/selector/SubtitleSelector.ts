@@ -1,5 +1,6 @@
 import { markInteractionRoot } from '../../../../lib/pointerTargets';
 import { areTargetLanguagesCompatible } from './language';
+import { resolveSubtitleButtonMountTarget } from './mountTarget';
 import {
     filterSubtitleMenuGroups,
     flattenSubtitleMenuGroups,
@@ -135,8 +136,12 @@ export class SubtitleSelector {
             else this.close();
         });
 
-        const settingsButton = controls.querySelector('.ytp-settings-button');
-        controls.insertBefore(button, settingsButton ?? controls.firstChild);
+        const settingsButton = controls.querySelector<HTMLElement>('.ytp-settings-button');
+        const mountTarget = resolveSubtitleButtonMountTarget(controls, settingsButton);
+        mountTarget.container.insertBefore(
+            button,
+            mountTarget.reference ?? mountTarget.container.firstChild
+        );
 
         const menu = document.createElement('div');
         menu.id = 'vb-yt-subtitle-selector-menu';
