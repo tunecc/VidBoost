@@ -3,7 +3,8 @@ import { areTargetLanguagesCompatible } from './language';
 import {
     filterSubtitleMenuGroups,
     flattenSubtitleMenuGroups,
-    getNextOptionIndex
+    getNextOptionIndex,
+    isSubtitleMenuOptionActive
 } from './menuState';
 import type { SubtitleMenuGroups, SubtitleOption } from './types';
 
@@ -21,6 +22,7 @@ export type SubtitleSelectorCopy = {
 export type SubtitleSelectorViewModel = {
     groups: SubtitleMenuGroups;
     activeOptionId: string;
+    activeLanguageCode: string;
     preferredLanguageCode: string;
     copy: SubtitleSelectorCopy;
 };
@@ -28,6 +30,7 @@ export type SubtitleSelectorViewModel = {
 const EMPTY_VIEW_MODEL: SubtitleSelectorViewModel = {
     groups: { provided: [], translated: [] },
     activeOptionId: '',
+    activeLanguageCode: '',
     preferredLanguageCode: '',
     copy: {
         buttonLabel: '',
@@ -98,6 +101,7 @@ export class SubtitleSelector {
         button.className = 'ytp-button vb-yt-subtitle-selector-button';
         button.setAttribute('aria-label', this.viewModel.copy.buttonLabel);
         button.setAttribute('aria-haspopup', 'dialog');
+        button.setAttribute('aria-controls', 'vb-yt-subtitle-selector-menu');
         button.setAttribute('aria-expanded', 'false');
         button.title = this.viewModel.copy.buttonLabel;
         button.style.cssText = [
@@ -135,6 +139,7 @@ export class SubtitleSelector {
         controls.insertBefore(button, settingsButton ?? controls.firstChild);
 
         const menu = document.createElement('div');
+        menu.id = 'vb-yt-subtitle-selector-menu';
         menu.className = 'vb-yt-subtitle-selector-menu';
         menu.setAttribute('role', 'dialog');
         menu.setAttribute('aria-label', this.viewModel.copy.buttonLabel);
@@ -268,7 +273,11 @@ export class SubtitleSelector {
 
         for (const option of options) {
             const optionButton = document.createElement('button');
-            const active = option.id === this.viewModel.activeOptionId;
+            const active = isSubtitleMenuOptionActive(
+                option,
+                this.viewModel.activeOptionId,
+                this.viewModel.activeLanguageCode
+            );
             optionButton.type = 'button';
             optionButton.setAttribute('role', 'option');
             optionButton.setAttribute('aria-selected', String(active));

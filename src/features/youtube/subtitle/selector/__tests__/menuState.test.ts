@@ -3,7 +3,8 @@ import type { SubtitleMenuGroups, SubtitleOption } from '../types';
 import {
     filterSubtitleMenuGroups,
     flattenSubtitleMenuGroups,
-    getNextOptionIndex
+    getNextOptionIndex,
+    isSubtitleMenuOptionActive
 } from '../menuState';
 
 const sourceTrack = {
@@ -61,5 +62,13 @@ describe('subtitle selector menu state', () => {
         expect(getNextOptionIndex(3, 2, 1)).toBe(0);
         expect(getNextOptionIndex(3, 0, -1)).toBe(2);
         expect(getNextOptionIndex(0, -1, 1)).toBe(-1);
+    });
+
+    it('marks the deduplicated language row active for a different physical track', () => {
+        expect(isSubtitleMenuOptionActive(
+            groups.provided[0],
+            'provided:.en:en',
+            'en'
+        )).toBe(true);
     });
 });

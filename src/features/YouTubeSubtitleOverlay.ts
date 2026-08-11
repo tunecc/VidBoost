@@ -762,6 +762,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         selector.update({
             groups: this.subtitleCatalog.menuGroups,
             activeOptionId: this.activeOption?.id || '',
+            activeLanguageCode: this.activeOption?.targetLanguageCode || '',
             preferredLanguageCode: this.config.preferredLanguageCode,
             copy: this.getSubtitleSelectorCopy()
         });
