@@ -8,19 +8,15 @@ import { addRuntimeMessageListener, runtimeSendMessage } from './webext';
 export type SyncMessage = {
     senderId: string;
     timestamp: number;
-} & (
-        { type: 'PLAY_STARTED' } |
-        { type: 'SETTINGS_CHANGED'; payload: unknown }
-    );
+    type: 'PLAY_STARTED';
+};
 
 function isSyncMessage(msg: unknown): msg is SyncMessage {
     if (!msg || typeof msg !== 'object') return false;
     const maybe = msg as Partial<SyncMessage>;
     if (typeof maybe.senderId !== 'string') return false;
     if (typeof maybe.timestamp !== 'number') return false;
-    if (maybe.type === 'PLAY_STARTED') return true;
-    if (maybe.type === 'SETTINGS_CHANGED') return 'payload' in maybe;
-    return false;
+    return maybe.type === 'PLAY_STARTED';
 }
 
 export class CrossTabSync {

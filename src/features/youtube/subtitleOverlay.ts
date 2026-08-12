@@ -86,10 +86,6 @@ async function postBridgeRequest<T extends BridgeResponse>(
 
 let scriptInjected = false;
 
-export function installYouTubeSubtitleOverlayBridge() {
-    // Reserved for future bridge expansion.
-}
-
 export function ensureYouTubeSubtitleOverlayScriptInjected() {
     if (typeof document === 'undefined') return;
     if (scriptInjected) return;

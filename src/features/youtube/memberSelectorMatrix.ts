@@ -51,31 +51,3 @@ export function getFastMembershipSelectorsForMode(mode: YTMemberBlockMode): stri
     ));
     return dedupeSelectors(selectors);
 }
-
-export function buildMemberSelectorSnapshotText(): string {
-    const allSelectors = getFastMembershipSelectorsForMode('all');
-    const listSelectors = getFastMembershipSelectorsForMode('blocklist');
-    const sceneLines = MEMBER_SCENE_MATRIX.map((scene) => (
-        `${scene.id} | all:${scene.all.length} | list:${scene.listModes.length}`
-    ));
-
-    return [
-        '# YouTube Member Selector Snapshot',
-        '',
-        `Scenes: ${MEMBER_SCENE_MATRIX.length}`,
-        `Card selectors: ${MEMBER_CARD_SELECTORS.length}`,
-        `Channel selectors: ${MEMBER_CHANNEL_SELECTORS.length}`,
-        `All-mode selectors: ${allSelectors.length}`,
-        `List-mode selectors: ${listSelectors.length}`,
-        '',
-        '## Scene Matrix',
-        ...sceneLines,
-        '',
-        '## All Mode Selectors',
-        ...allSelectors.map((sel, index) => `${index + 1}. ${sel}`),
-        '',
-        '## List Mode Selectors',
-        ...listSelectors.map((sel, index) => `${index + 1}. ${sel}`),
-        ''
-    ].join('\n');
-}

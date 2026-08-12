@@ -31,7 +31,6 @@ import {
 } from '../lib/subtitleFontAssets';
 import {
     ensureYouTubeSubtitleOverlayScriptInjected,
-    installYouTubeSubtitleOverlayBridge,
     requestYouTubeSubtitleEnsureEnabled,
     requestYouTubeSubtitlePlayerData,
     requestYouTubeSubtitleSetEnabled
@@ -584,7 +583,6 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.routeKey = this.getRouteKey();
         this.ensureSubtitleSelector();
 
-        installYouTubeSubtitleOverlayBridge();
         this.unsubscribeVideo = this.videoCtrl.subscribe(() => {
             if (!this.enabled) return;
             this.rebindVideo(this.videoCtrl.video);
@@ -696,7 +694,6 @@ export class YouTubeSubtitleOverlay implements Feature {
             return;
         }
 
-        installYouTubeSubtitleOverlayBridge();
         ensureYouTubeSubtitleOverlayScriptInjected();
         this.rebindVideo(this.videoCtrl.video);
         this.bindNativeSubtitleButtonObserver();
