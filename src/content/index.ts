@@ -21,7 +21,7 @@ import {
     CONTENT_SETTINGS_KEYS,
     resolveSettings,
     type Settings
-} from '../lib/settings-content';
+} from '../lib/settings';
 import {
     addRuntimeMessageListener,
     runtimeSendMessage,

@@ -1,6 +1,6 @@
 import { InputManager } from '../lib/InputManager';
 import type { Feature } from './Feature';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/settings-content';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { isSiteHost } from '../lib/siteProfiles';
 import { VideoController } from '../lib/VideoController';
 

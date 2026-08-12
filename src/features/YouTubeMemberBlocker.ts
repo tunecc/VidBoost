@@ -4,7 +4,7 @@ import {
     DEFAULT_SETTINGS,
     type Settings,
     type YTMemberBlockMode
-} from '../lib/settings-content';
+} from '../lib/settings';
 import { ObserverManager } from '../lib/ObserverManager';
 import {
     MEMBER_CARD_SELECTORS,

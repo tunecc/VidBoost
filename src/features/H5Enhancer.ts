@@ -3,7 +3,7 @@ import { MediaBridge } from '../lib/MediaBridge';
 import { VideoController } from '../lib/VideoController';
 import { OSD } from '../lib/OSD';
 import { getPlaybackRateConfigForHost, isSiteHost } from '../lib/siteProfiles';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/settings-content';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import {
     normalizeH5CompatMode,
     type H5CompatMode

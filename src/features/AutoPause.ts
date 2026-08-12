@@ -1,6 +1,6 @@
 import { CrossTabSync } from '../lib/CrossTabSync';
 import type { Feature } from './Feature';
-import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS } from '../lib/settings-content';
+import { getSettings, onSettingsChanged, onStorageKeysChanged, DEFAULT_SETTINGS } from '../lib/settings';
 import { normalizeDomain, normalizeDomainList } from '../lib/domain';
 import { getAutoPauseContainerSelectorsForHost } from '../lib/siteProfiles';
 import { ObserverManager } from '../lib/ObserverManager';
