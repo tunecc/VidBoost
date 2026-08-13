@@ -1,4 +1,5 @@
 import { markInteractionRoot } from '../../../../lib/pointerTargets';
+import { getRuntimeUrl } from '../../../../lib/webext';
 import { areTargetLanguagesCompatible } from './language';
 import { resolveSubtitleButtonMountTarget } from './mountTarget';
 import {
@@ -45,9 +46,15 @@ const EMPTY_VIEW_MODEL: SubtitleSelectorViewModel = {
     }
 };
 
+const BUTTON_ICON_URL = getRuntimeUrl('icons/icon48.png');
+const ICON_STYLE_ACTIVE = 'opacity:1;filter:none;transition:opacity .15s ease';
+const ICON_STYLE_INACTIVE = 'opacity:.45;filter:grayscale(.6);transition:opacity .15s ease';
+const ICON_SIZE_PX = 24;
+
 export class SubtitleSelector {
     private viewModel = EMPTY_VIEW_MODEL;
     private button: HTMLButtonElement | null = null;
+    private buttonIcon: HTMLImageElement | null = null;
     private menu: HTMLDivElement | null = null;
     private searchInput: HTMLInputElement | null = null;
     private optionList: HTMLDivElement | null = null;
@@ -79,6 +86,7 @@ export class SubtitleSelector {
             this.button.setAttribute('aria-label', viewModel.copy.buttonLabel);
             this.button.title = viewModel.copy.buttonLabel;
         }
+        this.updateIconState();
         if (this.searchInput) this.searchInput.placeholder = viewModel.copy.searchPlaceholder;
         if (this.menu && this.menu.style.display !== 'none') {
             this.renderMenu();
@@ -115,26 +123,30 @@ export class SubtitleSelector {
             'justify-content:center'
         ].join(';');
 
-        const icon = document.createElement('span');
-        icon.textContent = 'CC';
+        const icon = document.createElement('img');
+        icon.alt = '';
         icon.setAttribute('aria-hidden', 'true');
+        icon.draggable = false;
+        icon.src = BUTTON_ICON_URL ?? '';
         icon.style.cssText = [
             'display:inline-flex',
             'align-items:center',
             'justify-content:center',
-            'width:24px',
-            'height:17px',
-            'border:2px solid currentColor',
-            'border-radius:2px',
+            `width:${ICON_SIZE_PX}px`,
+            `height:${ICON_SIZE_PX}px`,
             'box-sizing:border-box',
-            'font:700 9px/1 Arial,sans-serif',
-            'letter-spacing:0'
+            'pointer-events:none',
+            'user-select:none',
+            this.hasActiveSubtitle() ? ICON_STYLE_ACTIVE : ICON_STYLE_INACTIVE
         ].join(';');
         button.append(icon);
         button.addEventListener('click', () => {
             if (this.menu?.style.display === 'none') this.open();
             else this.close();
         });
+
+        this.button = button;
+        this.buttonIcon = icon;
 
         const settingsButton = controls.querySelector<HTMLElement>('.ytp-settings-button');
         const mountTarget = resolveSubtitleButtonMountTarget(controls, settingsButton);
@@ -200,6 +212,7 @@ export class SubtitleSelector {
         markInteractionRoot(button);
         markInteractionRoot(menu);
         this.button = button;
+        this.buttonIcon = icon;
         this.menu = menu;
         this.searchInput = searchInput;
         this.optionList = optionList;
@@ -218,6 +231,7 @@ export class SubtitleSelector {
         this.button?.remove();
         this.menu?.remove();
         this.button = null;
+        this.buttonIcon = null;
         this.menu = null;
         this.searchInput = null;
         this.optionList = null;
@@ -229,6 +243,26 @@ export class SubtitleSelector {
         window.removeEventListener('resize', this.handleWindowResize);
         this.detach();
         this.viewModel = EMPTY_VIEW_MODEL;
+    }
+
+    private hasActiveSubtitle(): boolean {
+        return Boolean(this.viewModel.activeOptionId);
+    }
+
+    private updateIconState(): void {
+        if (!this.buttonIcon) return;
+        const active = this.hasActiveSubtitle();
+        this.buttonIcon.style.cssText = [
+            'display:inline-flex',
+            'align-items:center',
+            'justify-content:center',
+            `width:${ICON_SIZE_PX}px`,
+            `height:${ICON_SIZE_PX}px`,
+            'box-sizing:border-box',
+            'pointer-events:none',
+            'user-select:none',
+            active ? ICON_STYLE_ACTIVE : ICON_STYLE_INACTIVE
+        ].join(';');
     }
 
     private open(): void {

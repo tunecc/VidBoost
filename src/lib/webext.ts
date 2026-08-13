@@ -187,7 +187,12 @@ export function getManifestVersion(fallback = '0.0.0') {
 
 export function getRuntimeUrl(path: string): string | null {
     const getURL = browserApi()?.runtime?.getURL ?? chromeApi()?.runtime?.getURL;
-    return typeof getURL === 'function' ? getURL(path) : null;
+    if (typeof getURL !== 'function') return null;
+    return getURL(path);
+}
+
+export function runtimeGetURL(path: string): string | null {
+    return getRuntimeUrl(path);
 }
 
 export function isFirefoxExtensionRuntime() {
