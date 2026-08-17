@@ -8,6 +8,37 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [1.9.1] - 2026-08-17
+
+1.9.0 让 YouTube 自渲染字幕在「兼容沉浸式翻译」上更克制后，1.9.1 把重心收回到**字幕本身的可达性**：在播放器内嵌一个 VidBoost 自己的字幕语言选择器，让你不必绕回 YouTube 原生菜单，也能直接切换 / 记住目标语言；并配套一轮清理与图标打磨。
+
+### Added
+- **[新增] 播放器内字幕选择器**（`SubtitleSelector`）  
+  在 YouTube 播放器上挂载 VidBoost 自己的字幕按钮与下拉菜单：搜索框 + 选项列表，直接切语言，不必再回到 YouTube 原生 CC 菜单。含菜单状态机（`menuState`）、i18n 文案与对应单测。
+- **[新增] 单字幕目标语言请求管线**  
+  `catalog` / `language` / `request` / `resolver` 一组工具：构建单字幕语言目录、规范化目标语言码、解析单字幕目标请求并落到对应 track；`YouTubeSubtitleOverlay` 接入后改为按 `SubtitleOption` 取 baseUrl 与渲染。
+- **[新增] 记住目标字幕语言**  
+  设置新增持久化字段，下次打开同语言视频时优先恢复你上次选择的目标语言。
+- **[新增] 读取 YouTube 翻译语言**  
+  解析 YouTube 现有的翻译字幕信息，作为选择器候选项来源之一。
+- **[新增] 字幕选择器图标测试**（`icon.test.ts`，8 个用例）  
+  覆盖激活态彩色 / 未激活态灰度半透明、图标尺寸与可访问性等验收项。
+
+### Changed
+- **字幕选择器按钮图标改用 VidBoost 主图标**  
+  从 `CC` 文本框换为 `icons/icon48.png`（缩放至 24px）；图标随字幕激活态变化：激活时彩色，未激活时灰度半透明。`manifest.json` 的 `web_accessible_resources` 同步放开 `icons/*`，并新增 `runtimeGetURL` 导出别名。
+- **字幕请求模型重构**  
+  `buildSubtitleUrl` 改为接收 `SubtitleOption`，由 `option.sourceTrack` 取 baseUrl；旧的 `selectTrack` / `buildTrackKey` 等 track 直选逻辑被选择器管线取代。
+- 移除冗余的设置转发层与无效运行时接口，清理未使用的历史文件；固定本地测试工具依赖。
+- 版本号升至 `1.9.1`（`package.json` / `package-lock.json` / `public/manifest.json`）。
+
+### Fixed
+- 修复播放器字幕选择器挂载失败的问题（按钮挂载点解析与重试逻辑）。
+- 修正字幕选择器去重菜单的选中态显示。
+
+### Notes
+- 相关 commits（`v1.9.0` → HEAD）：`4a3e338`、`984bda8`、`ae42f4f`、`8de9a76`、`d5b0eee`、`655c3ef`、`ea7cbad`、`4634be2`、`01369ba`、`ddda3d9`、`f547363`、`034b6e1`、`29bf250`、`f600cef`、`8ce1701`。
+
 ## [1.9.0] - 2026-08-11
 
 1. **可让沉浸式翻译渲染非中文字幕** — 开启兼容后，非中文字幕交给 IT 显示翻译结果，VidBoost 不再叠加渲染；中文字幕仍由 VidBoost 强化渲染。
