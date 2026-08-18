@@ -94,6 +94,7 @@ const ROUTE_POLL_MS = 400;
 const TRACK_POLL_MS = 1200;
 const FETCH_RETRY_DELAY_MS = 250;
 const FETCH_RETRY_ATTEMPTS = 6;
+const FALLBACK_NOTICE_FAILURE_THRESHOLD = 3;
 const DRAG_HANDLE_HIDE_DELAY_MS = 300;
 const MIN_POSITION_PERCENT = 4;
 const MAX_POSITION_PERCENT = 72;
@@ -429,6 +430,9 @@ export class YouTubeSubtitleOverlay implements Feature {
     private lastFallbackNoticeKey = '';
     private lastNativeToggleRestoreKey = '';
     private nativeToggleMemorySuppressUntil = 0;
+    private loadFailureVideoId = '';
+    private consecutiveLoadFailures = 0;
+    private subtitleUnavailableVideoId = '';
 
     private boundVideo: HTMLVideoElement | null = null;
     private unsubscribeVideo: (() => void) | null = null;
@@ -585,7 +589,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         this.unsubscribeVideo = this.videoCtrl.subscribe(() => {
             if (!this.enabled) return;
-            this.rebindVideo(this.videoCtrl.video);
+            this.rebindVideo(this.youtubeMainVideo());
             this.scheduleSync(150);
         });
 
@@ -644,6 +648,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.clearSubtitleState();
         this.loadSerial += 1;
         this.lastFallbackNoticeKey = '';
+        this.loadFailureVideoId = '';
+        this.consecutiveLoadFailures = 0;
+        this.subtitleUnavailableVideoId = '';
         this.routeKey = '';
     }
 
@@ -695,7 +702,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
 
         ensureYouTubeSubtitleOverlayScriptInjected();
-        this.rebindVideo(this.videoCtrl.video);
+        this.rebindVideo(this.youtubeMainVideo());
         this.bindNativeSubtitleButtonObserver();
 
         void this.restoreNativeToggleForCurrentPage();
@@ -816,10 +823,26 @@ export class YouTubeSubtitleOverlay implements Feature {
             const language = failedOption?.label || failedOption?.targetLanguageCode || '';
             this.osd.show(
                 template.replace('{language}', language),
-                this.videoCtrl.video || undefined
+                this.youtubeMainVideo() || undefined
             );
             this.setNativeSubtitlesHidden(true);
             this.syncSubtitleSelectorView();
+            return;
+        }
+
+        // Current video already has a working overlay — don't falsely report
+        // a failure and replace it with native subtitles.
+        if (this.currentVideoId === expectedVideoId && this.currentFragments.length > 0) {
+            return;
+        }
+
+        if (this.loadFailureVideoId !== expectedVideoId) {
+            this.loadFailureVideoId = expectedVideoId;
+            this.consecutiveLoadFailures = 0;
+        }
+        this.consecutiveLoadFailures += 1;
+        if (this.consecutiveLoadFailures < FALLBACK_NOTICE_FAILURE_THRESHOLD) {
+            this.scheduleSync(FETCH_RETRY_DELAY_MS);
             return;
         }
 
@@ -842,7 +865,10 @@ export class YouTubeSubtitleOverlay implements Feature {
             return;
         }
 
-        const video = this.videoCtrl.video;
+        // 无字幕视频缓存：已标记为无字幕的视频，sync 提前返回，不重复请求。
+        if (this.subtitleUnavailableVideoId === expectedVideoId) return;
+
+        const video = this.youtubeMainVideo();
         if (!video) {
             this.scheduleSync(250);
             return;
@@ -885,6 +911,13 @@ export class YouTubeSubtitleOverlay implements Feature {
             let option = this.resolvePlayerSubtitleState(playerData);
             failedOption = option;
             if (!option) {
+                if (
+                    trigger === 'sync'
+                    && playerData.captionTracks.length === 0
+                    && this.subtitleUnavailableVideoId !== expectedVideoId
+                ) {
+                    this.markSubtitleUnavailable(expectedVideoId);
+                }
                 this.handleSubtitleLoadFailure(expectedVideoId, trigger, null);
                 return;
             }
@@ -916,6 +949,8 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.currentVideoId = playerData.videoId;
             this.currentOptionKey = buildSubtitleOptionKey(playerData.videoId, option);
             this.currentFragments = loaded.fragments;
+            this.consecutiveLoadFailures = 0;
+            this.loadFailureVideoId = expectedVideoId;
             this.currentIndex = -1;
             this.activeOption = option;
 
@@ -1041,6 +1076,9 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId) return;
+
+        // 无字幕视频缓存：已标记为无字幕的视频，poll 提前返回，不重复请求。
+        if (this.subtitleUnavailableVideoId === expectedVideoId) return;
 
         const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
         if (!response?.success || !response.data) return;
@@ -1860,7 +1898,15 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (noticeKey === this.lastFallbackNoticeKey) return;
 
         this.lastFallbackNoticeKey = noticeKey;
-        this.osd.show(i18n('yt_subtitle_native_fallback', this.language), this.videoCtrl.video || undefined);
+        this.osd.show(i18n('yt_subtitle_native_fallback', this.language), this.youtubeMainVideo() || undefined);
+    }
+
+    private markSubtitleUnavailable(videoId: string) {
+        this.subtitleUnavailableVideoId = videoId;
+        this.stopRenderer();
+        this.clearSubtitleState();
+        this.renderSubtitleText('');
+        this.setNativeSubtitlesHidden(false);
     }
 
     private clearSubtitleState() {
@@ -1901,5 +1947,15 @@ export class YouTubeSubtitleOverlay implements Feature {
         return document.getElementById('movie_player')
             || document.querySelector<HTMLElement>('ytd-player #movie_player')
             || document.querySelector<HTMLElement>('#movie_player');
+    }
+
+    private youtubeMainVideo(): HTMLVideoElement | null {
+        const player = this.playerRoot();
+        if (!player) return null;
+        // Recommendation cards can create other visible/playing <video> elements
+        // on the watch page. The main player owns the subtitle clock and is the
+        // only video this overlay should follow.
+        return player.querySelector<HTMLVideoElement>('video.html5-main-video')
+            || player.querySelector<HTMLVideoElement>('video');
     }
 }

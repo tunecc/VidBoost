@@ -15,3 +15,13 @@ outputs
 assets/VidBoost_logo.pxd
 .vibeskills
 AGENTS.md
+# >>> Comet managed project state >>>
+!/.comet/
+/.comet/*
+!/.comet/config.yaml
+# <<< Comet managed project state <<<
+# 本机 Agent 工具配置（Comet/Claude/Codex/Superpowers hooks 等），保持忽略
+.agents/
+.claude/
+.codex/
+.superpowers/

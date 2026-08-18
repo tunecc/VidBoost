@@ -215,6 +215,31 @@ function readSubtitlesEnabled() {
     return button.getAttribute('aria-pressed') === 'true';
 }
 
+function isYoutubeMenuOpen(): boolean {
+    const selectors = [
+        '.ytp-popup',
+        '.ytp-settings-menu',
+        '.ytp-contextmenu',
+        'ytd-menu-popup-renderer',
+        'tp-yt-iron-dropdown',
+        '.ytp-panel'
+    ];
+    for (const selector of selectors) {
+        const elements = document.querySelectorAll<HTMLElement>(selector);
+        for (const el of elements) {
+            if (
+                el.offsetWidth > 0 &&
+                el.offsetHeight > 0 &&
+                window.getComputedStyle(el).display !== 'none' &&
+                window.getComputedStyle(el).visibility !== 'hidden'
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 function setSubtitlesEnabled(enabled: boolean) {
     const button = document.querySelector<HTMLElement>('.ytp-subtitles-button');
     if (!button) return { success: false, enabled: false };
@@ -222,6 +247,10 @@ function setSubtitlesEnabled(enabled: boolean) {
     let current = readSubtitlesEnabled();
     if (current === enabled) {
         return { success: true, enabled: current };
+    }
+
+    if (isYoutubeMenuOpen()) {
+        return { success: false, enabled: current ?? false };
     }
 
     const player = findYoutubePlayer();
