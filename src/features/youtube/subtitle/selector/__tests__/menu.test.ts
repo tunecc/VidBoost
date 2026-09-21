@@ -324,6 +324,278 @@ describe('SubtitleSelector menu search row', () => {
 
 const EMPTY_GROUPS: SubtitleMenuGroups = { provided: [], translated: [] };
 
+describe('SubtitleSelector render stability', () => {
+    let onSelectLanguage: ReturnType<typeof vi.fn>;
+    let selector: SubtitleSelector;
+    let player: HTMLElement;
+    let controls: HTMLElement;
+
+    // 宿主每个轮询周期都会重建目录对象，因此这里每次都构造新的数组与对象。
+    function viewModelWith(overrides: Partial<SubtitleSelectorViewModel> = {}): SubtitleSelectorViewModel {
+        return {
+            groups: { provided: [...GROUPS.provided], translated: [...GROUPS.translated] },
+            activeOptionId: 'p-zh',
+            activeLanguageCode: 'zh-CN',
+            preferredLanguageCode: 'zh-CN',
+            copy: { ...COPY },
+            ...overrides,
+        };
+    }
+
+    function emptyViewModelWith(overrides: Partial<SubtitleSelectorViewModel> = {}): SubtitleSelectorViewModel {
+        return viewModelWith({
+            groups: { provided: [], translated: [] },
+            activeOptionId: '',
+            activeLanguageCode: '',
+            ...overrides,
+        });
+    }
+
+    beforeEach(() => {
+        onSelectLanguage = vi.fn();
+        selector = new SubtitleSelector(onSelectLanguage);
+
+        player = document.createElement('div');
+        player.id = 'movie_player';
+        controls = document.createElement('div');
+        controls.className = 'ytp-right-controls';
+        const settingsButton = document.createElement('button');
+        settingsButton.className = 'ytp-settings-button';
+        controls.append(settingsButton);
+        player.append(controls);
+        document.body.append(player);
+
+        selector.update(viewModelWith());
+        expect(selector.ensureMounted()).toBe(true);
+    });
+
+    afterEach(() => {
+        selector.destroy();
+        document.body.innerHTML = '';
+        vi.restoreAllMocks();
+    });
+
+    function getMenu(): HTMLElement {
+        const menu = document.getElementById('vb-yt-subtitle-selector-menu');
+        expect(menu).not.toBeNull();
+        return menu as HTMLElement;
+    }
+
+    function getToolbarButton(): HTMLButtonElement {
+        const button = controls.querySelector<HTMLButtonElement>(
+            'button.vb-yt-subtitle-selector-button'
+        );
+        expect(button).not.toBeNull();
+        return button as HTMLButtonElement;
+    }
+
+    function optionButtons(): HTMLButtonElement[] {
+        return Array.from(
+            getMenu().querySelectorAll<HTMLButtonElement>('button[data-option-id]')
+        );
+    }
+
+    function emptyNotices(): HTMLElement[] {
+        return Array.from(getMenu().querySelectorAll<HTMLElement>(
+            '.vb-yt-subtitle-selector-empty'
+        ));
+    }
+
+    function openMenu(): void {
+        getToolbarButton().click();
+    }
+
+    it('keeps the same option nodes and the focus across identical updates', () => {
+        openMenu();
+        const before = optionButtons();
+        expect(before.length).toBeGreaterThan(0);
+        before[2].focus();
+
+        for (let round = 0; round < 5; round += 1) selector.update(viewModelWith());
+
+        const after = optionButtons();
+        expect(after.length).toBe(before.length);
+        after.forEach((button, index) => expect(button).toBe(before[index]));
+        expect(document.activeElement).toBe(before[2]);
+    });
+
+    it('keeps one empty-state node across identical updates with an empty catalog', () => {
+        selector.detach();
+        selector.update(emptyViewModelWith());
+        expect(selector.ensureMounted()).toBe(true);
+        openMenu();
+
+        const [notice] = emptyNotices();
+        expect(notice).toBeDefined();
+
+        for (let round = 0; round < 5; round += 1) selector.update(emptyViewModelWith());
+
+        const notices = emptyNotices();
+        expect(notices.length).toBe(1);
+        expect(notices[0]).toBe(notice);
+    });
+
+    it('rebuilds the list when the active option moves', () => {
+        openMenu();
+        const before = optionButtons();
+
+        selector.update(viewModelWith({ activeOptionId: 'p-en', activeLanguageCode: 'en' }));
+
+        const after = optionButtons();
+        expect(after[0]).not.toBe(before[0]);
+        expect(after.find((b) => b.dataset.optionId === 'p-en')?.getAttribute('aria-selected'))
+            .toBe('true');
+        expect(after.find((b) => b.dataset.optionId === 'p-zh')?.getAttribute('aria-selected'))
+            .toBe('false');
+    });
+
+    it('rebuilds the list when the preferred language or the copy changes', () => {
+        openMenu();
+        const beforePreferred = optionButtons();
+
+        selector.update(viewModelWith({ preferredLanguageCode: 'ja' }));
+
+        const afterPreferred = optionButtons();
+        expect(afterPreferred[0]).not.toBe(beforePreferred[0]);
+        expect(afterPreferred.find((b) => b.dataset.optionId === 't-ja')?.textContent)
+            .toContain(COPY.preferredBadge);
+
+        selector.update(viewModelWith());
+        const beforeCopy = optionButtons();
+
+        selector.update(viewModelWith({ copy: { ...COPY, providedHeading: 'Provided' } }));
+
+        const afterCopy = optionButtons();
+        expect(afterCopy[0]).not.toBe(beforeCopy[0]);
+        expect(getMenu().textContent).toContain('Provided');
+    });
+
+    it('rebuilds the list when the catalog gains a language', () => {
+        openMenu();
+        const before = optionButtons();
+
+        selector.update(viewModelWith({
+            groups: {
+                provided: [...GROUPS.provided, providedOption('p-de', 'Deutsch', 'de')],
+                translated: [...GROUPS.translated]
+            }
+        }));
+
+        const after = optionButtons();
+        expect(after[0]).not.toBe(before[0]);
+        expect(after.map((b) => b.dataset.optionId)).toContain('p-de');
+    });
+
+    it('keeps the filtered list and the search state across identical updates', () => {
+        openMenu();
+        getMenu().querySelector<HTMLButtonElement>(
+            '.vb-yt-subtitle-selector-search-toggle'
+        )?.click();
+        const input = getMenu().querySelector<HTMLInputElement>('input[type="search"]');
+        expect(input).not.toBeNull();
+        input!.value = 'zh';
+        input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+        const before = optionButtons();
+        expect(before.map((b) => b.dataset.optionId)).toEqual(['p-zh']);
+
+        for (let round = 0; round < 3; round += 1) selector.update(viewModelWith());
+
+        const after = optionButtons();
+        expect(after.length).toBe(before.length);
+        after.forEach((button, index) => expect(button).toBe(before[index]));
+        expect(input!.value).toBe('zh');
+    });
+
+    it('re-renders the list when the search row is expanded and again when it collapses', () => {
+        openMenu();
+        const collapsed = optionButtons();
+        const toggle = getMenu().querySelector<HTMLButtonElement>(
+            '.vb-yt-subtitle-selector-search-toggle'
+        );
+        expect(toggle).not.toBeNull();
+
+        toggle!.click();
+        const expanded = optionButtons();
+        expect(expanded[0]).not.toBe(collapsed[0]);
+        expect(expanded.map((button) => button.dataset.optionId)).toEqual(ALL_OPTION_IDS);
+
+        toggle!.click();
+        const reCollapsed = optionButtons();
+        expect(reCollapsed[0]).not.toBe(expanded[0]);
+        expect(reCollapsed.map((button) => button.dataset.optionId)).toEqual(ALL_OPTION_IDS);
+    });
+
+    it('re-renders the list when only an option source kind changes', () => {
+        openMenu();
+        const before = optionButtons();
+
+        selector.update(viewModelWith({
+            groups: {
+                provided: [{
+                    ...GROUPS.provided[0],
+                    sourceKind: 'asr' as const
+                }, ...GROUPS.provided.slice(1)],
+                translated: [...GROUPS.translated]
+            }
+        }));
+
+        const after = optionButtons();
+        expect(after[0]).not.toBe(before[0]);
+        expect(after.find((button) => button.dataset.optionId === 'p-zh')?.textContent)
+            .toContain(COPY.asrBadge);
+    });
+
+    it('re-renders the list when only the searchable text changes', () => {
+        openMenu();
+        const before = optionButtons();
+
+        selector.update(viewModelWith({
+            groups: {
+                provided: [{
+                    ...GROUPS.provided[0],
+                    searchText: `${GROUPS.provided[0].label} zh-cn 别名`
+                }, ...GROUPS.provided.slice(1)],
+                translated: [...GROUPS.translated]
+            }
+        }));
+
+        expect(optionButtons()[0]).not.toBe(before[0]);
+    });
+
+    it('repositions the menu even when the list rebuild is skipped', () => {
+        openMenu();
+        const before = optionButtons();
+        const menu = getMenu();
+        const playerRect = { right: 1000, bottom: 800 } as DOMRect;
+        const buttonRect = { right: 940, top: 700 } as DOMRect;
+        vi.spyOn(player, 'getBoundingClientRect').mockReturnValue(playerRect);
+        vi.spyOn(getToolbarButton(), 'getBoundingClientRect').mockReturnValue(buttonRect);
+
+        selector.update(viewModelWith());
+
+        // 列表被跳过重建，弹层坐标仍按新的播放器与按钮位置更新。
+        expect(optionButtons()[0]).toBe(before[0]);
+        expect(menu.style.right).toBe('60px');
+        expect(menu.style.bottom).toBe('108px');
+    });
+
+    it('re-renders the list after a remount with an unchanged catalog', () => {
+        openMenu();
+        expect(optionButtons().length).toBe(ALL_OPTION_IDS.length);
+
+        selector.detach();
+        selector.update(viewModelWith());
+        expect(selector.ensureMounted()).toBe(true);
+        openMenu();
+
+        // YouTube 摘走按钮后以相同内容重新挂载：签名必须失效，否则面板永久空白。
+        const after = optionButtons();
+        expect(after.map((button) => button.dataset.optionId)).toEqual(ALL_OPTION_IDS);
+        expect(emptyNotices().length).toBe(0);
+    });
+});
+
 describe('SubtitleSelector empty catalog', () => {
     let onSelectLanguage: ReturnType<typeof vi.fn>;
     let selector: SubtitleSelector;

@@ -146,6 +146,7 @@ export class SubtitleSelector {
     private optionList: HTMLDivElement | null = null;
     private query = '';
     private searchOpen = false;
+    private renderedSignature: string | null = null;
 
     private readonly handleDocumentPointerDown = (event: PointerEvent) => {
         const target = event.target;
@@ -378,6 +379,7 @@ export class SubtitleSelector {
         this.optionList = null;
         this.query = '';
         this.searchOpen = false;
+        this.renderedSignature = null;
     }
 
     destroy(): void {
@@ -450,14 +452,51 @@ export class SubtitleSelector {
     private renderMenu(): void {
         if (!this.optionList) return;
         this.syncSearchAvailability();
+        const signature = this.renderSignature();
+        if (signature === this.renderedSignature) return;
         this.optionList.replaceChildren();
         if (this.isCatalogEmpty()) {
             this.optionList.append(this.createEmptyState());
+            this.renderedSignature = signature;
             return;
         }
         const visibleGroups = filterSubtitleMenuGroups(this.viewModel.groups, this.query);
         this.renderGroup(this.viewModel.copy.providedHeading, visibleGroups.provided);
         this.renderGroup(this.viewModel.copy.translatedHeading, visibleGroups.translated);
+        // 签名只在整段渲染完成后写入，避免半截列表被后续周期一直当作「已渲染」。
+        this.renderedSignature = signature;
+    }
+
+    /**
+     * 稳定性判定只能按内容比较：宿主每个轮询周期都会重建目录对象，比较引用会永远判定为「已变化」。
+     * 字段用嵌套数组承载，避免标签内的分隔符把不同内容串成同一签名。
+     */
+    private renderSignature(): string {
+        const {
+            groups,
+            activeOptionId,
+            activeLanguageCode,
+            preferredLanguageCode,
+            copy
+        } = this.viewModel;
+        const items = (options: SubtitleOption[]) => options.map((option) => [
+            option.id,
+            option.label,
+            option.targetLanguageCode,
+            option.kind,
+            option.kind === 'provided' ? option.sourceKind : '',
+            option.searchText
+        ]);
+        return JSON.stringify([
+            items(groups.provided),
+            items(groups.translated),
+            activeOptionId,
+            activeLanguageCode,
+            preferredLanguageCode,
+            this.query,
+            this.searchOpen,
+            copy
+        ]);
     }
 
     private isCatalogEmpty(): boolean {
