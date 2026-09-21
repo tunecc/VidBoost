@@ -56,3 +56,11 @@ export function areTargetLanguagesCompatible(left: string, right: string): boole
     const rightIsGeneric = !rightParts.script && !rightParts.region;
     return leftIsGeneric !== rightIsGeneric;
 }
+
+export function chineseScriptGroupOf(languageCode: string): 'hans' | 'hant' | null {
+    const canonical = canonicalizeLanguageCode(languageCode);
+    if (!canonical) return null;
+    const parts = localeParts(canonical);
+    if (!parts || parts.language !== 'zh') return null;
+    return chineseScriptGroup(parts.script, parts.region);
+}

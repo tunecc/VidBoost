@@ -51,14 +51,99 @@ const ICON_STYLE_ACTIVE = 'opacity:1;filter:none;transition:opacity .15s ease';
 const ICON_STYLE_INACTIVE = 'opacity:.45;filter:grayscale(.6);transition:opacity .15s ease';
 const ICON_SIZE_PX = 24;
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const HOVER_BG = 'rgba(255,255,255,.1)';
+const ACTIVE_BG = 'rgba(62,166,255,.16)';
+const ACTIVE_HOVER_BG = 'rgba(62,166,255,.24)';
+const FOCUS_OUTLINE = '2px solid rgba(255,255,255,.9)';
+const MENU_SURFACE_STYLE = [
+    'position:absolute',
+    'display:none',
+    'flex-direction:column',
+    'width:min(360px, calc(100% - 24px))',
+    'max-height:min(420px, calc(100% - 80px))',
+    'box-sizing:border-box',
+    'padding:6px 0',
+    'gap:0',
+    'overflow:hidden',
+    'z-index:70',
+    'color:#fff',
+    'background:rgba(40,40,40,.98)',
+    'border:0',
+    'border-radius:12px',
+    'box-shadow:0 4px 16px rgba(0,0,0,.5)',
+    'font:400 13px/1.35 Roboto,Arial,sans-serif',
+    'letter-spacing:0'
+].join(';');
+
+const SEARCH_TOGGLE_BASE_STYLE = [
+    'flex:0 0 auto',
+    'width:32px',
+    'height:32px',
+    'padding:0',
+    'border:0',
+    'border-radius:50%',
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'cursor:pointer',
+    'outline:none',
+    'transition:background .12s ease,color .12s ease'
+].join(';');
+const SEARCH_TOGGLE_IDLE_COLOR = 'rgba(255,255,255,.85)';
+const SEARCH_TOGGLE_ACTIVE_COLOR = '#3ea6ff';
+const SEARCH_TOGGLE_ACTIVE_BG = 'rgba(62,166,255,.16)';
+
+const SEARCH_INPUT_BASE_STYLE = [
+    'width:100%',
+    'height:32px',
+    'box-sizing:border-box',
+    'padding:0 12px',
+    'border-radius:8px',
+    'outline:none',
+    'color:#fff',
+    'font:inherit',
+    'letter-spacing:0'
+].join(';');
+
+function createSearchIcon(): SVGSVGElement {
+    const icon = document.createElementNS(SVG_NS, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('width', '18');
+    icon.setAttribute('height', '18');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.setAttribute('focusable', 'false');
+
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', '10.5');
+    circle.setAttribute('cy', '10.5');
+    circle.setAttribute('r', '6.5');
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', 'currentColor');
+    circle.setAttribute('stroke-width', '1.8');
+
+    const handle = document.createElementNS(SVG_NS, 'path');
+    handle.setAttribute('d', 'M15.4 15.4 20 20');
+    handle.setAttribute('stroke', 'currentColor');
+    handle.setAttribute('stroke-width', '1.8');
+    handle.setAttribute('stroke-linecap', 'round');
+
+    icon.append(circle, handle);
+    return icon;
+}
+
 export class SubtitleSelector {
     private viewModel = EMPTY_VIEW_MODEL;
     private button: HTMLButtonElement | null = null;
     private buttonIcon: HTMLImageElement | null = null;
     private menu: HTMLDivElement | null = null;
+    private title: HTMLDivElement | null = null;
+    private searchToggle: HTMLButtonElement | null = null;
+    private searchRow: HTMLDivElement | null = null;
     private searchInput: HTMLInputElement | null = null;
     private optionList: HTMLDivElement | null = null;
     private query = '';
+    private searchOpen = false;
 
     private readonly handleDocumentPointerDown = (event: PointerEvent) => {
         const target = event.target;
@@ -87,6 +172,12 @@ export class SubtitleSelector {
             this.button.title = viewModel.copy.buttonLabel;
         }
         this.updateIconState();
+        if (this.title) this.title.textContent = viewModel.copy.buttonLabel;
+        if (this.menu) this.menu.setAttribute('aria-label', viewModel.copy.buttonLabel);
+        if (this.searchToggle) {
+            this.searchToggle.setAttribute('aria-label', viewModel.copy.searchPlaceholder);
+            this.searchToggle.title = viewModel.copy.searchPlaceholder;
+        }
         if (this.searchInput) this.searchInput.placeholder = viewModel.copy.searchPlaceholder;
         if (this.menu && this.menu.style.display !== 'none') {
             this.renderMenu();
@@ -160,52 +251,94 @@ export class SubtitleSelector {
         menu.className = 'vb-yt-subtitle-selector-menu';
         menu.setAttribute('role', 'dialog');
         menu.setAttribute('aria-label', this.viewModel.copy.buttonLabel);
-        menu.style.cssText = [
-            'position:absolute',
-            'display:none',
-            'flex-direction:column',
-            'width:min(320px, calc(100% - 24px))',
-            'max-height:min(420px, calc(100% - 80px))',
-            'box-sizing:border-box',
-            'padding:10px',
+        menu.style.cssText = MENU_SURFACE_STYLE;
+
+        const header = document.createElement('div');
+        header.className = 'vb-yt-subtitle-selector-header';
+        header.style.cssText = [
+            'flex:0 0 auto',
+            'display:flex',
+            'align-items:center',
             'gap:8px',
-            'overflow:hidden',
-            'z-index:70',
-            'color:#fff',
-            'background:rgba(20,20,20,.96)',
-            'border:1px solid rgba(255,255,255,.18)',
-            'border-radius:6px',
-            'box-shadow:0 8px 24px rgba(0,0,0,.38)',
-            'font:400 13px/1.35 Roboto,Arial,sans-serif',
-            'letter-spacing:0'
+            'min-height:36px',
+            'padding:2px 8px 2px 14px'
         ].join(';');
+
+        const title = document.createElement('div');
+        title.className = 'vb-yt-subtitle-selector-title';
+        title.textContent = this.viewModel.copy.buttonLabel;
+        title.style.cssText = [
+            'min-width:0',
+            'flex:1 1 auto',
+            'overflow:hidden',
+            'text-overflow:ellipsis',
+            'white-space:nowrap',
+            'font-size:13px',
+            'font-weight:500',
+            'color:rgba(255,255,255,.9)'
+        ].join(';');
+
+        const searchToggle = document.createElement('button');
+        searchToggle.type = 'button';
+        searchToggle.className = 'vb-yt-subtitle-selector-search-toggle';
+        searchToggle.setAttribute('aria-label', this.viewModel.copy.searchPlaceholder);
+        searchToggle.setAttribute('aria-expanded', 'false');
+        searchToggle.title = this.viewModel.copy.searchPlaceholder;
+        searchToggle.style.cssText = SEARCH_TOGGLE_BASE_STYLE;
+        searchToggle.style.color = SEARCH_TOGGLE_IDLE_COLOR;
+        searchToggle.style.background = 'transparent';
+        searchToggle.append(createSearchIcon());
+        searchToggle.addEventListener('pointerenter', () => {
+            searchToggle.style.background = this.searchOpen ? ACTIVE_HOVER_BG : HOVER_BG;
+        });
+        searchToggle.addEventListener('pointerleave', () => this.syncSearchToggleStyle());
+        searchToggle.addEventListener('click', () => {
+            const open = !this.searchOpen;
+            this.setSearchOpen(open);
+            this.renderMenu();
+            if (open) this.searchInput?.focus();
+        });
+
+        header.append(title, searchToggle);
+
+        const searchRow = document.createElement('div');
+        searchRow.className = 'vb-yt-subtitle-selector-search-row';
+        searchRow.style.cssText = 'flex:0 0 auto;display:none;padding:2px 14px 8px';
 
         const searchInput = document.createElement('input');
         searchInput.type = 'search';
         searchInput.placeholder = this.viewModel.copy.searchPlaceholder;
         searchInput.setAttribute('aria-label', this.viewModel.copy.searchPlaceholder);
         searchInput.style.cssText = [
-            'width:100%',
-            'height:34px',
-            'box-sizing:border-box',
-            'padding:0 10px',
-            'border:1px solid rgba(255,255,255,.26)',
-            'border-radius:4px',
-            'outline:none',
-            'color:#fff',
-            'background:rgba(255,255,255,.08)',
-            'font:inherit',
-            'letter-spacing:0'
+            SEARCH_INPUT_BASE_STYLE,
+            'border:1px solid rgba(255,255,255,.22)',
+            'background:rgba(255,255,255,.06)'
         ].join(';');
+        searchInput.addEventListener('focus', () => {
+            searchInput.style.borderColor = 'rgba(255,255,255,.6)';
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.style.borderColor = 'rgba(255,255,255,.22)';
+        });
         searchInput.addEventListener('input', () => {
             this.query = searchInput.value;
             this.renderMenu();
         });
+        searchRow.append(searchInput);
 
         const optionList = document.createElement('div');
         optionList.setAttribute('role', 'listbox');
-        optionList.style.cssText = 'min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px';
-        menu.append(searchInput, optionList);
+        optionList.style.cssText = [
+            'min-height:0',
+            'flex:1 1 auto',
+            'overflow:auto',
+            'display:flex',
+            'flex-direction:column',
+            'scrollbar-width:thin',
+            'scrollbar-color:rgba(255,255,255,.28) transparent'
+        ].join(';');
+
+        menu.append(header, searchRow, optionList);
         menu.addEventListener('keydown', (event) => this.handleMenuKeydown(event));
         player.append(menu);
 
@@ -214,14 +347,20 @@ export class SubtitleSelector {
         this.button = button;
         this.buttonIcon = icon;
         this.menu = menu;
+        this.title = title;
+        this.searchToggle = searchToggle;
+        this.searchRow = searchRow;
         this.searchInput = searchInput;
         this.optionList = optionList;
+        this.searchOpen = false;
+        this.query = '';
         this.renderMenu();
         return true;
     }
 
     close(): void {
         if (!this.menu) return;
+        this.setSearchOpen(false);
         this.menu.style.display = 'none';
         this.button?.setAttribute('aria-expanded', 'false');
     }
@@ -233,9 +372,13 @@ export class SubtitleSelector {
         this.button = null;
         this.buttonIcon = null;
         this.menu = null;
+        this.title = null;
+        this.searchToggle = null;
+        this.searchRow = null;
         this.searchInput = null;
         this.optionList = null;
         this.query = '';
+        this.searchOpen = false;
     }
 
     destroy(): void {
@@ -265,15 +408,32 @@ export class SubtitleSelector {
         ].join(';');
     }
 
-    private open(): void {
-        if (!this.ensureMounted() || !this.menu || !this.searchInput) return;
+    private setSearchOpen(open: boolean): void {
+        this.searchOpen = open;
+        if (this.searchRow) this.searchRow.style.display = open ? 'block' : 'none';
+        this.searchToggle?.setAttribute('aria-expanded', String(open));
+        this.syncSearchToggleStyle();
+        if (open) return;
         this.query = '';
-        this.searchInput.value = '';
+        if (this.searchInput) this.searchInput.value = '';
+    }
+
+    private syncSearchToggleStyle(): void {
+        if (!this.searchToggle) return;
+        this.searchToggle.style.color = this.searchOpen
+            ? SEARCH_TOGGLE_ACTIVE_COLOR
+            : SEARCH_TOGGLE_IDLE_COLOR;
+        this.searchToggle.style.background = this.searchOpen ? SEARCH_TOGGLE_ACTIVE_BG : 'transparent';
+    }
+
+    private open(): void {
+        if (!this.ensureMounted() || !this.menu) return;
+        this.setSearchOpen(false);
         this.renderMenu();
         this.menu.style.display = 'flex';
         this.button?.setAttribute('aria-expanded', 'true');
         this.positionMenu();
-        this.searchInput.focus();
+        this.searchToggle?.focus();
     }
 
     private positionMenu(): void {
@@ -299,13 +459,13 @@ export class SubtitleSelector {
     private renderGroup(heading: string, options: SubtitleOption[]): void {
         if (!this.optionList || options.length === 0) return;
         const headingElement = document.createElement('div');
+        headingElement.className = 'vb-yt-subtitle-selector-heading';
         headingElement.textContent = heading;
         headingElement.style.cssText = [
-            'padding:8px 8px 3px',
-            'color:rgba(255,255,255,.68)',
+            'padding:10px 14px 4px',
+            'color:rgba(255,255,255,.55)',
             'font-size:11px',
-            'font-weight:600',
-            'text-transform:uppercase',
+            'font-weight:500',
             'letter-spacing:0'
         ].join(';');
         this.optionList.append(headingElement);
@@ -321,35 +481,57 @@ export class SubtitleSelector {
             optionButton.setAttribute('role', 'option');
             optionButton.setAttribute('aria-selected', String(active));
             optionButton.dataset.optionId = option.id;
+            const baseBackground = active ? ACTIVE_BG : 'transparent';
+            const hoverBackground = active ? ACTIVE_HOVER_BG : HOVER_BG;
             optionButton.style.cssText = [
                 'width:100%',
                 'min-height:38px',
                 'display:grid',
-                'grid-template-columns:18px minmax(0,1fr) auto',
+                'grid-template-columns:20px minmax(0,1fr) auto',
                 'align-items:center',
                 'gap:8px',
-                'padding:6px 8px',
+                'padding:8px 14px',
                 'border:0',
-                'border-radius:4px',
-                `background:${active ? 'rgba(62,166,255,.24)' : 'transparent'}`,
+                'border-radius:0',
+                `background:${baseBackground}`,
                 'color:#fff',
                 'font:inherit',
                 'letter-spacing:0',
                 'text-align:left',
-                'cursor:pointer'
+                'cursor:pointer',
+                'transition:background .12s ease'
             ].join(';');
+            optionButton.addEventListener('pointerenter', () => {
+                optionButton.style.background = hoverBackground;
+            });
+            optionButton.addEventListener('pointerleave', () => {
+                optionButton.style.background = baseBackground;
+            });
 
             const check = document.createElement('span');
             check.textContent = active ? '\u2713' : '';
             check.setAttribute('aria-hidden', 'true');
-            check.style.cssText = 'width:18px;text-align:center;color:#3ea6ff;font-weight:700';
+            check.style.cssText = [
+                'width:20px',
+                'text-align:center',
+                'color:#3ea6ff',
+                'font-size:14px',
+                'font-weight:700'
+            ].join(';');
 
             const label = document.createElement('span');
             label.textContent = option.label;
             label.style.cssText = 'min-width:0;overflow-wrap:anywhere';
 
             const badges = document.createElement('span');
-            badges.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:4px;white-space:nowrap';
+            badges.style.cssText = [
+                'display:flex',
+                'align-items:center',
+                'justify-content:flex-end',
+                'gap:8px',
+                'flex:0 0 auto',
+                'white-space:nowrap'
+            ].join(';');
             badges.append(this.createBadge(
                 option.kind === 'translated'
                     ? this.viewModel.copy.translatedBadge
@@ -366,7 +548,7 @@ export class SubtitleSelector {
 
             optionButton.append(check, label, badges);
             optionButton.addEventListener('focus', () => {
-                optionButton.style.outline = '2px solid rgba(255,255,255,.9)';
+                optionButton.style.outline = FOCUS_OUTLINE;
                 optionButton.style.outlineOffset = '-2px';
             });
             optionButton.addEventListener('blur', () => {
@@ -382,13 +564,10 @@ export class SubtitleSelector {
         const badge = document.createElement('span');
         badge.textContent = text;
         badge.style.cssText = [
-            'padding:2px 5px',
-            'border-radius:3px',
-            `color:${emphasized ? '#3ea6ff' : 'rgba(255,255,255,.72)'}`,
-            `background:${emphasized ? 'rgba(62,166,255,.16)' : 'rgba(255,255,255,.1)'}`,
-            'font-size:10px',
+            'font-size:11px',
             'line-height:1.3',
-            'letter-spacing:0'
+            'letter-spacing:0',
+            `color:${emphasized ? '#3ea6ff' : 'rgba(255,255,255,.55)'}`
         ].join(';');
         return badge;
     }
@@ -402,6 +581,12 @@ export class SubtitleSelector {
     private handleMenuKeydown(event: KeyboardEvent): void {
         if (event.key === 'Escape') {
             event.preventDefault();
+            if (this.searchOpen) {
+                this.setSearchOpen(false);
+                this.renderMenu();
+                this.searchToggle?.focus();
+                return;
+            }
             this.close();
             this.button?.focus();
             return;

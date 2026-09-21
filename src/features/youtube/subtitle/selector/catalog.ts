@@ -5,12 +5,32 @@ import type {
     YouTubeSubtitleTranslationLanguage,
     YouTubeTextValue
 } from '../../subtitleOverlay.shared';
-import { areTargetLanguagesCompatible, canonicalizeLanguageCode } from './language';
+import { areTargetLanguagesCompatible, canonicalizeLanguageCode, chineseScriptGroupOf } from './language';
 import type {
     ProvidedSubtitleOption,
     SubtitleCatalog,
     TranslatedSubtitleOption
 } from './types';
+
+// Fixed locale keeps the list stable across host browser UI languages: Chinese labels by
+// pinyin, Latin labels alphabetically.
+const MENU_COLLATOR = new Intl.Collator('zh-Hans', { sensitivity: 'base' });
+
+function compareMenuLabels(
+    left: { label: string; targetLanguageCode: string },
+    right: { label: string; targetLanguageCode: string }
+): number {
+    return MENU_COLLATOR.compare(left.label, right.label);
+}
+
+// Simplified Chinese first, Traditional Chinese second, everything else after them.
+function translatedPinRank(languageCode: string): number {
+    switch (chineseScriptGroupOf(languageCode)) {
+        case 'hans': return 0;
+        case 'hant': return 1;
+        default: return 2;
+    }
+}
 
 export function getYouTubeText(value: YouTubeTextValue | undefined): string {
     return value?.simpleText?.trim()
@@ -80,7 +100,7 @@ function deduplicateProvidedForMenu(
             deduplicated[existingIndex] = option;
         }
     }
-    return deduplicated.sort((left, right) => left.label.localeCompare(right.label));
+    return deduplicated.sort(compareMenuLabels);
 }
 
 function toTranslatedOption(
@@ -125,7 +145,11 @@ export function buildSubtitleCatalog(
         }
     }
 
-    translatedOptions.sort((left, right) => left.label.localeCompare(right.label));
+    translatedOptions.sort((left, right) => {
+        const pin = translatedPinRank(left.targetLanguageCode)
+            - translatedPinRank(right.targetLanguageCode);
+        return pin !== 0 ? pin : compareMenuLabels(left, right);
+    });
     return {
         providedOptions,
         translatedOptions,
