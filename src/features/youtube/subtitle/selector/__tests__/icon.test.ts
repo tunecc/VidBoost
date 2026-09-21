@@ -24,6 +24,7 @@ describe('SubtitleSelector icon', () => {
         asrBadge: 'ASR',
         translatedBadge: '翻译',
         preferredBadge: '偏好',
+        emptyMessage: '该视频暂无字幕',
     };
 
     const viewModel: SubtitleSelectorViewModel = {
@@ -229,6 +230,35 @@ describe('SubtitleSelector icon', () => {
         expect(onSelectLanguage).toHaveBeenCalledWith('zh-CN');
         const menu = document.getElementById('vb-yt-subtitle-selector-menu');
         expect(menu?.style.display).toBe('none');
+    });
+
+    it('keeps the button mounted and dimmed while the catalog is still empty', () => {
+        selector.update(viewModel);
+        expect(selector.ensureMounted()).toBe(true);
+        expect(getButton()).not.toBeNull();
+        expect((getIcon()?.style.cssText ?? '')).toMatch(/opacity:\s*0?\.45/);
+    });
+
+    it('does not detach the button when the catalog becomes empty again', () => {
+        expect(mount()).toBe(true);
+        selector.update(activeViewModel());
+        selector.update(viewModel);
+
+        expect(getButton()).not.toBeNull();
+        expect((getIcon()?.style.cssText ?? '')).toMatch(/opacity:\s*0?\.45/);
+    });
+
+    it('recomputes the icon state when the button is remounted', () => {
+        expect(mount()).toBe(true);
+        selector.update(activeViewModel());
+        selector.detach();
+
+        selector.ensureMounted();
+        const icon = getIcon();
+        expect((icon?.style.cssText ?? '')).toMatch(/opacity:\s*1\b/);
+
+        selector.update(viewModel);
+        expect((getIcon()?.style.cssText ?? '')).toMatch(/opacity:\s*0?\.45/);
     });
 
     it('detaches and clears all references', () => {

@@ -16,6 +16,7 @@ const COPY: SubtitleSelectorCopy = {
     asrBadge: '自动生成',
     translatedBadge: '翻译',
     preferredBadge: '默认',
+    emptyMessage: '该视频暂无字幕',
 };
 
 function providedOption(id: string, label: string, languageCode: string) {
@@ -318,5 +319,116 @@ describe('SubtitleSelector menu search row', () => {
         expect(getSearchRow().style.display).not.toBe('none');
         expect(getSearchInput().value).toBe('zh');
         expect(getVisibleOptionIds()).toEqual(['p-zh']);
+    });
+});
+
+const EMPTY_GROUPS: SubtitleMenuGroups = { provided: [], translated: [] };
+
+describe('SubtitleSelector empty catalog', () => {
+    let onSelectLanguage: ReturnType<typeof vi.fn>;
+    let selector: SubtitleSelector;
+    let player: HTMLElement;
+    let controls: HTMLElement;
+
+    function emptyViewModel(): SubtitleSelectorViewModel {
+        return {
+            groups: EMPTY_GROUPS,
+            activeOptionId: '',
+            activeLanguageCode: '',
+            preferredLanguageCode: '',
+            copy: COPY,
+        };
+    }
+
+    beforeEach(() => {
+        onSelectLanguage = vi.fn();
+        selector = new SubtitleSelector(onSelectLanguage);
+
+        player = document.createElement('div');
+        player.id = 'movie_player';
+        controls = document.createElement('div');
+        controls.className = 'ytp-right-controls';
+        const settingsButton = document.createElement('button');
+        settingsButton.className = 'ytp-settings-button';
+        controls.append(settingsButton);
+        player.append(controls);
+        document.body.append(player);
+
+        selector.update(emptyViewModel());
+        expect(selector.ensureMounted()).toBe(true);
+    });
+
+    afterEach(() => {
+        selector.destroy();
+        document.body.innerHTML = '';
+        vi.restoreAllMocks();
+    });
+
+    function getMenu(): HTMLElement {
+        const menu = document.getElementById('vb-yt-subtitle-selector-menu');
+        expect(menu).not.toBeNull();
+        return menu as HTMLElement;
+    }
+
+    function getToolbarButton(): HTMLButtonElement {
+        const button = controls.querySelector<HTMLButtonElement>(
+            'button.vb-yt-subtitle-selector-button'
+        );
+        expect(button).not.toBeNull();
+        return button as HTMLButtonElement;
+    }
+
+    function getSearchButton(): HTMLButtonElement | null {
+        return getMenu().querySelector<HTMLButtonElement>(
+            '.vb-yt-subtitle-selector-search-toggle'
+        );
+    }
+
+    function getEmptyNotice(): HTMLElement | null {
+        return getMenu().querySelector<HTMLElement>('.vb-yt-subtitle-selector-empty');
+    }
+
+    function getVisibleOptionIds(): string[] {
+        return Array.from(getMenu().querySelectorAll<HTMLElement>('[data-option-id]'))
+            .map((element) => element.dataset.optionId as string);
+    }
+
+    it('keeps the toolbar button mounted and opens a menu with the empty notice', () => {
+        getToolbarButton().click();
+        expect(getMenu().style.display).toBe('flex');
+        expect(getToolbarButton().getAttribute('aria-expanded')).toBe('true');
+        expect(getEmptyNotice()?.textContent).toBe(COPY.emptyMessage);
+        expect(getVisibleOptionIds()).toEqual([]);
+    });
+
+    it('hides the search entry and never focuses it while the catalog is empty', () => {
+        getToolbarButton().click();
+        expect(getSearchButton()?.style.display).toBe('none');
+        expect(document.activeElement).not.toBe(getSearchButton());
+    });
+
+    it('renders the language list in place once the catalog arrives', () => {
+        getToolbarButton().click();
+        expect(getEmptyNotice()).not.toBeNull();
+
+        selector.update({
+            groups: GROUPS,
+            activeOptionId: '',
+            activeLanguageCode: '',
+            preferredLanguageCode: '',
+            copy: COPY,
+        });
+
+        expect(getEmptyNotice()).toBeNull();
+        expect(getVisibleOptionIds()).toEqual(ALL_OPTION_IDS);
+        expect(getSearchButton()?.style.display).not.toBe('none');
+    });
+
+    it('keeps the empty notice out of arrow-key navigation', () => {
+        getToolbarButton().click();
+        getMenu().dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+        );
+        expect(document.activeElement).not.toHaveProperty('dataset.optionId');
     });
 });

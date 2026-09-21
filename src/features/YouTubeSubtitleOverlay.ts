@@ -433,6 +433,9 @@ export class YouTubeSubtitleOverlay implements Feature {
     private loadFailureVideoId = '';
     private consecutiveLoadFailures = 0;
     private subtitleUnavailableVideoId = '';
+    private catalogVideoId = '';
+    private catalogRequestInFlight = false;
+    private manualNativeToggleOnVideoId = '';
 
     private boundVideo: HTMLVideoElement | null = null;
     private unsubscribeVideo: (() => void) | null = null;
@@ -463,6 +466,8 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.subtitleSelector?.detach();
         this.subtitleCatalog = null;
         this.activeOption = null;
+        this.catalogVideoId = '';
+        this.manualNativeToggleOnVideoId = '';
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.setNativeSubtitlesHidden(false);
@@ -651,6 +656,8 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.loadFailureVideoId = '';
         this.consecutiveLoadFailures = 0;
         this.subtitleUnavailableVideoId = '';
+        this.catalogVideoId = '';
+        this.manualNativeToggleOnVideoId = '';
         this.routeKey = '';
     }
 
@@ -710,6 +717,8 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!this.shouldRenderOverlay()) {
             this.subtitleSelector?.detach();
             this.subtitleCatalog = null;
+            this.catalogVideoId = '';
+            this.manualNativeToggleOnVideoId = '';
             this.abortPendingLoad();
             this.stopRenderer();
             this.clearSubtitleState();
@@ -720,9 +729,12 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
 
         if (this.shouldPauseForNativeToggleOff()) {
-            this.pauseOverlayForNativeToggleOff();
+            this.enterIdleSelectorState();
             return;
         }
+
+        // 目录未取到的加载窗口内也先挂出按钮，控件栏还没就绪时由下面的重试再挂。
+        this.syncSubtitleSelectorView();
 
         if (!this.ensureOverlayMounted()) {
             this.scheduleSync(250);
@@ -752,19 +764,20 @@ export class YouTubeSubtitleOverlay implements Feature {
             authorBadge: i18n('yt_subtitle_badge_author', this.language),
             asrBadge: i18n('yt_subtitle_badge_asr', this.language),
             translatedBadge: i18n('yt_subtitle_badge_translated', this.language),
-            preferredBadge: i18n('yt_subtitle_badge_preferred', this.language)
+            preferredBadge: i18n('yt_subtitle_badge_preferred', this.language),
+            emptyMessage: i18n('yt_subtitle_empty_catalog', this.language)
         };
     }
 
     private syncSubtitleSelectorView() {
-        if (!this.subtitleCatalog || !this.shouldRenderOverlay() || !this.isSupportedPage()) {
+        if (!this.enabled || !this.shouldRenderOverlay() || !this.isSupportedPage()) {
             this.subtitleSelector?.detach();
             return;
         }
 
         const selector = this.ensureSubtitleSelector();
         selector.update({
-            groups: this.subtitleCatalog.menuGroups,
+            groups: this.subtitleCatalog?.menuGroups ?? { provided: [], translated: [] },
             activeOptionId: this.activeOption?.id || '',
             activeLanguageCode: this.activeOption?.targetLanguageCode || '',
             preferredLanguageCode: this.config.preferredLanguageCode,
@@ -780,6 +793,38 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.subtitleSelector?.detach();
             console.warn('[VidBoost] Failed to mount the YouTube subtitle selector.', error);
             return false;
+        }
+    }
+
+    /**
+     * 功能已开启但当前不渲染字幕（跟随原生 CC 关闭）时的常驻态：按钮保持可见并置灰，
+     * 同时取一次语言目录，让用户可以直接从 VidBoost 面板选语言开启字幕。
+     */
+    private enterIdleSelectorState() {
+        this.pauseOverlayForNativeToggleOff();
+        this.syncSubtitleSelectorView();
+        void this.loadCatalogWithoutRendering();
+    }
+
+    private async loadCatalogWithoutRendering() {
+        if (!this.enabled || !this.shouldRenderOverlay() || !this.isSupportedPage()) return;
+        if (this.loadAbortController || this.catalogRequestInFlight) return;
+
+        const expectedVideoId = this.getCurrentUrlVideoId();
+        if (!expectedVideoId || this.catalogVideoId === expectedVideoId) return;
+
+        this.catalogRequestInFlight = true;
+        try {
+            const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
+            if (!response?.success || !response.data) return;
+            if (!this.enabled || !this.shouldRenderOverlay() || !this.isSupportedPage()) return;
+            if (this.getCurrentUrlVideoId() !== expectedVideoId) return;
+
+            this.catalogVideoId = expectedVideoId;
+            this.subtitleCatalog = buildSubtitleCatalog(response.data);
+            this.syncSubtitleSelectorView();
+        } finally {
+            this.catalogRequestInFlight = false;
         }
     }
 
@@ -805,7 +850,26 @@ export class YouTubeSubtitleOverlay implements Feature {
         });
         this.syncSubtitleSelectorView();
         void setSettings({ yt_subtitle: cloneYTSubtitleConfig(this.config) });
+        await this.enableNativeToggleIfPaused();
         await this.loadSubtitlesForCurrentPage(undefined, 'user-selection');
+    }
+
+    /**
+     * 从面板主动选择语言即表示要开启字幕：先把 YouTube 原生 CC 置为开启，
+     * 否则 loadSubtitlesForCurrentPage 会立刻回到「跟随原生开关关闭」的暂停分支。
+     */
+    private async enableNativeToggleIfPaused() {
+        if (!this.shouldRenderOverlay() || !this.shouldPauseForNativeToggleOff()) return;
+
+        const expectedVideoId = this.getCurrentUrlVideoId();
+        if (!expectedVideoId) return;
+
+        this.suppressNextNativeToggleMemoryWrite();
+        await requestYouTubeSubtitleEnsureEnabled();
+        // 只豁免「用户真正打开成功的那个视频」：await 期间可能已导航，且 YouTube 菜单打开时强制开启会失败。
+        if (this.getCurrentUrlVideoId() !== expectedVideoId) return;
+        if (this.readNativeSubtitleButtonState() !== true) return;
+        this.manualNativeToggleOnVideoId = expectedVideoId;
     }
 
     private handleSubtitleLoadFailure(
@@ -861,12 +925,15 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
 
         if (this.shouldPauseForNativeToggleOff()) {
-            this.pauseOverlayForNativeToggleOff();
+            this.enterIdleSelectorState();
             return;
         }
 
         // 无字幕视频缓存：已标记为无字幕的视频，sync 提前返回，不重复请求。
-        if (this.subtitleUnavailableVideoId === expectedVideoId) return;
+        if (this.subtitleUnavailableVideoId === expectedVideoId) {
+            this.syncSubtitleSelectorView();
+            return;
+        }
 
         const video = this.youtubeMainVideo();
         if (!video) {
@@ -1070,7 +1137,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         }
 
         if (this.shouldPauseForNativeToggleOff()) {
-            this.pauseOverlayForNativeToggleOff();
+            this.enterIdleSelectorState();
             return;
         }
 
@@ -1078,7 +1145,10 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!expectedVideoId) return;
 
         // 无字幕视频缓存：已标记为无字幕的视频，poll 提前返回，不重复请求。
-        if (this.subtitleUnavailableVideoId === expectedVideoId) return;
+        if (this.subtitleUnavailableVideoId === expectedVideoId) {
+            this.syncSubtitleSelectorView();
+            return;
+        }
 
         const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
         if (!response?.success || !response.data) return;
@@ -1707,6 +1777,8 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId) return;
+        // 用户刚在本视频从 VidBoost 面板显式开启字幕，不要用记忆里的关闭状态盖回去。
+        if (this.manualNativeToggleOnVideoId === expectedVideoId) return;
 
         const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
         if (!response?.success || !response.data) return;
@@ -1728,6 +1800,10 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.lastNativeToggleRestoreKey = restoreKey;
             return;
         }
+
+        // 两次 await 期间可能已 SPA 跳转（导航会把 A 视频的豁免清掉），或用户已从面板开启字幕：写回前复查地址与豁免。
+        if (this.getCurrentUrlVideoId() !== expectedVideoId) return;
+        if (this.manualNativeToggleOnVideoId === expectedVideoId) return;
 
         this.suppressNextNativeToggleMemoryWrite();
         const setResult = await requestYouTubeSubtitleSetEnabled(remembered);

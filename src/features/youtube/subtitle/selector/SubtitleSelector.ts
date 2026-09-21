@@ -19,6 +19,7 @@ export type SubtitleSelectorCopy = {
     asrBadge: string;
     translatedBadge: string;
     preferredBadge: string;
+    emptyMessage: string;
 };
 
 export type SubtitleSelectorViewModel = {
@@ -42,7 +43,8 @@ const EMPTY_VIEW_MODEL: SubtitleSelectorViewModel = {
         authorBadge: '',
         asrBadge: '',
         translatedBadge: '',
-        preferredBadge: ''
+        preferredBadge: '',
+        emptyMessage: ''
     }
 };
 
@@ -163,10 +165,6 @@ export class SubtitleSelector {
 
     update(viewModel: SubtitleSelectorViewModel): void {
         this.viewModel = viewModel;
-        if (viewModel.groups.provided.length === 0 && viewModel.groups.translated.length === 0) {
-            this.detach();
-            return;
-        }
         if (this.button) {
             this.button.setAttribute('aria-label', viewModel.copy.buttonLabel);
             this.button.title = viewModel.copy.buttonLabel;
@@ -174,6 +172,7 @@ export class SubtitleSelector {
         this.updateIconState();
         if (this.title) this.title.textContent = viewModel.copy.buttonLabel;
         if (this.menu) this.menu.setAttribute('aria-label', viewModel.copy.buttonLabel);
+        this.syncSearchAvailability();
         if (this.searchToggle) {
             this.searchToggle.setAttribute('aria-label', viewModel.copy.searchPlaceholder);
             this.searchToggle.title = viewModel.copy.searchPlaceholder;
@@ -433,7 +432,7 @@ export class SubtitleSelector {
         this.menu.style.display = 'flex';
         this.button?.setAttribute('aria-expanded', 'true');
         this.positionMenu();
-        this.searchToggle?.focus();
+        if (!this.isCatalogEmpty()) this.searchToggle?.focus();
     }
 
     private positionMenu(): void {
@@ -450,10 +449,42 @@ export class SubtitleSelector {
 
     private renderMenu(): void {
         if (!this.optionList) return;
-        const visibleGroups = filterSubtitleMenuGroups(this.viewModel.groups, this.query);
+        this.syncSearchAvailability();
         this.optionList.replaceChildren();
+        if (this.isCatalogEmpty()) {
+            this.optionList.append(this.createEmptyState());
+            return;
+        }
+        const visibleGroups = filterSubtitleMenuGroups(this.viewModel.groups, this.query);
         this.renderGroup(this.viewModel.copy.providedHeading, visibleGroups.provided);
         this.renderGroup(this.viewModel.copy.translatedHeading, visibleGroups.translated);
+    }
+
+    private isCatalogEmpty(): boolean {
+        return this.viewModel.groups.provided.length === 0
+            && this.viewModel.groups.translated.length === 0;
+    }
+
+    /** 目录为空时没有可过滤项，收起搜索行并隐藏搜索入口。 */
+    private syncSearchAvailability(): void {
+        if (this.searchToggle) {
+            this.searchToggle.style.display = this.isCatalogEmpty() ? 'none' : 'inline-flex';
+        }
+        if (this.isCatalogEmpty() && this.searchOpen) this.setSearchOpen(false);
+    }
+
+    private createEmptyState(): HTMLDivElement {
+        const empty = document.createElement('div');
+        empty.className = 'vb-yt-subtitle-selector-empty';
+        empty.textContent = this.viewModel.copy.emptyMessage;
+        empty.style.cssText = [
+            'padding:16px 14px',
+            'color:rgba(255,255,255,.55)',
+            'font-size:12px',
+            'letter-spacing:0',
+            'text-align:center'
+        ].join(';');
+        return empty;
     }
 
     private renderGroup(heading: string, options: SubtitleOption[]): void {
