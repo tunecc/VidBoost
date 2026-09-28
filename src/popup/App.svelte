@@ -126,6 +126,7 @@
   let bbQualityAddCurrentStatusTimer: number | null = null;
   let bbQualityTargetQn = DEFAULT_SETTINGS.bb_quality.targetQn;
   let bbQualityDefaultQn = DEFAULT_SETTINGS.bb_quality.defaultQn;
+  let bbQualityBlockedQns: string[] = [...DEFAULT_SETTINGS.bb_quality.blockedQns];
   let bbBlockSpace = DEFAULT_SETTINGS.bb_block_space;
 
   // YouTube Member Block Config
@@ -566,6 +567,14 @@
     bbQualityTargetsList = bbQualityTargetsList
       .filter((item) => normalizeBilibiliTargetKey(item) !== targetKey)
       .slice();
+  }
+
+  function toggleBilibiliBlockedQuality(qn: string) {
+    if (!globalEnabled || !bbQualityEnabled) return;
+
+    bbQualityBlockedQns = bbQualityBlockedQns.includes(qn)
+      ? bbQualityBlockedQns.filter((item) => item !== qn)
+      : [...bbQualityBlockedQns, qn];
   }
 
   function parseBilibiliSpeed(
@@ -1278,6 +1287,9 @@
           : [];
         bbQualityTargetQn = res.bb_quality.targetQn ?? DEFAULT_SETTINGS.bb_quality.targetQn;
         bbQualityDefaultQn = res.bb_quality.defaultQn ?? DEFAULT_SETTINGS.bb_quality.defaultQn;
+        bbQualityBlockedQns = Array.isArray(res.bb_quality.blockedQns)
+          ? [...res.bb_quality.blockedQns]
+          : [];
         bbQualityDraftText = "";
       }
       bbBlockSpace = res.bb_block_space;
@@ -1385,6 +1397,7 @@
           targets: bbQualityTargetsList,
           targetQn: bbQualityTargetQn,
           defaultQn: bbQualityDefaultQn,
+          blockedQns: bbQualityBlockedQns,
         },
         bb_block_space: bbBlockSpace,
         language: language,
@@ -3099,6 +3112,37 @@
                       {/each}
                     </select>
                   </label>
+                </div>
+              </div>
+
+              <div class="settings-panel">
+                <div class="settings-panel-header relative z-20">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="settings-panel-title">
+                      {t("bb_quality_blocked")}
+                    </span>
+                  </div>
+                  <span class="settings-status-pill border-black/5 bg-black/[0.03] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50">
+                    {bbQualityBlockedQns.length}
+                  </span>
+                </div>
+
+                <p class="mb-1.5 text-[9px] leading-tight text-gray-400 dark:text-white/30">
+                  {t("bb_quality_blocked_desc")}
+                </p>
+
+                <div class="flex flex-wrap gap-1.5">
+                  {#each BILIBILI_QUALITY_OPTIONS as option (option.value)}
+                    <button
+                      type="button"
+                      aria-pressed={bbQualityBlockedQns.includes(option.value)}
+                      class={`settings-segment ${bbQualityBlockedQns.includes(option.value) ? "settings-segment-active-cyan" : ""}`}
+                      disabled={!globalEnabled || !bbQualityEnabled}
+                      on:click={() => toggleBilibiliBlockedQuality(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  {/each}
                 </div>
               </div>
 

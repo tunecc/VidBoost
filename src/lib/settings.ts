@@ -8,6 +8,7 @@ import {
 import {
     DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY,
     DEFAULT_BILIBILI_TARGET_QUALITY,
+    normalizeBilibiliBlockedQualityValues,
     normalizeBilibiliQualityValue
 } from './bilibiliQuality';
 
@@ -113,6 +114,7 @@ export type BilibiliQualityConfig = {
     targets: string[];
     targetQn: string;
     defaultQn: string;
+    blockedQns: string[];
 };
 
 export type BilibiliCdnConfig = {
@@ -228,7 +230,8 @@ export const DEFAULT_SETTINGS: Settings = {
         enabled: false,
         targets: [],
         targetQn: DEFAULT_BILIBILI_TARGET_QUALITY,
-        defaultQn: DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY
+        defaultQn: DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY,
+        blockedQns: []
     },
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
     bb_cdn_test: {
@@ -527,6 +530,7 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
                 source.bb_quality?.defaultQn,
                 DEFAULT_SETTINGS.bb_quality.defaultQn
             ),
+            blockedQns: normalizeBilibiliBlockedQualityValues(source.bb_quality?.blockedQns),
             targets: Array.isArray(source.bb_quality?.targets)
                 ? [...source.bb_quality.targets]
                 : [...DEFAULT_SETTINGS.bb_quality.targets]

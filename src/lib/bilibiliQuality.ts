@@ -50,6 +50,38 @@ export function getBilibiliQualityRank(value: string): number {
     return BILIBILI_QUALITY_ORDER.indexOf(value as typeof BILIBILI_QUALITY_ORDER[number]);
 }
 
+export function normalizeBilibiliBlockedQualityValues(values: unknown): string[] {
+    if (!Array.isArray(values)) return [];
+
+    const seen = new Set<string>();
+    for (const value of values) {
+        const normalized = typeof value === 'number'
+            ? String(value)
+            : (typeof value === 'string' ? value.trim() : '');
+        if (QUALITY_OPTION_SET.has(normalized)) seen.add(normalized);
+    }
+    return [...seen];
+}
+
+export function filterBilibiliBlockedQualityValues(
+    availableValues: string[],
+    blockedValues: string[] | null | undefined
+): string[] {
+    const normalizedValues = [...new Set(
+        availableValues.filter((value) => QUALITY_OPTION_SET.has(value))
+    )];
+    if (normalizedValues.length === 0) return [];
+    if (!blockedValues || blockedValues.length === 0) return normalizedValues;
+
+    const blocked = new Set(
+        blockedValues.filter((value) => QUALITY_OPTION_SET.has(value))
+    );
+    if (blocked.size === 0) return normalizedValues;
+
+    const remaining = normalizedValues.filter((value) => !blocked.has(value));
+    return remaining.length > 0 ? remaining : normalizedValues;
+}
+
 export function pickBilibiliQualityAtOrBelow(
     availableValues: string[],
     desiredValue: string | null | undefined

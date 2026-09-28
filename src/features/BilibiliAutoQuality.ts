@@ -4,7 +4,9 @@ import type { BilibiliQualityConfig } from '../lib/settings';
 import {
     DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY,
     DEFAULT_BILIBILI_TARGET_QUALITY,
+    filterBilibiliBlockedQualityValues,
     getBilibiliQualityAliases,
+    normalizeBilibiliBlockedQualityValues,
     normalizeBilibiliQualityValue,
     pickBilibiliQualityAtOrBelow
 } from '../lib/bilibiliQuality';
@@ -119,7 +121,8 @@ export class BilibiliAutoQuality implements Feature {
         enabled: false,
         targets: [],
         targetQn: DEFAULT_BILIBILI_TARGET_QUALITY,
-        defaultQn: DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY
+        defaultQn: DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY,
+        blockedQns: []
     };
     private titleObserver: MutationObserver | null = null;
     private retryTimer: number | null = null;
@@ -188,7 +191,8 @@ export class BilibiliAutoQuality implements Feature {
                 defaultQn: normalizeBilibiliQualityValue(
                     qualityConfig.defaultQn,
                     DEFAULT_BILIBILI_CUSTOM_DEFAULT_QUALITY
-                )
+                ),
+                blockedQns: normalizeBilibiliBlockedQualityValues(qualityConfig.blockedQns)
             };
         }
 
@@ -290,14 +294,18 @@ export class BilibiliAutoQuality implements Feature {
         const availableQnValues = items
             .map((item) => item.qn)
             .filter((item): item is string => Boolean(item));
+        const candidateQnValues = filterBilibiliBlockedQualityValues(
+            availableQnValues,
+            this.config.blockedQns
+        );
         const desiredQn = plan.desiredQn
-            ? pickBilibiliQualityAtOrBelow(availableQnValues, plan.desiredQn)
+            ? pickBilibiliQualityAtOrBelow(candidateQnValues, plan.desiredQn)
             : null;
         const fallbackQn = !desiredQn && plan.fallbackQn
-            ? pickBilibiliQualityAtOrBelow(availableQnValues, plan.fallbackQn)
+            ? pickBilibiliQualityAtOrBelow(candidateQnValues, plan.fallbackQn)
             : null;
         const bestAvailableQn = !desiredQn && !fallbackQn
-            ? pickBilibiliQualityAtOrBelow(availableQnValues, null)
+            ? pickBilibiliQualityAtOrBelow(candidateQnValues, null)
             : null;
         const selectedQn = desiredQn ?? fallbackQn ?? bestAvailableQn;
         const selectedItem = selectedQn ? findQualityItem(items, selectedQn) : null;
