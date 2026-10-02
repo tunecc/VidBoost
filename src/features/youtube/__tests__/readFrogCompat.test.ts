@@ -5,8 +5,10 @@ import {
     createReadFrogActivationController,
     dispatchReadFrogToggleShortcut,
     findReadFrogTranslateButtonContainer,
-    readReadFrogToggleState
+    readReadFrogToggleState,
+    resolvePluginTranslateYield
 } from '../subtitleOverlay.shared';
+import { cloneYTSubtitleConfig, DEFAULT_SETTINGS } from '../../../lib/settings';
 
 type MutableBadgeHost = HTMLElement & { setBadge(text: string): void };
 
@@ -259,5 +261,104 @@ describe('createReadFrogActivationController', () => {
         h.state = 'off';
         await h.advance(2_000);
         expect(h.dispatchCount()).toBe(1);
+    });
+});
+
+describe('resolvePluginTranslateYield（合并协调判定）', () => {
+    it('returns null when the switch is off, even with Read Frog present', () => {
+        expect(resolvePluginTranslateYield('en', { enabled: false, readFrogPresent: true })).toBeNull();
+        expect(resolvePluginTranslateYield('en', { enabled: false, readFrogPresent: false })).toBeNull();
+    });
+
+    it('returns null for Chinese subtitles even when the switch is on', () => {
+        expect(resolvePluginTranslateYield('zh', { enabled: true, readFrogPresent: true })).toBeNull();
+        expect(resolvePluginTranslateYield('zh-Hans', { enabled: true, readFrogPresent: false })).toBeNull();
+    });
+
+    it('yields to Read Frog when present, regardless of Immersive Translate', () => {
+        expect(resolvePluginTranslateYield('en', { enabled: true, readFrogPresent: true })).toBe('read-frog');
+        expect(resolvePluginTranslateYield('ja', { enabled: true, readFrogPresent: true })).toBe('read-frog');
+    });
+
+    it('falls back to the unconditional Immersive Translate yield when Read Frog is absent', () => {
+        expect(resolvePluginTranslateYield('en', { enabled: true, readFrogPresent: false })).toBe('immersive-translate');
+        expect(resolvePluginTranslateYield('ja', { enabled: true, readFrogPresent: false })).toBe('immersive-translate');
+    });
+
+    it('decides from the live DOM presence helper as used by the overlay', () => {
+        // 开关开 + 非中文 + 容器在场 → read-frog
+        mountReadFrogButton('OFF');
+        expect(
+            resolvePluginTranslateYield('en', {
+                enabled: true,
+                readFrogPresent: findReadFrogTranslateButtonContainer() !== null
+            })
+        ).toBe('read-frog');
+        unmountReadFrogButton();
+        // 容器缺席 → 回落 IT
+        expect(
+            resolvePluginTranslateYield('en', {
+                enabled: true,
+                readFrogPresent: findReadFrogTranslateButtonContainer() !== null
+            })
+        ).toBe('immersive-translate');
+    });
+});
+
+describe('cloneYTSubtitleConfig（旧设置迁移）', () => {
+    it('defaults to false when no legacy or new field is stored', () => {
+        expect(cloneYTSubtitleConfig({}).compatibleWithPluginTranslate).toBe(false);
+        expect(cloneYTSubtitleConfig(null).compatibleWithPluginTranslate).toBe(false);
+        expect(DEFAULT_SETTINGS.yt_subtitle.compatibleWithPluginTranslate).toBe(false);
+    });
+
+    it('migrates to true when either legacy switch was true', () => {
+        expect(
+            cloneYTSubtitleConfig({ compatibleWithImmersiveTranslate: true }).compatibleWithPluginTranslate
+        ).toBe(true);
+        expect(
+            cloneYTSubtitleConfig({ compatibleWithReadFrog: true }).compatibleWithPluginTranslate
+        ).toBe(true);
+        expect(
+            cloneYTSubtitleConfig({
+                compatibleWithImmersiveTranslate: true,
+                compatibleWithReadFrog: true
+            }).compatibleWithPluginTranslate
+        ).toBe(true);
+    });
+
+    it('migrates to false when both legacy switches are false', () => {
+        expect(
+            cloneYTSubtitleConfig({
+                compatibleWithImmersiveTranslate: false,
+                compatibleWithReadFrog: false
+            }).compatibleWithPluginTranslate
+        ).toBe(false);
+    });
+
+    it('adopts the stored new field directly and ignores legacy switches', () => {
+        expect(
+            cloneYTSubtitleConfig({
+                compatibleWithPluginTranslate: true,
+                compatibleWithImmersiveTranslate: false,
+                compatibleWithReadFrog: false
+            }).compatibleWithPluginTranslate
+        ).toBe(true);
+        expect(
+            cloneYTSubtitleConfig({
+                compatibleWithPluginTranslate: false,
+                compatibleWithImmersiveTranslate: true,
+                compatibleWithReadFrog: true
+            }).compatibleWithPluginTranslate
+        ).toBe(false);
+    });
+
+    it('drops legacy keys from the sanitized config', () => {
+        const sanitized = cloneYTSubtitleConfig({
+            compatibleWithImmersiveTranslate: true,
+            compatibleWithReadFrog: true
+        });
+        expect('compatibleWithImmersiveTranslate' in sanitized).toBe(false);
+        expect('compatibleWithReadFrog' in sanitized).toBe(false);
     });
 });

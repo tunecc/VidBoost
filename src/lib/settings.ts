@@ -91,10 +91,8 @@ export type YTSubtitleConfig = {
     preferredLanguageCode: string;
     position: YTSubtitlePosition;
     style: YTSubtitleStyle;
-    /** 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果 */
-    compatibleWithImmersiveTranslate: boolean;
-    /** 兼容 Read Frog：非中文字幕时自动开启 Read Frog 字幕翻译并让位 */
-    compatibleWithReadFrog: boolean;
+    /** 插件翻译兼容：非中文字幕时让位外部翻译插件（Read Frog 在场优先，缺席回落沉浸式翻译） */
+    compatibleWithPluginTranslate: boolean;
 };
 
 export type UIState = {
@@ -274,8 +272,7 @@ export const DEFAULT_SETTINGS: Settings = {
             importedFontId: '',
             customFontFamily: ''
         },
-        compatibleWithImmersiveTranslate: false,
-        compatibleWithReadFrog: false
+        compatibleWithPluginTranslate: false
     },
     h5_config: {
         speedStep: 0.1,
@@ -480,8 +477,27 @@ export function cloneYTSubtitleStyle(
     };
 }
 
+/**
+ * 旧版「兼容沉浸式翻译」/「兼容 Read Frog」独立开关的存量存储形态。
+ * 仅用于读取迁移：任一旧开关为 true → 合并后的「插件翻译兼容」开关为 true。
+ */
+type LegacyYTSubtitleCompatConfig = Partial<YTSubtitleConfig> & {
+    compatibleWithImmersiveTranslate?: unknown;
+    compatibleWithReadFrog?: unknown;
+};
+
+function resolveCompatibleWithPluginTranslate(
+    config: LegacyYTSubtitleCompatConfig | null | undefined
+): boolean {
+    if (typeof config?.compatibleWithPluginTranslate === 'boolean') {
+        return config.compatibleWithPluginTranslate;
+    }
+    return config?.compatibleWithImmersiveTranslate === true
+        || config?.compatibleWithReadFrog === true;
+}
+
 export function cloneYTSubtitleConfig(
-    config: Partial<YTSubtitleConfig> | null | undefined
+    config: LegacyYTSubtitleCompatConfig | null | undefined
 ): YTSubtitleConfig {
     const fallback = DEFAULT_SETTINGS.yt_subtitle;
     return {
@@ -500,17 +516,12 @@ export function cloneYTSubtitleConfig(
             : fallback.preferredLanguageCode,
         position: cloneYTSubtitlePosition(config?.position),
         style: cloneYTSubtitleStyle(config?.style),
-        compatibleWithImmersiveTranslate: typeof config?.compatibleWithImmersiveTranslate === 'boolean'
-            ? config.compatibleWithImmersiveTranslate
-            : fallback.compatibleWithImmersiveTranslate,
-        compatibleWithReadFrog: typeof config?.compatibleWithReadFrog === 'boolean'
-            ? config.compatibleWithReadFrog
-            : fallback.compatibleWithReadFrog
+        compatibleWithPluginTranslate: resolveCompatibleWithPluginTranslate(config)
     };
 }
 
 export function resolveSettings(source: Partial<Settings> = {}): Settings {
-    const subtitleSource = (source.yt_subtitle ?? {}) as Partial<YTSubtitleConfig>;
+    const subtitleSource = (source.yt_subtitle ?? {}) as LegacyYTSubtitleCompatConfig;
     return {
         ...DEFAULT_SETTINGS,
         ...source,
