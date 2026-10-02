@@ -40,6 +40,8 @@ import {
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
     type YouTubeTimedText,
+    createReadFrogActivationController,
+    findReadFrogTranslateButtonContainer,
     isChineseLanguageCode
 } from './youtube/subtitleOverlay.shared';
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
@@ -435,6 +437,7 @@ export class YouTubeSubtitleOverlay implements Feature {
     private subtitleUnavailableVideoId = '';
     private catalogVideoId = '';
     private catalogRequestInFlight = false;
+    private readonly readFrogActivation = createReadFrogActivationController();
     private manualNativeToggleOnVideoId = '';
 
     private boundVideo: HTMLVideoElement | null = null;
@@ -620,6 +623,7 @@ export class YouTubeSubtitleOverlay implements Feature {
 
     unmount() {
         this.enabled = false;
+        this.readFrogActivation.reset();
 
         if (this.syncTimer != null) {
             window.clearTimeout(this.syncTimer);
@@ -995,6 +999,12 @@ export class YouTubeSubtitleOverlay implements Feature {
                 return;
             }
 
+            // 兼容 Read Frog：非中文字幕且其在场时让位并自动开启其翻译（IT 让位优先）
+            if (this.shouldYieldToReadFrog(getSubtitleOptionLanguage(option))) {
+                this.yieldToReadFrog(buildSubtitleOptionKey(playerData.videoId, option));
+                return;
+            }
+
             const loaded = await this.fetchOptionWithFallback(option, playerData, abortController.signal);
             if (!this.isLoadActive(loadId, abortController)) {
                 return;
@@ -1157,6 +1167,12 @@ export class YouTubeSubtitleOverlay implements Feature {
         // 兼容 Immersive Translate：非中文字幕时让 IT 渲染
         if (option && this.shouldYieldToImmersiveTranslate(getSubtitleOptionLanguage(option))) {
             this.showNativeSubtitlesForImmersiveTranslate();
+            return;
+        }
+
+        // 兼容 Read Frog：非中文字幕且其在场时让位并自动开启其翻译（IT 让位优先）
+        if (option && this.shouldYieldToReadFrog(getSubtitleOptionLanguage(option))) {
+            this.yieldToReadFrog(buildSubtitleOptionKey(response.data.videoId, option));
             return;
         }
 
@@ -1673,15 +1689,41 @@ export class YouTubeSubtitleOverlay implements Feature {
     }
 
     /**
-     * 停止 VidBoost 字幕渲染并恢复原生字幕显示，让 IT 渲染翻译结果。
+     * 兼容 Read Frog：开关开启 + 非中文 + Read Frog 在场（按钮容器已挂载）。
+     * 与 IT 的无条件让位不同，插件缺席时返回 false，VidBoost 正常自渲染。
      */
-    private showNativeSubtitlesForImmersiveTranslate() {
+    private shouldYieldToReadFrog(trackLanguageCode: string): boolean {
+        if (!this.config.compatibleWithReadFrog) return false;
+        if (isChineseLanguageCode(trackLanguageCode)) return false;
+        return findReadFrogTranslateButtonContainer() !== null;
+    }
+
+    /**
+     * 停止 VidBoost 字幕渲染并恢复原生字幕显示（让位给外部翻译插件）。
+     */
+    private stopRenderingAndRestoreNativeSubtitles() {
         this.abortPendingLoad();
         this.stopRenderer();
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.destroyOverlay();
         this.setNativeSubtitlesHidden(false);
+    }
+
+    /**
+     * 停止 VidBoost 字幕渲染并恢复原生字幕显示，让 IT 渲染翻译结果。
+     */
+    private showNativeSubtitlesForImmersiveTranslate() {
+        this.stopRenderingAndRestoreNativeSubtitles();
+    }
+
+    /**
+     * 停止 VidBoost 字幕渲染并恢复原生字幕显示，让 Read Frog 渲染翻译结果；
+     * 并按 key（videoId + optionKey）受控触发其翻译开关（有界等待 / 验证 / 去重）。
+     */
+    private yieldToReadFrog(optionKey: string) {
+        this.stopRenderingAndRestoreNativeSubtitles();
+        this.readFrogActivation.activate(optionKey);
     }
 
     private shouldRememberNativeToggle() {

@@ -93,6 +93,8 @@ export type YTSubtitleConfig = {
     style: YTSubtitleStyle;
     /** 兼容 Immersive Translate：非中文字幕时让 IT 渲染翻译结果 */
     compatibleWithImmersiveTranslate: boolean;
+    /** 兼容 Read Frog：非中文字幕时自动开启 Read Frog 字幕翻译并让位 */
+    compatibleWithReadFrog: boolean;
 };
 
 export type UIState = {
@@ -272,7 +274,8 @@ export const DEFAULT_SETTINGS: Settings = {
             importedFontId: '',
             customFontFamily: ''
         },
-        compatibleWithImmersiveTranslate: false
+        compatibleWithImmersiveTranslate: false,
+        compatibleWithReadFrog: false
     },
     h5_config: {
         speedStep: 0.1,
@@ -499,7 +502,10 @@ export function cloneYTSubtitleConfig(
         style: cloneYTSubtitleStyle(config?.style),
         compatibleWithImmersiveTranslate: typeof config?.compatibleWithImmersiveTranslate === 'boolean'
             ? config.compatibleWithImmersiveTranslate
-            : fallback.compatibleWithImmersiveTranslate
+            : fallback.compatibleWithImmersiveTranslate,
+        compatibleWithReadFrog: typeof config?.compatibleWithReadFrog === 'boolean'
+            ? config.compatibleWithReadFrog
+            : fallback.compatibleWithReadFrog
     };
 }
 

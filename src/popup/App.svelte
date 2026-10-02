@@ -120,6 +120,7 @@
   let bbQualityTargetsTooltipOpen = false;
   let ytSubtitleFollowNativeTooltipOpen = false;
   let ytSubtitleCompatibleItTooltipOpen = false;
+  let ytSubtitleCompatibleReadFrogTooltipOpen = false;
   let bbQualityAddCurrentPending = false;
   let bbQualityAddCurrentStatus = "";
   let bbQualityAddCurrentTone: "neutral" | "success" | "error" = "neutral";
@@ -1455,6 +1456,7 @@
     bbQualityTargetsTooltipOpen = false;
     ytSubtitleFollowNativeTooltipOpen = false;
     ytSubtitleCompatibleItTooltipOpen = false;
+    ytSubtitleCompatibleReadFrogTooltipOpen = false;
     sectionOpen[section] = !sectionOpen[section];
   }
 
@@ -1490,6 +1492,14 @@
     ytSubtitleCompatibleItTooltipOpen = false;
   }
 
+  function toggleYtSubtitleCompatibleReadFrogTooltip() {
+    ytSubtitleCompatibleReadFrogTooltipOpen = !ytSubtitleCompatibleReadFrogTooltipOpen;
+  }
+
+  function closeYtSubtitleCompatibleReadFrogTooltip() {
+    ytSubtitleCompatibleReadFrogTooltipOpen = false;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       showLangMenu = false;
@@ -1497,6 +1507,7 @@
       closeBilibiliQualityTargetsTooltip();
       closeYtSubtitleFollowNativeTooltip();
       closeYtSubtitleCompatibleItTooltip();
+      closeYtSubtitleCompatibleReadFrogTooltip();
     }
   }
 
@@ -2226,6 +2237,64 @@
                     <span
                       class={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
                         ytSubtitleConfig.compatibleWithImmersiveTranslate ? "left-[22px]" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div class="settings-field setting-line">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="setting-label">{t("yt_subtitle_compatible_read_frog")}</span>
+
+                    <div class="relative flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        aria-controls="yt-subtitle-compatible-read-frog-tooltip"
+                        aria-expanded={ytSubtitleCompatibleReadFrogTooltipOpen}
+                        class="relative z-50 flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-black/5 text-[10px] font-bold text-gray-400 outline-none transition-colors hover:bg-black/10 hover:text-gray-600 focus:bg-cyan-500/10 focus:text-cyan-600 dark:bg-white/10 dark:text-white/40 dark:hover:bg-white/20 dark:hover:text-white/70 dark:focus:bg-cyan-500/20 dark:focus:text-cyan-300"
+                        on:click|stopPropagation={toggleYtSubtitleCompatibleReadFrogTooltip}
+                      >
+                        ?
+                      </button>
+
+                      {#if ytSubtitleCompatibleReadFrogTooltipOpen}
+                        <div
+                          id="yt-subtitle-compatible-read-frog-tooltip"
+                          role="tooltip"
+                          class="absolute left-1/2 top-full z-50 mt-2 w-[220px] -translate-x-1/2 rounded-xl border border-black/5 bg-white/90 p-2.5 text-[10.5px] leading-relaxed text-gray-600 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#2A2D35]/95 dark:text-white/70"
+                          in:fly|local={{ y: 6, duration: 180, opacity: 0.35, easing: quintOut }}
+                          out:fade|local={{ duration: 120 }}
+                        >
+                          {t("yt_subtitle_compatible_read_frog_desc")}
+                        </div>
+
+                        <button
+                          type="button"
+                          class="fixed inset-0 z-40 m-0 cursor-default border-0 bg-transparent p-0"
+                          aria-label={t("yt_subtitle_compatible_read_frog_desc")}
+                          on:click={closeYtSubtitleCompatibleReadFrogTooltip}
+                        ></button>
+                      {/if}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                      ytSubtitleConfig.compatibleWithReadFrog
+                        ? "bg-red-500"
+                        : "bg-gray-300 dark:bg-white/15"
+                    } ${ytSubtitleStyleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                    aria-pressed={ytSubtitleConfig.compatibleWithReadFrog}
+                    disabled={ytSubtitleStyleDisabled}
+                    on:click={() =>
+                      !ytSubtitleStyleDisabled &&
+                      updateYtSubtitleConfig({
+                        compatibleWithReadFrog: !ytSubtitleConfig.compatibleWithReadFrog,
+                      })}
+                  >
+                    <span
+                      class={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                        ytSubtitleConfig.compatibleWithReadFrog ? "left-[22px]" : "left-0.5"
                       }`}
                     />
                   </button>
