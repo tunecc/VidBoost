@@ -129,6 +129,23 @@ export function isChineseLanguageCode(languageCode: string): boolean {
     return languageCode.startsWith('zh');
 }
 
+export type PluginTranslateYield = 'read-frog' | 'immersive-translate';
+
+/**
+ * 「插件翻译兼容」单一开关的统一让位决策：
+ * - 开关关闭或中文字幕 → null（VidBoost 正常自渲染）；
+ * - Read Frog 在场 → 'read-frog'（让位并自动开启其翻译）；
+ * - Read Frog 不在场 → 'immersive-translate'（回落 IT 无条件让位）。
+ */
+export function resolvePluginTranslateYield(
+    trackLanguageCode: string,
+    options: { enabled: boolean; readFrogPresent: boolean }
+): PluginTranslateYield | null {
+    if (!options.enabled) return null;
+    if (isChineseLanguageCode(trackLanguageCode)) return null;
+    return options.readFrogPresent ? 'read-frog' : 'immersive-translate';
+}
+
 /** Read Frog 启用视频字幕后挂载在播放器控件栏的翻译按钮容器（open shadow root）。 */
 export const READ_FROG_TRANSLATE_BUTTON_CONTAINER_ID = 'read-frog-subtitles-translate-button-container';
 
