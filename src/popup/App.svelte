@@ -6,7 +6,6 @@
   import H5Settings from "./H5Settings.svelte";
   import AutoPauseSettings from "./AutoPauseSettings.svelte";
   import CdnSettings from "./CdnSettings.svelte";
-  import ThreadRipperSettings from "./ThreadRipperSettings.svelte";
   import {
     cloneYTSubtitleConfig,
     getSettings,
@@ -153,6 +152,7 @@
   let bbCdnNode = DEFAULT_SETTINGS.bb_cdn.node;
   let bbCdnBangumi = DEFAULT_SETTINGS.bb_cdn.bangumiMode;
   let bbCdnOpen = false;
+  let bbThreadRipperOpen = false;
   let bbCdnSpeedResults: Record<string, { speed: string; error: boolean }> = {};
   let bbCdnTesting = false;
   let bbCdnTestIncludeOverseas =
@@ -741,11 +741,9 @@
     bbCdnNode = event.detail.bbCdnNode;
   }
 
-  function handleBilibiliThreadRipperToggle(
-    event: CustomEvent<{ enabled: boolean }>,
-  ) {
+  function toggleBilibiliThreadRipper() {
     if (!globalEnabled) return;
-    const enabled = event.detail.enabled === true;
+    const enabled = !bbThreadRipper.enabled;
     bbThreadRipper = { ...bbThreadRipper, enabled };
     // Thread Ripper is mutually exclusive with the CDN switcher.
     if (enabled && bbCdnEnabled) {
@@ -753,18 +751,17 @@
     }
   }
 
-  function handleBilibiliThreadRipperRegion(
-    event: CustomEvent<{ region: "auto" | "mainland" | "overseas" }>,
-  ) {
+  function updateBilibiliThreadRipperRegion(region: string) {
     if (!globalEnabled) return;
-    bbThreadRipper = { ...bbThreadRipper, region: event.detail.region };
+    if (region !== "auto" && region !== "mainland" && region !== "overseas") {
+      return;
+    }
+    bbThreadRipper = { ...bbThreadRipper, region };
   }
 
-  function handleBilibiliNoP2pToggle(
-    event: CustomEvent<{ enabled: boolean }>,
-  ) {
+  function toggleBilibiliNoP2p() {
     if (!globalEnabled) return;
-    const enabled = event.detail.enabled === true;
+    const enabled = !bbNoP2p.enabled;
     bbNoP2p = { enabled };
     // No P2P is mutually exclusive with the CDN switcher.
     if (enabled && bbCdnEnabled) {
@@ -3453,16 +3450,123 @@
           >
 
           <!-- Thread Ripper / No P2P (mutually exclusive with CDN switcher) -->
-          <ThreadRipperSettings
-            {language}
-            {globalEnabled}
-            bbThreadRipperEnabled={bbThreadRipper.enabled}
-            bbThreadRipperRegion={bbThreadRipper.region}
-            bbNoP2pEnabled={bbNoP2p.enabled}
-            on:toggle-thread-ripper={handleBilibiliThreadRipperToggle}
-            on:select-region={handleBilibiliThreadRipperRegion}
-            on:toggle-no-p2p={handleBilibiliNoP2pToggle}
-          />
+          <AccordionItem
+            title={t("bb_thread_ripper_title")}
+            desc={t("bb_thread_ripper_desc")}
+            iconColor="cyan"
+            density="main"
+            isOpen={bbThreadRipperOpen}
+            masterChecked={bbThreadRipper.enabled}
+            disabled={!globalEnabled}
+            onToggleOpen={() => (bbThreadRipperOpen = !bbThreadRipperOpen)}
+            onToggleMaster={toggleBilibiliThreadRipper}
+          >
+            <div
+              slot="icon"
+              class="w-full h-full flex items-center justify-center"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9z"
+                />
+              </svg>
+            </div>
+            <div slot="content" class="space-y-0.5">
+              <!-- Delivery Region Preference -->
+              <div
+                class="flex items-center justify-between gap-3 py-1.5 px-0.5 border-b border-black/[0.03] dark:border-white/[0.03]"
+              >
+                <span
+                  class="text-[11px] text-gray-500 dark:text-white/40 font-medium tracking-wide shrink-0"
+                >
+                  {t("bb_thread_ripper_region_title")}
+                </span>
+                <select
+                  class="settings-select settings-select-cyan w-auto max-w-[170px] shrink-0 min-h-0 py-0.5 text-[11px]"
+                  disabled={!globalEnabled || !bbThreadRipper.enabled}
+                  aria-label={t("bb_thread_ripper_region_title")}
+                  value={bbThreadRipper.region}
+                  on:change={(event) =>
+                    updateBilibiliThreadRipperRegion(readTextValue(event))}
+                >
+                  <option value="auto"
+                    >{t("bb_thread_ripper_region_auto")}</option
+                  >
+                  <option value="mainland"
+                    >{t("bb_thread_ripper_region_mainland")}</option
+                  >
+                  <option value="overseas"
+                    >{t("bb_thread_ripper_region_overseas")}</option
+                  >
+                </select>
+              </div>
+
+              <!-- No P2P Toggle (Full Row Clickable) -->
+              <button
+                type="button"
+                class="w-full flex items-center justify-between py-2 px-0.5 text-left outline-none rounded-lg group active:bg-black/5 dark:active:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!globalEnabled}
+                aria-label={t("bb_no_p2p_enable")}
+                title={t("bb_no_p2p_enable")}
+                on:click={() => globalEnabled && toggleBilibiliNoP2p()}
+              >
+                <div class="flex-1 min-w-0 pr-2">
+                  <span
+                    class="text-[11px] text-gray-600 dark:text-white/60 font-medium group-active:text-gray-800 dark:group-active:text-white/80 transition-colors"
+                  >
+                    {t("bb_no_p2p_title")}
+                  </span>
+                  <p
+                    class="text-[9px] text-gray-400 dark:text-white/30 mt-0.5 leading-tight group-active:text-gray-500 dark:group-active:text-white/50 transition-colors"
+                  >
+                    {t("bb_no_p2p_desc")}
+                  </p>
+                </div>
+                <!-- Prevent internal label captures by disabling pointer events on the switch -->
+                <div
+                  class="relative inline-flex items-center ml-2 shrink-0 pointer-events-none"
+                >
+                  <input
+                    type="checkbox"
+                    class="sr-only peer"
+                    checked={bbNoP2p.enabled}
+                    readOnly
+                  />
+                  <div
+                    class="w-8 h-[18px] bg-black/10 dark:bg-white/10 rounded-full peer peer-checked:bg-cyan-500 transition-all after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-[14px] after:w-[14px] after:transition-all peer-checked:after:translate-x-[14px]"
+                  ></div>
+                </div>
+              </button>
+
+              <!-- Mutual Exclusivity Hint -->
+              <div class="flex items-start gap-1.5 px-0.5 pb-1 pt-0.5">
+                <svg
+                  class="w-3 h-3 mt-[1px] shrink-0 text-gray-400 dark:text-white/30"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p class="text-[9px] leading-snug text-gray-400 dark:text-white/30">
+                  {t("bb_thread_ripper_exclusive_hint")}
+                </p>
+              </div>
+            </div>
+          </AccordionItem>
         </SectionCard>
         <div
           class="popup-main-inline-footer relative z-10 flex shrink-0 items-center justify-center gap-1.5"

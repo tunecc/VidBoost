@@ -273,6 +273,22 @@ Currently supported:
   <img src="./assets/bilibili_cdn.png" width="72%" alt="Bilibili CDN feature screenshot" />
 </p>
 
+#### 4. Thread Ripper and No P2P
+
+Reference: the thread-ripper module of [SukkaW/Make-Bilibili-Great-Than-Ever-Before](https://github.com/SukkaW/Make-Bilibili-Great-Than-Ever-Before)
+
+Bilibili often routes video segments to PCDN / edge nodes, and during peak hours playback can get stuck on one slow node. Thread Ripper splits a video's download into multiple chunks, fetches them concurrently from several CDNs, schedules threads and nodes automatically, and falls back to native loading on failure.
+
+Currently supported:
+
+- Concurrent multi-CDN chunked downloads with automatic thread and node scheduling
+- Delivery region preference: Auto (race all) / Prefer mainland / Prefer overseas
+- Automatic fallback to native loading on failure
+- No P2P: blocks P2P / PCDN nodes and rewrites them to official CDN hosts
+- No P2P can be enabled on its own or together with Thread Ripper
+
+Both options live inside the "Bilibili Thread Ripper" entry; click the chevron to expand the settings. They are mutually exclusive with the CDN switcher above — enabling either side turns the other off automatically.
+
 <details>
   <summary>Show the full Bilibili settings panel screenshot</summary>
   <p align="center">

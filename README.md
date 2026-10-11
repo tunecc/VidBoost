@@ -289,6 +289,23 @@ YouTube 首页、订阅流这类信息流里，经常会混进一些频道会员
 </p>
 
 
+#### 4. 线程撕裂者与屏蔽 P2P
+
+参考：[SukkaW/Make-Bilibili-Great-Than-Ever-Before](https://github.com/SukkaW/Make-Bilibili-Great-Than-Ever-Before) 的 thread-ripper 模块
+
+B 站经常把视频分片调度到 PCDN / 边缘节点，高峰期容易卡在某个慢节点上。线程撕裂者会把视频下载拆成多个分片，并发从多个 CDN 同时拉取、自动调度线程与节点，失败时自动回退到原生加载。
+
+目前支持：
+
+- 多 CDN 并发分片下载，自动调度线程与节点
+- 加速地区偏好：跟随竞速（全部）/ 优先大陆 / 优先海外
+- 失败自动回退原生加载
+- 屏蔽 P2P：拦截 P2P / PCDN 节点，改写到官方 CDN 加载
+- 屏蔽 P2P 可以单独开启，也可以和线程撕裂者一起用
+
+这两个选项收纳在「B 站线程撕裂者」条目里，点击右侧倒三角展开设置；功能与上面的 CDN 切换互斥，开启任一方会自动关闭另一方。
+
+
 <details>
   <summary>展开查看完整的 B 站设置面板截图</summary>
   <p align="center">
