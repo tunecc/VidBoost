@@ -46,6 +46,16 @@
         },
         {
             "matches": [
+                "*://*.bilibili.com/*"
+            ],
+            "js": [
+                "assets/bb-thread-ripper.page.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": [
                 "*://*.douyin.com/*"
             ],
             "js": [

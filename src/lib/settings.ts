@@ -123,6 +123,14 @@ export type BilibiliCdnConfig = {
     bangumiMode: boolean;
 };
 
+export type BilibiliThreadRipperConfig = {
+    enabled: boolean;
+};
+
+export type BilibiliNoP2pConfig = {
+    enabled: boolean;
+};
+
 export type BilibiliCdnTestConfig = {
     includeOverseas: boolean;
     autoSelectBest: boolean;
@@ -153,6 +161,8 @@ export type Settings = {
     bb_quality: BilibiliQualityConfig;
     bb_cdn: BilibiliCdnConfig;
     bb_cdn_test: BilibiliCdnTestConfig;
+    bb_thread_ripper: BilibiliThreadRipperConfig;
+    bb_no_p2p: BilibiliNoP2pConfig;
     language: 'auto' | 'en' | 'zh';
     yt_config: YTConfig;
     yt_subtitle: YTSubtitleConfig;
@@ -182,6 +192,8 @@ export const CONTENT_SETTINGS_KEYS = [
     'bb_subtitle',
     'bb_quality',
     'bb_cdn',
+    'bb_thread_ripper',
+    'bb_no_p2p',
     'language',
     'yt_config',
     'yt_subtitle',
@@ -234,6 +246,8 @@ export const DEFAULT_SETTINGS: Settings = {
         blockedQns: []
     },
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
+    bb_thread_ripper: { enabled: false },
+    bb_no_p2p: { enabled: false },
     bb_cdn_test: {
         includeOverseas: true,
         autoSelectBest: false,
@@ -554,6 +568,12 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         },
         bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
         bb_cdn_test: { ...DEFAULT_SETTINGS.bb_cdn_test, ...(source.bb_cdn_test ?? {}) },
+        bb_thread_ripper: {
+            enabled: (source.bb_thread_ripper ?? DEFAULT_SETTINGS.bb_thread_ripper).enabled === true
+        },
+        bb_no_p2p: {
+            enabled: (source.bb_no_p2p ?? DEFAULT_SETTINGS.bb_no_p2p).enabled === true
+        },
         ap_sites: { ...DEFAULT_SETTINGS.ap_sites, ...(source.ap_sites ?? {}) },
         ap_custom_sites: Array.isArray(source.ap_custom_sites)
             ? [...source.ap_custom_sites]

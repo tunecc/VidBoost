@@ -21,6 +21,7 @@ type FirefoxFeatureModuleMap = {
     'firefox-feature-bilibili-auto-subtitle': { BilibiliAutoSubtitle: new () => Feature };
     'firefox-feature-bilibili-auto-quality': { BilibiliAutoQuality: new () => Feature };
     'firefox-feature-bilibili-cdn': { BilibiliCDN: new () => Feature };
+    'firefox-feature-bilibili-thread-ripper': { BilibiliThreadRipper: new () => Feature };
     'firefox-feature-h5-enhancer': { H5Enhancer: new () => Feature };
     'firefox-feature-bilibili-fast-pause': { BilibiliFastPause: new () => Feature };
     'firefox-feature-stats-speed-converter': { StatsSpeedConverter: new () => Feature };
@@ -246,6 +247,10 @@ const bilibiliCdn = {
         bilibiliCdnController.getCurrentInstance()?.abortSpeedTest();
     }
 };
+const bilibiliThreadRipper = createDeferredFeature(
+    'BilibiliThreadRipper',
+    async () => new (await loadFirefoxFeatureModule('firefox-feature-bilibili-thread-ripper')).BilibiliThreadRipper()
+);
 
 const features = [
     h5Enhancer,
@@ -262,7 +267,8 @@ const features = [
     youtubeCdnStatus,
     youtubeBottomProgress,
     statsSpeedConverter,
-    bilibiliAutoQuality
+    bilibiliAutoQuality,
+    bilibiliThreadRipper
 ];
 
 const mountedState = new Array(features.length).fill(false);
@@ -404,7 +410,9 @@ function applyFromSettings(res: Partial<Settings>) {
     const bbBlockSpaceOn = settings.bb_block_space !== false;
     const ytMemberBlockOn = settings.yt_member_block === true;
     const bbSubtitleOn = settings.bb_subtitle.enabled === true;
-    const bbCdnOn = settings.bb_cdn.enabled === true;
+    const bbTrOn = settings.bb_thread_ripper?.enabled === true;
+    const bbNoP2pOn = settings.bb_no_p2p?.enabled === true;
+    const bbCdnOn = settings.bb_cdn?.enabled === true && !bbTrOn && !bbNoP2pOn;
     const bbQualityOn = settings.bb_quality.enabled === true;
 
     h5Enhancer.updateSettings(settings);
@@ -433,9 +441,17 @@ function applyFromSettings(res: Partial<Settings>) {
     setFeatureEnabled(12, ytBottomProgressOn);
     setFeatureEnabled(13, statsSpeedConverterOn);
     setFeatureEnabled(14, bbQualityOn);
+    setFeatureEnabled(15, bbTrOn || bbNoP2pOn);
 
-    // Push CDN config update (always, so page script gets latest node)
-    bilibiliCdn.updateSettings(settings);
+    // Push CDN config update (always, so page script gets latest node;
+    // bb_cdn is normalized so thread-ripper / no-p2p wins the mutual exclusion)
+    bilibiliCdn.updateSettings({
+        ...settings,
+        bb_cdn: { ...settings.bb_cdn, enabled: bbCdnOn }
+    });
+
+    // Push thread-ripper / no-p2p config update (always, so page script gets latest state)
+    bilibiliThreadRipper.updateSettings(settings);
 
     publishDebug(settings);
 }

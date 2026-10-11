@@ -6,6 +6,7 @@
   import H5Settings from "./H5Settings.svelte";
   import AutoPauseSettings from "./AutoPauseSettings.svelte";
   import CdnSettings from "./CdnSettings.svelte";
+  import ThreadRipperSettings from "./ThreadRipperSettings.svelte";
   import {
     cloneYTSubtitleConfig,
     getSettings,
@@ -13,6 +14,8 @@
     DEFAULT_SETTINGS,
     POPUP_SETTINGS_KEYS,
     type Settings,
+    type BilibiliThreadRipperConfig,
+    type BilibiliNoP2pConfig,
     type BilibiliSubtitleTargetMode,
     type YTSubtitleConfig,
     type YTSubtitleEffect,
@@ -159,6 +162,14 @@
   let bbCdnTestSampleSizeMiB = DEFAULT_SETTINGS.bb_cdn_test.sampleSizeMiB;
   let bbCdnTestTimeoutSeconds = DEFAULT_SETTINGS.bb_cdn_test.timeoutSeconds;
   let bbCdnSpeedTestRunId = 0;
+
+  // Bilibili Thread Ripper / No P2P Config (mutually exclusive with bb_cdn)
+  let bbThreadRipper: BilibiliThreadRipperConfig = {
+    enabled: DEFAULT_SETTINGS.bb_thread_ripper.enabled,
+  };
+  let bbNoP2p: BilibiliNoP2pConfig = {
+    enabled: DEFAULT_SETTINGS.bb_no_p2p.enabled,
+  };
 
   const BB_CDN_SPEED_RESULT_KEY = "bb_cdn_speed_results";
 
@@ -726,6 +737,30 @@
     event: CustomEvent<{ bbCdnNode: string }>,
   ) {
     bbCdnNode = event.detail.bbCdnNode;
+  }
+
+  function handleBilibiliThreadRipperToggle(
+    event: CustomEvent<{ enabled: boolean }>,
+  ) {
+    if (!globalEnabled) return;
+    const enabled = event.detail.enabled === true;
+    bbThreadRipper = { enabled };
+    // Thread Ripper is mutually exclusive with the CDN switcher.
+    if (enabled && bbCdnEnabled) {
+      bbCdnEnabled = false;
+    }
+  }
+
+  function handleBilibiliNoP2pToggle(
+    event: CustomEvent<{ enabled: boolean }>,
+  ) {
+    if (!globalEnabled) return;
+    const enabled = event.detail.enabled === true;
+    bbNoP2p = { enabled };
+    // No P2P is mutually exclusive with the CDN switcher.
+    if (enabled && bbCdnEnabled) {
+      bbCdnEnabled = false;
+    }
   }
 
   function normalizeMemberTagList(items: string[]) {
@@ -1316,6 +1351,13 @@
         bbCdnTestTimeoutSeconds = speedTestOptions.timeoutSeconds;
       }
 
+      bbThreadRipper = {
+        enabled: res.bb_thread_ripper?.enabled === true,
+      };
+      bbNoP2p = {
+        enabled: res.bb_no_p2p?.enabled === true,
+      };
+
       language = res.language || DEFAULT_SETTINGS.language;
 
       if (res.ui_state) {
@@ -1422,6 +1464,8 @@
           node: bbCdnNode,
           bangumiMode: bbCdnBangumi,
         },
+        bb_thread_ripper: { ...bbThreadRipper },
+        bb_no_p2p: { ...bbNoP2p },
       });
     }
   }
@@ -3290,8 +3334,15 @@
             masterChecked={bbCdnEnabled}
             disabled={!globalEnabled}
             onToggleOpen={() => (bbCdnOpen = !bbCdnOpen)}
-            onToggleMaster={() =>
-              globalEnabled && (bbCdnEnabled = !bbCdnEnabled)}
+            onToggleMaster={() => {
+              if (!globalEnabled) return;
+              bbCdnEnabled = !bbCdnEnabled;
+              // CDN switcher is mutually exclusive with Thread Ripper / No P2P.
+              if (bbCdnEnabled) {
+                bbThreadRipper = { ...bbThreadRipper, enabled: false };
+                bbNoP2p = { ...bbNoP2p, enabled: false };
+              }
+            }}
           >
             <div
               slot="icon"
@@ -3388,6 +3439,16 @@
               </button>
             </div></AccordionItem
           >
+
+          <!-- Thread Ripper / No P2P (mutually exclusive with CDN switcher) -->
+          <ThreadRipperSettings
+            {language}
+            {globalEnabled}
+            bbThreadRipperEnabled={bbThreadRipper.enabled}
+            bbNoP2pEnabled={bbNoP2p.enabled}
+            on:toggle-thread-ripper={handleBilibiliThreadRipperToggle}
+            on:toggle-no-p2p={handleBilibiliNoP2pToggle}
+          />
         </SectionCard>
         <div
           class="popup-main-inline-footer relative z-10 flex shrink-0 items-center justify-center gap-1.5"

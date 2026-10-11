@@ -21,6 +21,7 @@ export default defineConfig({
                 'firefox-feature-bilibili-auto-subtitle': path.resolve(__dirname, 'src/features/BilibiliAutoSubtitle.ts'),
                 'firefox-feature-bilibili-auto-quality': path.resolve(__dirname, 'src/features/BilibiliAutoQuality.ts'),
                 'firefox-feature-bilibili-cdn': path.resolve(__dirname, 'src/features/BilibiliCDN.ts'),
+                'firefox-feature-bilibili-thread-ripper': path.resolve(__dirname, 'src/features/BilibiliThreadRipper.ts'),
                 'firefox-feature-h5-enhancer': path.resolve(__dirname, 'src/features/H5Enhancer.ts'),
                 'firefox-feature-bilibili-fast-pause': path.resolve(__dirname, 'src/features/BilibiliFastPause.ts'),
                 'firefox-feature-stats-speed-converter': path.resolve(__dirname, 'src/features/StatsSpeedConverter.ts'),

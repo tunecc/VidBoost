@@ -15,6 +15,7 @@ const EXPECTED_DEFERRED_MAPPINGS = new Map([
     ['bilibiliAutoQuality', 'firefox-feature-bilibili-auto-quality'],
     ['bilibiliFastPause', 'firefox-feature-bilibili-fast-pause'],
     ['bilibiliCdn', 'firefox-feature-bilibili-cdn'],
+    ['bilibiliThreadRipper', 'firefox-feature-bilibili-thread-ripper'],
     ['statsSpeedConverter', 'firefox-feature-stats-speed-converter'],
     ['youtubeSeekBlocker', 'firefox-feature-youtube-seek-blocker'],
     ['youtubeFastPause', 'firefox-feature-youtube-fast-pause'],
