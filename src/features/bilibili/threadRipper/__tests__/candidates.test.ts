@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { CandidateTier, findCandidate, isCandidateUsable, mediaCandidates } from '../player/candidates';
+import { afterEach, describe, expect, it } from 'vitest';
+import { CandidateTier, findCandidate, isCandidateUsable, mediaCandidates, setRegionPreference } from '../player/candidates';
 import type { MediaCandidate } from '../player/candidates';
 import { ingestPlayinfo, noteHost, toMediaAddress } from '../player/registry';
 import type { MediaFile } from '../player/registry';
@@ -35,6 +35,82 @@ function ingestFile(baseUrl: string, backupUrl?: string): MediaFile {
     return files![0];
 }
 
+afterEach(() => {
+    setRegionPreference('auto');
+});
+
+describe('threadRipper region preference', () => {
+    const MIRROR_PATH = '/upgcxcode/51/02/368854051/Cd1/Cd1-1-30080.m4s';
+
+    it('mainland preference restricts swap targets to mainland hosts', () => {
+        setRegionPreference('mainland');
+        const file = ingestFile(`https://upos-sz-mirrorcosov.bilivideo.com${MIRROR_PATH}?deadline=1728000000&upsig=r1&os=cosov`);
+        const candidates = mediaCandidates(null, file);
+        const swaps = candidates.filter(c => c.hostname !== 'upos-sz-mirrorcosov.bilivideo.com');
+        expect(swaps.length).toBeGreaterThan(0);
+        for (const swap of swaps) {
+            expect(/ov\.bilivideo\.com$|akamaized\.net$/.test(swap.hostname) || swap.hostname.startsWith('cn-hk-')).toBe(false);
+        }
+    });
+
+    it('overseas preference restricts swap targets to overseas hosts', () => {
+        setRegionPreference('overseas');
+        const file = ingestFile(`https://upos-sz-mirrorcos.bilivideo.com${MIRROR_PATH}?deadline=1728000000&upsig=r2&os=cos`);
+        const candidates = mediaCandidates(null, file);
+        const swaps = candidates.filter(c => c.hostname !== 'upos-sz-mirrorcos.bilivideo.com');
+        expect(swaps.length).toBeGreaterThan(0);
+        for (const swap of swaps) {
+            expect(swap.hostname.startsWith('upos-sz-mirror') && !/ov\.bilivideo\.com$/.test(swap.hostname)).toBe(false);
+        }
+    });
+
+    it('demotes non-preferred listed addresses to RegionFallback instead of dropping them', () => {
+        setRegionPreference('mainland');
+        const file = ingestFile(`https://upos-sz-mirrorcosov.bilivideo.com${MIRROR_PATH}?deadline=1728000000&upsig=r3&os=cosov`);
+        const candidates = mediaCandidates(null, file);
+        const listed = candidates.find(c => c.hostname === 'upos-sz-mirrorcosov.bilivideo.com');
+        expect(listed).toBeDefined();
+        expect(listed!.tier).toBe(CandidateTier.RegionFallback);
+        const preferred = candidates.filter(c => c.tier < CandidateTier.RegionFallback);
+        expect(preferred.length).toBeGreaterThan(0);
+    });
+
+    it('falls back to the whole pool when only non-preferred hosts exist', () => {
+        setRegionPreference('mainland');
+        const file = ingestFile(`https://upos-sz-mirrorakam.akamaized.net${MIRROR_PATH}?deadline=1728000000&upsig=r4`);
+        const candidates = mediaCandidates(null, file);
+        // akamaized-only playinfo: mainland swaps still exist, so the listed akamai address is
+        // demoted to RegionFallback (kept as last resort, not lost)
+        expect(candidates.length).toBeGreaterThan(0);
+        const fallbackListed = candidates.find(c => c.hostname.endsWith('.akamaized.net'));
+        expect(fallbackListed).toBeDefined();
+        expect(fallbackListed!.tier).toBe(CandidateTier.RegionFallback);
+        expect(candidates.some(c => c.tier < CandidateTier.RegionFallback)).toBe(true);
+    });
+
+    it('leaves tiers untouched when no preferred-region candidate exists for a file', () => {
+        // 非 upgcxcode 路径的文件没有任何换签候选可被地区过滤，hasPreferred=false → 不降级
+        setRegionPreference('mainland');
+        const file = ingestFile(`https://upos-sz-mirrorcosov.bilivideo.com/video/99/91/137649199/137649199-1-100023.m4s?deadline=1728000000&upsig=w9&os=cosov`);
+        const candidates = mediaCandidates(null, file);
+        expect(candidates.length).toBeGreaterThan(0);
+        expect(candidates.every(c => c.tier !== CandidateTier.RegionFallback)).toBe(true);
+        const listed = candidates.find(c => c.hostname === 'upos-sz-mirrorcosov.bilivideo.com');
+        expect(listed).toBeDefined();
+        expect(listed!.tier).toBe(CandidateTier.ListedMirror);
+    });
+
+    it('auto keeps candidate construction region-agnostic', () => {
+        setRegionPreference('auto');
+        const file = ingestFile(`https://upos-sz-mirrorcosov.bilivideo.com${MIRROR_PATH}?deadline=1728000000&upsig=r5&os=cosov`);
+        const candidates = mediaCandidates(null, file);
+        expect(candidates.some(c => c.hostname.startsWith('cn-hk-'))).toBe(true);
+        expect(candidates.some(c => c.hostname.endsWith('.akamaized.net'))).toBe(true);
+        const listed = candidates.find(c => c.hostname === 'upos-sz-mirrorcosov.bilivideo.com');
+        expect(listed!.tier).not.toBe(CandidateTier.RegionFallback);
+    });
+});
+
 describe('threadRipper candidate tiers', () => {
     it('orders the tiers from listed mirrors to foreign hosts', () => {
         const tiers = [
@@ -45,9 +121,10 @@ describe('threadRipper candidate tiers', () => {
             CandidateTier.Source,
             CandidateTier.Proxy,
             CandidateTier.P2P,
-            CandidateTier.Foreign
+            CandidateTier.Foreign,
+        CandidateTier.RegionFallback
         ];
-        expect(tiers).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+        expect(tiers).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     });
 });
 

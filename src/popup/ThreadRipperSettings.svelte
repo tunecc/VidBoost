@@ -5,6 +5,7 @@
   export let language: I18nLang = "auto";
   export let globalEnabled: boolean = true;
   export let bbThreadRipperEnabled: boolean = false;
+  export let bbThreadRipperRegion: "auto" | "mainland" | "overseas" = "auto";
   export let bbNoP2pEnabled: boolean = false;
 
   const dispatch = createEventDispatcher();
@@ -14,6 +15,14 @@
   function toggleThreadRipper() {
     if (!globalEnabled) return;
     dispatch("toggle-thread-ripper", { enabled: !bbThreadRipperEnabled });
+  }
+
+  function selectRegion(event: Event) {
+    if (!globalEnabled) return;
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === "mainland" || value === "overseas" || value === "auto") {
+      dispatch("select-region", { region: value });
+    }
   }
 
   function toggleNoP2p() {
@@ -61,6 +70,26 @@
       ></div>
     </div>
   </button>
+
+  <!-- Region Preference Select (applies to the thread ripper) -->
+  <div class="flex items-center justify-between gap-2 min-h-10 px-1.5 py-1">
+    <span
+      class="text-[11px] leading-snug text-gray-600 dark:text-white/60 shrink-0"
+    >
+      {t("bb_thread_ripper_region_title")}
+    </span>
+    <select
+      class="shrink-0 rounded-md border border-black/10 dark:border-white/10 bg-white dark:bg-white/10 text-[11px] text-gray-700 dark:text-white/80 px-1.5 py-1 outline-none disabled:opacity-50"
+      disabled={!globalEnabled || !bbThreadRipperEnabled}
+      aria-label={t("bb_thread_ripper_region_title")}
+      value={bbThreadRipperRegion}
+      on:change={selectRegion}
+    >
+      <option value="auto">{t("bb_thread_ripper_region_auto")}</option>
+      <option value="mainland">{t("bb_thread_ripper_region_mainland")}</option>
+      <option value="overseas">{t("bb_thread_ripper_region_overseas")}</option>
+    </select>
+  </div>
 
   <!-- No P2P Toggle (Full Row Clickable) -->
   <button

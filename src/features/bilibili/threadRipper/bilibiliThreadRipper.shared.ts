@@ -6,8 +6,11 @@
  * Copyright (c) 2024 Sukka), PR #31 "feat: thread-ripper".
  */
 
+export type BilibiliThreadRipperRegion = 'auto' | 'mainland' | 'overseas';
+
 export type BilibiliThreadRipperConfig = {
     enabled: boolean;
+    region: BilibiliThreadRipperRegion;
 };
 
 export type BilibiliNoP2pConfig = {
@@ -26,7 +29,7 @@ export const BB_TR_PAGE_SOURCE = 'vb:bb-thread-ripper:page';
 export const BB_TR_CONTENT_SOURCE = 'vb:bb-thread-ripper:content';
 
 export const DEFAULT_BB_THREAD_RIPPER_PAGE_CONFIG: BilibiliThreadRipperPageConfig = {
-    threadRipper: { enabled: false },
+    threadRipper: { enabled: false, region: 'auto' },
     noP2p: { enabled: false }
 };
 
@@ -34,11 +37,15 @@ function sanitizeEnabledFlag(value: unknown): boolean {
     return value === true;
 }
 
+function sanitizeRegion(value: unknown): BilibiliThreadRipperRegion {
+    return value === 'mainland' || value === 'overseas' ? value : 'auto';
+}
+
 export function cloneBilibiliThreadRipperPageConfig(
     config: BilibiliThreadRipperPageConfig
 ): BilibiliThreadRipperPageConfig {
     return {
-        threadRipper: { enabled: config.threadRipper.enabled },
+        threadRipper: { enabled: config.threadRipper.enabled, region: config.threadRipper.region },
         noP2p: { enabled: config.noP2p.enabled }
     };
 }
@@ -48,7 +55,8 @@ export function sanitizeBilibiliThreadRipperPageConfig(
 ): BilibiliThreadRipperPageConfig {
     return {
         threadRipper: {
-            enabled: sanitizeEnabledFlag(config?.threadRipper?.enabled)
+            enabled: sanitizeEnabledFlag(config?.threadRipper?.enabled),
+            region: sanitizeRegion(config?.threadRipper?.region)
         },
         noP2p: {
             enabled: sanitizeEnabledFlag(config?.noP2p?.enabled)

@@ -35,6 +35,7 @@ import {
     type BilibiliThreadRipperPageConfig
 } from './bilibiliThreadRipper.shared';
 import { createThreadRipper } from './engine';
+import { setRegionPreference } from './player/candidates';
 import { installNoP2p } from './noP2pMocks';
 import { noP2PPolicy } from './noP2pPolicy';
 import { initPlayerInterceptor, player } from './player/interceptorIndex';
@@ -228,6 +229,7 @@ type OnResponseHook = (
         );
         trEnabled = config.threadRipper.enabled;
         noP2pEnabled = config.noP2p.enabled;
+        setRegionPreference(config.threadRipper.region);
 
         // Live pages are never taken over (upstream thread-ripper.ts skips live:
         // live streams are not DASH segments)

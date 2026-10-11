@@ -8,7 +8,8 @@ import {
 import {
     DEFAULT_BB_THREAD_RIPPER_PAGE_CONFIG,
     sanitizeBilibiliThreadRipperPageConfig,
-    type BilibiliThreadRipperPageConfig
+    type BilibiliThreadRipperPageConfig,
+    type BilibiliThreadRipperRegion
 } from './bilibili/threadRipper/bilibiliThreadRipper.shared';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -18,6 +19,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readEnabledFlag(value: unknown): boolean {
     if (!isRecord(value)) return false;
     return value.enabled === true;
+}
+
+function readRegionPreference(value: unknown): BilibiliThreadRipperRegion {
+    if (!isRecord(value)) return 'auto';
+    return value.region === 'mainland' || value.region === 'overseas' ? value.region : 'auto';
 }
 
 export class BilibiliThreadRipper implements Feature {
@@ -46,6 +52,7 @@ export class BilibiliThreadRipper implements Feature {
 
         const bbThreadRipperOn = readEnabledFlag(record.bb_thread_ripper);
         const bbNoP2pOn = readEnabledFlag(record.bb_no_p2p);
+        const bbThreadRipperRegion = readRegionPreference(record.bb_thread_ripper);
 
         // Effective states per the confirmed mutual-exclusion rule:
         // - thread-ripper and no-p2p are independent and may both be on;
@@ -57,7 +64,7 @@ export class BilibiliThreadRipper implements Feature {
         const noP2pEffective = bbNoP2pOn;
 
         this.config = sanitizeBilibiliThreadRipperPageConfig({
-            threadRipper: { enabled: threadRipperEffective },
+            threadRipper: { enabled: threadRipperEffective, region: bbThreadRipperRegion },
             noP2p: { enabled: noP2pEffective }
         });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     classifyCdnUrl,
+    hostRegion,
     isAkamaiHost,
     isKnownNonVideoUrl,
     isMirrorHost,
@@ -87,5 +88,21 @@ describe('threadRipper CDN classification', () => {
         expect(isKnownNonVideoUrl('blob:https://www.bilibili.com/1234')).toBe(true);
         expect(isKnownNonVideoUrl('https://upos-sz-mirrorali.bilivideo.com/upgcxcode/21/07/268854021/Bd1/Bd1-1-30080.m4s?upsig=abc')).toBe(false);
         expect(isKnownNonVideoUrl(new URL('https://www.bilibili.com/video/BV1xx'))).toBe(true);
+    });
+});
+
+describe('hostRegion', () => {
+    it('classifies delivery regions per the upstream BTR convention (Hong Kong = overseas)', () => {
+        expect(hostRegion('upos-sz-mirrorali.bilivideo.com')).toBe('mainland');
+        expect(hostRegion('upos-sz-mirrorcos.bilivideo.com')).toBe('mainland');
+        expect(hostRegion('upos-sz-mirror08c.bilivideo.com')).toBe('mainland');
+        expect(hostRegion('upos-sz-estgoss.bilivideo.com')).toBe('mainland');
+        expect(hostRegion('upos-sz-mirrorcoso1.bilivideo.com')).toBe('mainland'); // `o1` 结尾非 `ov`
+        expect(hostRegion('upos-sz-mirrorcosb.bilivideo.com')).toBe('mainland');
+        expect(hostRegion('upos-sz-mirrorcosov.bilivideo.com')).toBe('overseas');
+        expect(hostRegion('upos-sz-mirroraliov.bilivideo.com')).toBe('overseas');
+        expect(hostRegion('cn-hk-eq-01-01.bilivideo.com')).toBe('overseas');
+        expect(hostRegion('cn-hk-eq-01-03.bilivideo.com')).toBe('overseas');
+        expect(hostRegion('upos-hz-mirrorakam.akamaized.net')).toBe('overseas');
     });
 });

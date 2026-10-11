@@ -38,6 +38,24 @@ export function isMirrorHost(hostname: string): boolean {
     return mirrorRegex.test(`https://${hostname}/upgcxcode/`);
 }
 
+/** Delivery regions a user may prefer; Hong Kong counts as overseas (upstream BTR convention) */
+export type HostRegion = 'mainland' | 'overseas';
+
+/**
+ * Mainland mirrors are the plain `upos-sz-mirror*` families; the overseas delivery lines are the
+ * `ov`-suffix mirrors, the Hong Kong `cn-hk-eq-*` PoPs, and Akamai.
+ */
+export function hostRegion(hostname: string): HostRegion {
+    const host = hostname.toLowerCase();
+    if (host.endsWith('.akamaized.net') || host.startsWith('cn-hk-')) {
+        return 'overseas';
+    }
+    if (host.endsWith('ov.bilivideo.com')) {
+        return 'overseas';
+    }
+    return 'mainland';
+}
+
 /**
  * Akamai matches `mirrorRegex`, but it does not accept upos signatures (403): an Akamai URL is
  * only valid with its own signature, it can never be the target of a host swap.

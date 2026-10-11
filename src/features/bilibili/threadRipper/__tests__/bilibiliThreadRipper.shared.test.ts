@@ -21,7 +21,7 @@ describe('bilibili thread ripper shared config', () => {
 
     it('defaults both capabilities to disabled', () => {
         expect(DEFAULT_BB_THREAD_RIPPER_PAGE_CONFIG).toEqual({
-            threadRipper: { enabled: false },
+            threadRipper: { enabled: false, region: 'auto' },
             noP2p: { enabled: false }
         });
     });
@@ -37,20 +37,20 @@ describe('bilibili thread ripper shared config', () => {
 
     it('sanitizes non-boolean and missing fields back to defaults', () => {
         expect(sanitizeBilibiliThreadRipperPageConfig(null)).toEqual({
-            threadRipper: { enabled: false },
+            threadRipper: { enabled: false, region: 'auto' },
             noP2p: { enabled: false }
         });
         expect(
             sanitizeBilibiliThreadRipperPageConfig({
-                threadRipper: { enabled: 'yes' as unknown as boolean },
+                threadRipper: { enabled: 'yes' as unknown as boolean, region: 'narnia' as never },
                 noP2p: {}
             })
-        ).toEqual({ threadRipper: { enabled: false }, noP2p: { enabled: false } });
+        ).toEqual({ threadRipper: { enabled: false, region: 'auto' }, noP2p: { enabled: false } });
         expect(
             sanitizeBilibiliThreadRipperPageConfig({
-                threadRipper: { enabled: true },
+                threadRipper: { enabled: true, region: 'mainland' },
                 noP2p: { enabled: false }
             })
-        ).toEqual({ threadRipper: { enabled: true }, noP2p: { enabled: false } });
+        ).toEqual({ threadRipper: { enabled: true, region: 'mainland' }, noP2p: { enabled: false } });
     });
 });

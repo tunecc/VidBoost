@@ -11,6 +11,7 @@
     cloneYTSubtitleConfig,
     getSettings,
     setSettings,
+    BILIBILI_THREAD_RIPPER_REGIONS,
     DEFAULT_SETTINGS,
     POPUP_SETTINGS_KEYS,
     type Settings,
@@ -166,6 +167,7 @@
   // Bilibili Thread Ripper / No P2P Config (mutually exclusive with bb_cdn)
   let bbThreadRipper: BilibiliThreadRipperConfig = {
     enabled: DEFAULT_SETTINGS.bb_thread_ripper.enabled,
+    region: DEFAULT_SETTINGS.bb_thread_ripper.region,
   };
   let bbNoP2p: BilibiliNoP2pConfig = {
     enabled: DEFAULT_SETTINGS.bb_no_p2p.enabled,
@@ -744,11 +746,18 @@
   ) {
     if (!globalEnabled) return;
     const enabled = event.detail.enabled === true;
-    bbThreadRipper = { enabled };
+    bbThreadRipper = { ...bbThreadRipper, enabled };
     // Thread Ripper is mutually exclusive with the CDN switcher.
     if (enabled && bbCdnEnabled) {
       bbCdnEnabled = false;
     }
+  }
+
+  function handleBilibiliThreadRipperRegion(
+    event: CustomEvent<{ region: "auto" | "mainland" | "overseas" }>,
+  ) {
+    if (!globalEnabled) return;
+    bbThreadRipper = { ...bbThreadRipper, region: event.detail.region };
   }
 
   function handleBilibiliNoP2pToggle(
@@ -1353,6 +1362,9 @@
 
       bbThreadRipper = {
         enabled: res.bb_thread_ripper?.enabled === true,
+        region: BILIBILI_THREAD_RIPPER_REGIONS.includes(res.bb_thread_ripper?.region as never)
+          ? res.bb_thread_ripper!.region
+          : 'auto',
       };
       bbNoP2p = {
         enabled: res.bb_no_p2p?.enabled === true,
@@ -3445,8 +3457,10 @@
             {language}
             {globalEnabled}
             bbThreadRipperEnabled={bbThreadRipper.enabled}
+            bbThreadRipperRegion={bbThreadRipper.region}
             bbNoP2pEnabled={bbNoP2p.enabled}
             on:toggle-thread-ripper={handleBilibiliThreadRipperToggle}
+            on:select-region={handleBilibiliThreadRipperRegion}
             on:toggle-no-p2p={handleBilibiliNoP2pToggle}
           />
         </SectionCard>

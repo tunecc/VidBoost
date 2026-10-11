@@ -123,8 +123,13 @@ export type BilibiliCdnConfig = {
     bangumiMode: boolean;
 };
 
+export const BILIBILI_THREAD_RIPPER_REGIONS: readonly BilibiliThreadRipperRegion[] = ['auto', 'mainland', 'overseas'];
+
+export type BilibiliThreadRipperRegion = 'auto' | 'mainland' | 'overseas';
+
 export type BilibiliThreadRipperConfig = {
     enabled: boolean;
+    region: BilibiliThreadRipperRegion;
 };
 
 export type BilibiliNoP2pConfig = {
@@ -246,7 +251,7 @@ export const DEFAULT_SETTINGS: Settings = {
         blockedQns: []
     },
     bb_cdn: { enabled: false, node: '', bangumiMode: false },
-    bb_thread_ripper: { enabled: false },
+    bb_thread_ripper: { enabled: false, region: 'auto' },
     bb_no_p2p: { enabled: false },
     bb_cdn_test: {
         includeOverseas: true,
@@ -569,7 +574,12 @@ export function resolveSettings(source: Partial<Settings> = {}): Settings {
         bb_cdn: { ...DEFAULT_SETTINGS.bb_cdn, ...(source.bb_cdn ?? {}) },
         bb_cdn_test: { ...DEFAULT_SETTINGS.bb_cdn_test, ...(source.bb_cdn_test ?? {}) },
         bb_thread_ripper: {
-            enabled: (source.bb_thread_ripper ?? DEFAULT_SETTINGS.bb_thread_ripper).enabled === true
+            enabled: (source.bb_thread_ripper ?? DEFAULT_SETTINGS.bb_thread_ripper).enabled === true,
+            region: BILIBILI_THREAD_RIPPER_REGIONS.includes(
+                (source.bb_thread_ripper ?? DEFAULT_SETTINGS.bb_thread_ripper).region as never
+            )
+                ? (source.bb_thread_ripper ?? DEFAULT_SETTINGS.bb_thread_ripper).region
+                : 'auto'
         },
         bb_no_p2p: {
             enabled: (source.bb_no_p2p ?? DEFAULT_SETTINGS.bb_no_p2p).enabled === true

@@ -19,8 +19,8 @@
 
 import { addArrayElementsToSet } from '../vendor/foxts';
 import { pickOne } from '../vendor/foxts';
-import { isAkamaiHost, isMirrorHost, isP2PCDNDomain } from './cdnClassify';
-import type { SignatureFamily } from './cdnClassify';
+import { hostRegion, isAkamaiHost, isMirrorHost, isP2PCDNDomain } from './cdnClassify';
+import type { HostRegion, SignatureFamily } from './cdnClassify';
 import { isAddressBanned, isCoolingDown, isExcluded, isFamilyRefused } from './hostModel';
 import { upgcxcodeHosts } from './registry';
 import type { MediaAddress, MediaFile } from './registry';
@@ -48,7 +48,9 @@ export enum CandidateTier {
      * A signature on a host not known to accept it: upos ones on Akamai refuse with 403 (verified),
      * Akamai ones elsewhere are unverified. Kept, tried last, and the refusal is learned
      */
-    Foreign = 7
+    Foreign = 7,
+    /** A valid host outside the user's preferred delivery region: last resort only */
+    RegionFallback = 8
 }
 
 /** One URL a media request could go to */
@@ -140,6 +142,21 @@ export function mediaCandidates(requested: MediaAddress | null, file: MediaFile 
             }
         }
     }
+    // Region preference: demote as-listed candidates from the non-preferred region below every
+    // preferred-region candidate (never drop them — they are the whole-pool fallback). Swap
+    // candidates are already preferred-region via `upgcxcodeHostsOf`; P2P ones keep their tier.
+    if (regionPreference !== 'auto') {
+        const hasPreferred = candidates.some(candidate => !candidate.p2p
+            && hostRegion(candidate.hostname) === regionPreference);
+        if (hasPreferred) {
+            for (let i = 0, len = candidates.length; i < len; i++) {
+                const candidate = candidates[i];
+                if (!candidate.p2p && hostRegion(candidate.hostname) !== regionPreference) {
+                    candidates[i] = { ...candidate, tier: CandidateTier.RegionFallback };
+                }
+            }
+        }
+    }
     return candidates;
 }
 
@@ -193,7 +210,18 @@ function upgcxcodeHostsOf(file: MediaFile | null) {
     }
     for (const hostname of upgcxcodeHosts) names.add(hostname);
     addArrayElementsToSet(names, SEED_HOSTS);
-    return Array.from(names).filter(hostname => !isP2PCDNDomain(hostname));
+    return Array.from(names).filter(hostname => !isP2PCDNDomain(hostname)
+        && (regionPreference === 'auto' || hostRegion(hostname) === regionPreference));
+}
+
+/**
+ * The user's delivery-region preference (`auto` races every region). Set by the page entry's
+ * config handler; the page world runs this module as a singleton.
+ */
+let regionPreference: 'auto' | HostRegion = 'auto';
+
+export function setRegionPreference(preference: 'auto' | HostRegion): void {
+    regionPreference = preference;
 }
 
 /** A signature moved onto an upgcxcode host (never a P2P one) */

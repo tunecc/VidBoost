@@ -3,7 +3,7 @@ import { CONTENT_SETTINGS_KEYS, DEFAULT_SETTINGS, resolveSettings } from '../set
 
 describe('bilibili thread ripper / no-p2p settings', () => {
     it('defaults both new capabilities to disabled', () => {
-        expect(DEFAULT_SETTINGS.bb_thread_ripper).toEqual({ enabled: false });
+        expect(DEFAULT_SETTINGS.bb_thread_ripper).toEqual({ enabled: false, region: 'auto' });
         expect(DEFAULT_SETTINGS.bb_no_p2p).toEqual({ enabled: false });
     });
 
@@ -13,13 +13,20 @@ describe('bilibili thread ripper / no-p2p settings', () => {
         expect(resolved.bb_no_p2p.enabled).toBe(false);
     });
 
-    it('resolveSettings preserves stored enabled flags', () => {
+    it('resolveSettings preserves stored enabled flags and regions', () => {
         const resolved = resolveSettings({
-            bb_thread_ripper: { enabled: true },
+            bb_thread_ripper: { enabled: true, region: 'mainland' },
             bb_no_p2p: { enabled: true }
         });
-        expect(resolved.bb_thread_ripper).toEqual({ enabled: true });
+        expect(resolved.bb_thread_ripper).toEqual({ enabled: true, region: 'mainland' });
         expect(resolved.bb_no_p2p).toEqual({ enabled: true });
+    });
+
+    it('normalize unknown region values back to auto', () => {
+        const resolved = resolveSettings({
+            bb_thread_ripper: { enabled: true, region: 'narnia' as never }
+        });
+        expect(resolved.bb_thread_ripper).toEqual({ enabled: true, region: 'auto' });
     });
 
     it('normalize non-boolean enabled flags back to false', () => {
@@ -27,7 +34,7 @@ describe('bilibili thread ripper / no-p2p settings', () => {
             bb_thread_ripper: { enabled: 'yes' as unknown as boolean },
             bb_no_p2p: { enabled: null as unknown as boolean }
         });
-        expect(resolved.bb_thread_ripper).toEqual({ enabled: false });
+        expect(resolved.bb_thread_ripper).toEqual({ enabled: false, region: 'auto' });
         expect(resolved.bb_no_p2p).toEqual({ enabled: false });
     });
 

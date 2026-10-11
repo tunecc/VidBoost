@@ -29,7 +29,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function syncToLocalStorage(config: BilibiliThreadRipperPageConfig) {
     try {
         localStorage.setItem(BB_TR_LS_KEY, JSON.stringify({
-            threadRipper: { enabled: config.threadRipper.enabled },
+            threadRipper: { enabled: config.threadRipper.enabled, region: config.threadRipper.region },
             noP2p: { enabled: config.noP2p.enabled }
         }));
     } catch { /* localStorage might be unavailable */ }
