@@ -8,6 +8,16 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
+## [Unreleased]
+
+### Added
+- **Cometix Translate 字幕让位**（`YouTubeSubtitleOverlay` / `subtitleOverlay.shared`）  
+  「插件翻译兼容」新增第三路目标：非中文字幕且页面存在 Cometix Translate（`#cometix-imt-root`）时，VidBoost 停止自渲染、恢复原生字幕显示，并确保 YouTube 原生 CC 开启（Cometix 的字幕源）。随后在有界时长内等待其字幕窗口（`#immersive-translate-caption-window`）出现以确认接管；超时未接管则回退 VidBoost 自渲染，同一视频同一字幕轨不再重试。Cometix 无可用的程序化开启路径（无默认字幕快捷键、播放器按钮在 closed shadow root、配置在其扩展私有存储），因此只做让位与接管验证，需用户自行开启其 YouTube 字幕翻译。
+- **三路让位优先级**  
+  单一开关的判定顺序更新为：非中文 + Read Frog 在场 → 让位 Read Frog 并自动开启其翻译；否则 Cometix Translate 在场 → 让位 Cometix 并验证接管；两者皆不在场 → 回落沉浸式翻译无条件让位；中文字幕或开关关闭 → VidBoost 正常自渲染。
+- **Cometix 兼容单元测试**（`cometixCompat.test`）  
+  jsdom 用例覆盖在场 / 接管检测、三路优先级、接管成功、超时回退、等待期状态变化与 reset 取消；既有 `readFrogCompat.test` 全量回归通过。
+
 ## [1.9.4] - 2026-10-02
 
 1.9.4 把字幕的外部翻译插件兼容整合为一个「插件翻译兼容」开关：非中文字幕时 VidBoost 自动让位——页面上装了 Read Frog 就自动开启它的视频字幕翻译（走其默认快捷键 Alt+C），没有 Read Frog 则沿用沉浸式翻译的让位。原来的「兼容沉浸式翻译」开关升级后自动迁移，不用重新设置，多个翻译插件同装也不会再互相遮蔽。

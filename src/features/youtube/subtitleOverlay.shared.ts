@@ -129,21 +129,25 @@ export function isChineseLanguageCode(languageCode: string): boolean {
     return languageCode.startsWith('zh');
 }
 
-export type PluginTranslateYield = 'read-frog' | 'immersive-translate';
+export type PluginTranslateYield = 'read-frog' | 'cometix-translate' | 'immersive-translate';
 
 /**
  * 「插件翻译兼容」单一开关的统一让位决策：
  * - 开关关闭或中文字幕 → null（VidBoost 正常自渲染）；
  * - Read Frog 在场 → 'read-frog'（让位并自动开启其翻译）；
- * - Read Frog 不在场 → 'immersive-translate'（回落 IT 无条件让位）。
+ * - 否则 Cometix Translate 在场 → 'cometix-translate'（让位、确保原生 CC 开启并验证接管）；
+ * - 两者皆缺席 → 'immersive-translate'（回落 IT 无条件让位）。
+ * `cometixPresent` 缺省按 false，保持旧调用的行为逐项不变。
  */
 export function resolvePluginTranslateYield(
     trackLanguageCode: string,
-    options: { enabled: boolean; readFrogPresent: boolean }
+    options: { enabled: boolean; readFrogPresent: boolean; cometixPresent?: boolean }
 ): PluginTranslateYield | null {
     if (!options.enabled) return null;
     if (isChineseLanguageCode(trackLanguageCode)) return null;
-    return options.readFrogPresent ? 'read-frog' : 'immersive-translate';
+    if (options.readFrogPresent) return 'read-frog';
+    if (options.cometixPresent === true) return 'cometix-translate';
+    return 'immersive-translate';
 }
 
 /** Read Frog 启用视频字幕后挂载在播放器控件栏的翻译按钮容器（open shadow root）。 */
@@ -296,6 +300,145 @@ export function createReadFrogActivationController(deps: ReadFrogActivationDeps 
         reset(): void {
             generation += 1;
             triggeredKeys.clear();
+        }
+    };
+}
+
+/** Cometix Translate 顶层 UI 根节点 id（其 content script 创建并维持挂载，隔离世界可见）。 */
+export const COMETIX_TRANSLATE_ROOT_ID = 'cometix-imt-root';
+
+/** Cometix Translate 真正 attach 字幕时创建的字幕窗口 id（closed shadow root，仅宿主元素可读）。 */
+export const COMETIX_TRANSLATE_CAPTION_WINDOW_ID = 'immersive-translate-caption-window';
+
+/**
+ * 查找 Cometix Translate 的根节点；未安装 / 未在本页加载时返回 null。
+ */
+export function findCometixTranslateRoot(): HTMLElement | null {
+    if (typeof document === 'undefined') return null;
+    return document.getElementById(COMETIX_TRANSLATE_ROOT_ID);
+}
+
+/**
+ * Cometix Translate 是否在场（其字幕模块已在本页就绪）。
+ */
+export function isCometixTranslatePresent(): boolean {
+    return findCometixTranslateRoot() !== null;
+}
+
+/**
+ * Cometix Translate 是否已接管字幕渲染（其字幕窗口已创建）。
+ * 仅根节点在场不算接管。
+ */
+export function hasCometixTranslateTakenOver(): boolean {
+    if (typeof document === 'undefined') return false;
+    return document.getElementById(COMETIX_TRANSLATE_CAPTION_WINDOW_ID) !== null;
+}
+
+export type CometixTranslateYieldDeps = {
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
+    /** Cometix 是否仍在场；返回 false 时立即放弃（不回退）。 */
+    present?: () => boolean;
+    /** Cometix 是否已接管字幕渲染。 */
+    hasTakenOver?: () => boolean;
+    /** 确保 YouTube 原生 CC 开启（Cometix 的字幕源）；失败不得抛错。 */
+    ensureNativeCaptions?: () => Promise<void>;
+    /** 等待上限内未接管时的回退通知；同一 key 至多一次。 */
+    onFallback?: (key: string) => void;
+    /** 等待接管的轮询间隔与总时长上限。 */
+    waitIntervalMs?: number;
+    waitTimeoutMs?: number;
+};
+
+const DEFAULT_COMETIX_YIELD_DEPS: Required<Pick<CometixTranslateYieldDeps,
+    'waitIntervalMs' | 'waitTimeoutMs'
+>> = {
+    waitIntervalMs: 500,
+    waitTimeoutMs: 6_000
+};
+
+/**
+ * Cometix Translate 让位的接管验证器。
+ *
+ * Cometix 无可用的程序化开启路径（无默认字幕快捷键、播放器按钮在 closed shadow、
+ * 配置在其扩展私有存储），因此这里只做「确认接管，否则回退」：
+ * - 按 key（videoId + optionKey）去重：同一 key 只处理一次，1.2s 轮询不重复触发；
+ * - 先确保原生 CC 开启，再有界轮询其字幕窗口出现；
+ * - 窗口出现 → 成功，不再回退；超时 → 通知 `onFallback` 一次；
+ * - 等待期间 Cometix 离场 → 放弃且不回退（交由下一次判定走其他分支）；
+ * - 新 key 到来或 reset() 时，旧的在途流程通过世代号退出。
+ */
+export function createCometixTranslateYieldController(deps: CometixTranslateYieldDeps = {}) {
+    const now = deps.now ?? (() => Date.now());
+    const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+    const present = deps.present ?? isCometixTranslatePresent;
+    const hasTakenOver = deps.hasTakenOver ?? hasCometixTranslateTakenOver;
+    const ensureNativeCaptions = deps.ensureNativeCaptions ?? (async () => {});
+    const onFallback = deps.onFallback ?? (() => {});
+    const { waitIntervalMs, waitTimeoutMs } = { ...DEFAULT_COMETIX_YIELD_DEPS, ...deps };
+
+    const handledKeys = new Set<string>();
+    let generation = 0;
+    /** 世代号变化时唤醒正在等待的流程，使其立即退出而不挂起。 */
+    const wakes = new Set<() => void>();
+
+    function sleepUntilSuperseded(ms: number, runGeneration: number): Promise<void> {
+        return new Promise<void>((resolve) => {
+            if (runGeneration !== generation) {
+                resolve();
+                return;
+            }
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                wakes.delete(finish);
+                resolve();
+            };
+            const timer = setTimeout(finish, ms);
+            wakes.add(finish);
+        });
+    }
+
+    async function run(key: string, runGeneration: number): Promise<void> {
+        const superseded = () => runGeneration !== generation;
+
+        try {
+            await ensureNativeCaptions();
+        } catch {
+            // 确保开启失败不阻断等待：Cometix 自身也会尝试开启原生 CC。
+        }
+        if (superseded()) return;
+
+        const deadline = now() + waitTimeoutMs;
+        while (now() < deadline) {
+            if (hasTakenOver()) return;
+            if (!present()) return;
+            await sleepUntilSuperseded(waitIntervalMs, runGeneration);
+            if (superseded()) return;
+        }
+        if (superseded()) return;
+        if (hasTakenOver()) return;
+        if (!present()) return;
+
+        onFallback(key);
+    }
+
+    return {
+        /** 对给定 key 启动接管验证；同 key 重复调用为 no-op。 */
+        activate(key: string): void {
+            if (!key || handledKeys.has(key)) return;
+            handledKeys.add(key);
+            generation += 1;
+            wakes.forEach((wake) => wake());
+            void run(key, generation);
+        },
+        /** 取消在途流程并清空去重记录（卸载 / 导航时调用）。 */
+        reset(): void {
+            generation += 1;
+            wakes.forEach((wake) => wake());
+            handledKeys.clear();
         }
     };
 }
