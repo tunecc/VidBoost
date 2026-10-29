@@ -1,0 +1,302 @@
+schema: comet.native.v4
+name: bilibili-thread-ripper-ui
+language: zh-CN
+phase: archive
+status: done
+state_version: 8
+brief: brief.md
+document_constraints_version: 3
+shape_confirmation_hash: 45dd5b5a1591b0ac32202144d45cf5f921f3754b3025959f3c4ce2261abe0d32
+spec_changes:
+  - capability: bilibili-thread-ripper-popup
+    operation: create
+    source: specs/bilibili-thread-ripper-popup/spec.md
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: "`A1` B 站区块中「线程撕裂者」以 `AccordionItem` 呈现：标题「B 站线程撕裂者」+ 一行简介 +
+      左侧图标（总开关或功能关闭时置灰）+ 右侧主开关（开启时青色发光，与「CDN 切换」一致）+ 倒三角箭头；点击标题/箭头行展开收起内容（slide
+      动效）；不再出现旧的独立圆角边框卡片样式。"
+    result: passed
+    reason:
+      text: "App.svelte:3453-3569 将线程撕裂者内联为
+        AccordionItem（iconColor=cyan、density=main、标题 bb_thread_ripper_title=「B
+        站线程撕裂者」、一行简介、CPU 芯片描边图标），masterChecked 绑定
+        bbThreadRipper.enabled；AccordionItem.svelte:46
+        iconMuted=disabled||!masterChecked 实现总开关或功能关闭时图标置灰，:133-146 开启时主开关为青色
+        #06b6d4 并带 0 0 10px rgba(6,182,212,0.5) 发光，与同为 iconColor=cyan 的 CDN
+        切换（App.svelte:3340）走同一组件完全一致；倒三角（M19 9l-7 7-7-7）随 isOpen
+        rotate-180，标题/箭头按钮 on:click={onToggleOpen} 切换展开，内容用 {#if
+        isOpen}+transition:slide；主开关点击 stopPropagation
+        不展开。ThreadRipperSettings.svelte 已删除且全仓库 grep 无残留引用，旧圆角边框卡片不再存在。"
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: "`A2` 展开区默认隐藏，点开倒三角后可见三部分：「加速地区」下拉（auto / 大陆 / 海外，线程撕裂者主开关关闭时禁用）、「屏蔽
+      P2P」整行开关（标题 + 描述 + 小开关，样式对齐「番剧增强模式」行）、与 CDN 切换互斥的提示行；en / zh-CN 文案齐全。"
+    result: passed
+    reason:
+      text: bbThreadRipperOpen 默认 false（App.svelte:155）且不写入 ui_state，内容默认隐藏、slide
+        展开后依次为：①加速地区行（App.svelte:3484-3510，select 三档
+        auto/mainland/overseas，disabled={!globalEnabled ||
+        !bbThreadRipper.enabled} 即主开关关闭时禁用）；②屏蔽 P2P
+        整行开关（3513-3547，标题+描述+小开关，按钮与开关 class 与「番剧增强模式」行 3414-3448
+        逐字一致）；③互斥提示行（3550-3567）。i18n.ts en（79-89 行）与 zh-CN（320-330 行）两侧 10 个
+        bb_thread_ripper_*/bb_no_p2p_* key 全部齐全。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: "`A3` 互斥与组合关系保持现状：开启线程撕裂者自动关闭 CDN 切换；开启 CDN 切换自动关闭线程撕裂者与屏蔽 P2P；线程撕裂者与屏蔽
+      P2P 可同时开启。"
+    result: passed
+    reason:
+      text: 三条互斥路径均保持且未被重写：toggleBilibiliThreadRipper（App.svelte:744-752）开启线程撕裂者时置
+        bbCdnEnabled=false；toggleBilibiliNoP2p（762-770）开启屏蔽 P2P 时置
+        bbCdnEnabled=false；CDN 主开关 onToggleMaster（3346-3354）开启 CDN 时同时置
+        bbThreadRipper.enabled=false 与 bbNoP2p.enabled=false。线程撕裂者与屏蔽 P2P 的
+        handler 互不触碰对方状态，可同时开启。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: "`A4` 「屏蔽 P2P」开关只受扩展总开关禁用约束，独立于线程撕裂者主开关（主开关关闭时仍可单独开启）；开启时自动关闭 CDN
+      切换；设置经现有防抖保存流程写入 `bb_thread_ripper` / `bb_no_p2p`，重新打开 popup 回显正确。"
+    result: passed
+    reason:
+      text: 屏蔽 P2P 整行仅 disabled={!globalEnabled}（App.svelte:3516），toggleBilibiliNoP2p
+        仅守卫 globalEnabled（763 行），完全独立于线程撕裂者主开关（受主开关约束的只有地区下拉 3494 行）；开启时自动关闭
+        CDN（767-769 行）。保存链路未动：App.svelte:1419-1478 响应式块读取
+        bbThreadRipper/bbNoP2p（1476-1477 行），任一变更触发 scheduleSettingsSave→防抖
+        flushSettingsSave→setSettings 写入顶层 bb_thread_ripper/bb_no_p2p
+        key；onMount 载入回显（1360-1368 行）恢复 enabled/region（非法 region 经
+        BILIBILI_THREAD_RIPPER_REGIONS 校验回退 'auto'）与 bbNoP2p.enabled，重新打开 popup
+        回显正确。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: "`A5` `README.md` 在「Bilibili 专属增强」下新增编号顺延的「线程撕裂者与屏蔽
+      P2P」条目，含参考来源、功能说明与支持列表，风格与「CDN 切换与测速」等条目一致；`README.en.md` 同步新增对应英文条目；两份
+      README 均不出现与实现不符的描述。"
+    result: passed
+    reason:
+      text: README.md:292-306 在「Bilibili 专属增强」下「CDN 切换与测速」之后新增编号顺延的「#### 4. 线程撕裂者与屏蔽
+        P2P」，含参考来源（SukkaW/Make-Bilibili-Great-Than-Ever-Before 的 thread-ripper
+        模块，与 src/features/bilibili/threadRipper/
+        各源文件头部移植注释一致）、功能说明与「目前支持」列表，结构与第 3 条 CDN 条目一致且无单独截图；README.en.md:276-290
+        同步新增「#### 4. Thread Ripper and No P2P」对应英文条目。描述经与实现核对相符：engine.ts
+        存在分片/attempt/alternative 调度与 fallbackToNative()（对应多 CDN
+        并发分片、自动调度、失败回退原生加载），noP2pPolicy.ts 将 P2P 主机改写回官方源站或官方代理域名（对应屏蔽 P2P 改写官方
+        CDN），地区三档与互斥关系同 UI 实现，屏蔽 P2P 可单独开启也可与线程撕裂者同开。现有条目编号与其余章节未改动。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: "`A6` `npm run check` 通过；`npm run build:chrome` 成功；因未改 manifest / 权限且无新
+      Firefox 模块，不要求 Firefox 低内存验证。"
+    result: passed
+    reason:
+      text: Runtime 检查记录（evidence=runtime）两项均 passed：svelte-check exitCode
+        0，日志尾部「svelte-check found 0 errors and 0
+        warnings」（含被删组件引用检查）；build-chrome exitCode 0，vite 各 chunk 构建成功。git
+        status 显示仅 README.md/README.en.md/i18n.ts/App.svelte 修改与
+        ThreadRipperSettings.svelte 删除，public/manifest*.json 与 src/features
+        零改动，无新 Firefox 模块，按 brief 免 Firefox 低内存验证。本验证者未自行运行任何构建/检查命令。
+      truncated: false
+builder_handoff:
+  candidate_id: 8d144da1-8dc6-4470-b1c2-bd45dcf0c543
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:b831d5e4-8371-4d22-8256-cdb084973386
+  iteration: 1
+  summary:
+    text: 本轮把 popup 中 B 站线程撕裂者/屏蔽 P2P 的自定义边框卡片改为与其他功能一致的 AccordionItem 主题：App.svelte
+      移除 ThreadRipperSettings 引用并内联手风琴（标题行+CPU 图标+倒三角+主开关），新增本地展开状态
+      bbThreadRipperOpen，展开区含「加速地区」下拉（主开关关闭时禁用）、「屏蔽 P2P」整行开关（对齐 CDN
+      番剧增强模式行样式，仅受总开关约束）与互斥提示行；原 CustomEvent 三个 handler 改为普通函数
+      toggleBilibiliThreadRipper / updateBilibiliThreadRipperRegion /
+      toggleBilibiliNoP2p，互斥逻辑逐行保持。删除 ThreadRipperSettings.svelte。i18n 中英两侧把
+      bb_thread_ripper_desc 收敛为一行式简介、bb_no_p2p_desc
+      去掉与互斥提示重复的半句。README.md/README.en.md 在「Bilibili 专属增强」新增第 4 条「线程撕裂者与屏蔽
+      P2P」（参考 SukkaW/Make-Bilibili-Great-Than-Ever-Before，含功能说明与支持列表）。开发期已运行 npm
+      run check（0 errors 0 warnings）与 npm run
+      build:chrome（成功）。已知限制：未做真实浏览器人工截图核对，UI 外观以代码审查与构建验证为准。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+  acceptance_review:
+    - id: A1
+      status: implemented-with-evidence
+      evidence:
+        - src/popup/App.svelte:3455-3580 内联
+          AccordionItem（iconColor=cyan、masterChecked=bbThreadRipper.enabled、onToggleOpen
+          切换 bbThreadRipperOpen）
+        - src/popup/ThreadRipperSettings.svelte 已删除（git status D）
+      note: App.svelte 中线程撕裂者改为内联 AccordionItem（density=main、iconColor=cyan、CPU
+        芯片描边图标），masterChecked 绑定 bbThreadRipper.enabled，onToggleOpen 切换
+        bbThreadRipperOpen；ThreadRipperSettings.svelte 已删除，旧卡片样式不再存在。
+    - id: A2
+      status: implemented-with-evidence
+      evidence:
+        - src/popup/App.svelte 展开区 slot=content：加速地区行（disabled={!globalEnabled
+          || !bbThreadRipper.enabled}）、屏蔽 P2P 整行开关（peer 样式与 CDN 番剧增强模式一致）、互斥提示行
+        - src/lib/i18n.ts en/zh 两侧 bb_thread_ripper_* 与 bb_no_p2p_* 文案齐全
+      note: AccordionItem 内容默认隐藏（isOpen=false，slide
+        动效）；展开区依次为加速地区行（三档下拉，disabled={!globalEnabled ||
+        !bbThreadRipper.enabled}）、屏蔽 P2P 整行开关、互斥提示行；i18n en/zh 文案齐全。
+    - id: A3
+      status: implemented-with-evidence
+      evidence:
+        - src/popup/App.svelte
+          toggleBilibiliThreadRipper/toggleBilibiliNoP2p：开启时 bbCdnEnabled=false
+        - src/popup/App.svelte CDN 主开关 onToggleMaster：开启时同时关闭
+          bbThreadRipper.enabled 与 bbNoP2p.enabled
+      note: 互斥逻辑逐行保留：toggleBilibiliThreadRipper / toggleBilibiliNoP2p 开启时置
+        bbCdnEnabled=false；CDN 主开关回调开启时同时关闭 bbThreadRipper 与 bbNoP2p；两者相互独立可同开。
+    - id: A4
+      status: implemented-with-evidence
+      evidence:
+        - src/popup/App.svelte 屏蔽 P2P 行 disabled 仅 {!globalEnabled}
+        - src/popup/App.svelte 保存 payload bb_thread_ripper/bb_no_p2p 顶层 key 与
+          onMount 回显逻辑未改动
+      note: 屏蔽 P2P 行 disabled 仅 {!globalEnabled}，独立于线程撕裂者主开关（Q1 结论）；开关写入 bbNoP2p
+        并经现有防抖保存链路（bb_thread_ripper / bb_no_p2p 顶层 key 未变），载入回显逻辑未改动。
+    - id: A5
+      status: implemented-with-evidence
+      evidence:
+        - README.md「Bilibili 专属增强」新增『#### 4. 线程撕裂者与屏蔽 P2P』
+        - README.en.md 新增『#### 4. Thread Ripper and No P2P』
+        - 参考出处与 src/features/bilibili/threadRipper/*.ts
+          头部移植注释一致（SukkaW/Make-Bilibili-Great-Than-Ever-Before）
+      note: 两份 README 在「CDN 切换与测速」后新增编号顺延第 4
+        条，参考出处来自代码注释中真实的移植来源（SukkaW/Make-Bilibili-Great-Than-Ever-Before
+        thread-ripper 模块），功能说明与实现一致（多 CDN 并发分片、地区偏好、失败回退、屏蔽 P2P 可单独开启、与 CDN
+        切换互斥），不重排既有条目。
+    - id: A6
+      status: implemented-with-evidence
+      evidence:
+        - npm run check 输出：svelte-check found 0 errors and 0 warnings
+        - npm run build:chrome 输出：全部 chunk ✓ built，exit 0
+      note: npm run check：0 errors 0 warnings；npm run build:chrome 成功（dist 重新生成）。未改
+        manifest/权限，无新 Firefox 模块，Firefox 低内存验证按 brief 非目标不要求。
+  checks:
+    - name:
+        text: npm run check
+        truncated: false
+      result: passed
+      note:
+        text: svelte-check 0 errors 0 warnings（含 ThreadRipperSettings 删除后的引用检查）。
+        truncated: false
+    - name:
+        text: npm run build:chrome
+        truncated: false
+      result: passed
+      note:
+        text: Chrome 构建成功，无报错。
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 未做真实浏览器人工截图核对；展开动效与深浅色外观以代码审查和构建验证为准。
+      truncated: false
+    - text: README 新条目未配截图（与「屏蔽空格翻页」条目一致，属既定决策）。
+      truncated: false
+  known_limits_truncated: false
+  review: null
+  submitted_at: 2026-10-11T10:59:49.441Z
+blockers: []
+verification:
+  candidate_id: 8d144da1-8dc6-4470-b1c2-bd45dcf0c543
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:f7b8be44-3930-4cc3-8cf9-0a18c67fb446
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks:
+    - id: svelte-check
+      name:
+        text: npm run check
+        truncated: false
+      argv_display:
+        - text: run
+          truncated: false
+        - text: check
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 2861
+    - id: build-chrome
+      name:
+        text: npm run build:chrome
+        truncated: false
+      argv_display:
+        - text: run
+          truncated: false
+        - text: build:chrome
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 5157
+  summary:
+    text: 独立验收通过：线程撕裂者/屏蔽 P2P 已按规格内联为与 CDN 切换同模式的
+      AccordionItem，旧卡片组件删除干净；展开区三部分齐全、中英文案齐全；三条互斥规则与保存/回显链路逐行核对无改动；两份 README
+      新条目编号顺延、参考来源与实现相符；Runtime 检查 svelte-check 与 build-chrome 均由 Runtime
+      实际执行并通过（exitCode 0）。verdict=pass。
+    truncated: false
+  risks:
+    - text: 未做真实浏览器人工截图核对，展开动效与深浅色外观以共享 AccordionItem 组件行为与构建验证为准（该组件已被 CDN
+        切换条目长期使用，风险很低）。
+      truncated: false
+    - text: 仓库根目录出现未跟踪的 .zcodeignore（Agent 工具忽略配置，疑似环境工具生成而非本候选产物），与 6
+        项验收无关，建议提交前确认是否纳入版本管理。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-10-11T11:08:05.908Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 独立验收通过：线程撕裂者/屏蔽 P2P 已按规格内联为与 CDN 切换同模式的
+        AccordionItem，旧卡片组件删除干净；展开区三部分齐全、中英文案齐全；三条互斥规则与保存/回显链路逐行核对无改动；两份 README
+        新条目编号顺延、参考来源与实现相符；Runtime 检查 svelte-check 与 build-chrome 均由 Runtime
+        实际执行并通过（exitCode 0）。verdict=pass。
+      truncated: false
+    completed_at: 2026-10-11T11:08:05.908Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-10-11T10:41:35.443Z

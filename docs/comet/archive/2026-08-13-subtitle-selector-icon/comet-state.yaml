@@ -1,0 +1,181 @@
+schema: comet.native.v4
+name: subtitle-selector-icon
+language: zh-CN
+phase: archive
+status: done
+state_version: 14
+brief: brief.md
+spec_changes: []
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 3
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: 'A1: 在 YouTube 视频页面，字幕选择器按钮显示 VidBoost 图标而非 "CC" 文本'
+    result: passed
+    reason:
+      text: 使用 img 元素加载 icon48.png，无 CC 文本
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: "A2: 图标展示尺寸为 24×24px，显示清晰"
+    result: passed
+    reason:
+      text: width:24px;height:24px，ICON_SIZE_PX=24
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: "A3: 有字幕轨道激活时，图标彩色正常显示（不透明度 1.0，无滤镜）"
+    result: passed
+    reason:
+      text: 激活态 opacity:1;filter:none
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: "A4: 无字幕轨道激活时，图标以灰/半透明状态显示（灰度 + 降低不透明度）"
+    result: passed
+    reason:
+      text: 非激活态 opacity:.45;filter:grayscale(.6)
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: "A5: 点击按钮仍能正常打开字幕选择菜单"
+    result: passed
+    reason:
+      text: 点击可打开菜单，aria-expanded 同步
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: "A6: 菜单功能不受影响（搜索、选择语言、关闭等行为不变）"
+    result: passed
+    reason:
+      text: 菜单搜索/选择/键盘导航完整保留
+      truncated: false
+builder_handoff:
+  candidate_id: fe56ad14-86c3-4106-aff3-7ff0f0f5c073
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:0fce584d-0c52-4888-8167-e67ee02df78b
+  iteration: 3
+  summary:
+    text: 修复测试中 A3/A4 标签交叉命名问题，使 it() 描述与验收项一致。其余实现与上轮相同：SubtitleSelector.ts
+      CC→icon48.png(24px) 激活/非激活状态，manifest.json 添加 icons/* WAR，测试 8 个全部通过。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+  checks:
+    - name:
+        text: npm run build
+        truncated: false
+      result: passed
+      note:
+        text: 完整 Chrome build 成功
+        truncated: false
+    - name:
+        text: svelte-check / TypeScript
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors, 0 warnings
+        truncated: false
+    - name:
+        text: vitest - selector test suite
+        truncated: false
+      result: passed
+      note:
+        text: 9 files, 35 tests passed
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 图标 URL 运行时经 getRuntimeUrl 解析，测试 mock chrome-extension://test/ 前缀
+      truncated: false
+    - text: jsdom 中 style.cssText 序列化有空格，断言用正则
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-13T05:27:47.415Z
+blockers: []
+verification:
+  candidate_id: fe56ad14-86c3-4106-aff3-7ff0f0f5c073
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:27f1f475-7a87-49b0-821e-85b4e9693a48
+  iteration: 3
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 所有 6 个验收项通过。测试 A3/A4 标签已修正，实现正确完整。
+    truncated: false
+  risks: []
+  risks_truncated: false
+  completed_at: 2026-08-13T05:28:31.791Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Observed implementation write before public/manifest.json
+      truncated: false
+    completed_at: 2026-08-13T05:09:56.704Z
+  - goal_cycle: 1
+    iteration: 2
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 所有 6 个验收项通过。实现正确完整；唯一的非功能性建议是测试文件中 A3/A4 标签与验收项交叉命名，不影响逻辑正确性。
+      truncated: false
+    completed_at: 2026-08-13T05:22:30.082Z
+  - goal_cycle: 1
+    iteration: 2
+    attempt: 1
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Observed implementation write before
+        src/features/youtube/subtitle/selector/__tests__/icon.test.ts
+      truncated: false
+    completed_at: 2026-08-13T05:24:01.984Z
+  - goal_cycle: 1
+    iteration: 3
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 所有 6 个验收项通过。测试 A3/A4 标签已修正，实现正确完整。
+      truncated: false
+    completed_at: 2026-08-13T05:28:31.791Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-13T04:33:25.331Z

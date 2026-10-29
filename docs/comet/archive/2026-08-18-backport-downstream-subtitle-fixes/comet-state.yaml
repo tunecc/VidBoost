@@ -1,0 +1,893 @@
+schema: comet.native.v4
+name: backport-downstream-subtitle-fixes
+language: zh-CN
+phase: archive
+status: done
+state_version: 10
+brief: brief.md
+spec_changes:
+  - capability: subtitle-rendering
+    operation: create
+    source: specs/subtitle-rendering/spec.md
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 2
+  retry_epoch: 1
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（#1）：含多句的中文翻译 cue（如「威源后面有两条路可以选择。这条沥青路是通往阿克赛的五七一号国道。往这边走。」）经
+      `splitFragmentBySentencePunctuation(frag, 'zh-CN')` 切成 3 条，且第 2 条（最长）时长 >
+      第 1 条时长；切分后总时长守恒（末条 `end` 等于原 `fragment.end`），无重叠。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（#1）：英文 cue「To the airport. I'm flying.」按词数加权分配时长，行为与改造前一致（不回归）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（#2）：用户在字幕选择器选了翻译语言（`SubtitleOption.kind ===
+      'translated'`）时，`fetchOptionFragments` 走 `refineAsrFragments`（保守精炼）而非
+      `postProcessSubtitles` 的 shape-gate lightClean 路径；`buildSubtitleUrl` 经
+      `applySubtitleOptionTarget` 注入 `tlang`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4（#2）：源轨道 `track.kind === 'asr'` 时同样走 `refineAsrFragments`（与现状一致，不回归）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5（#2）：用户从翻译语言切回源语言（`tlang` 被移除，其余 key 段不变）时，`isTlangRemovedOnly` 返回
+      `true`，不触发完整重载（保留现有片段或按 nextOptionKey 判定，不因 tlang 变化误判为轨道变更）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: A6（#3）：`asrMergeDurationMs` 默认 7000，存储值经 clamp 落在 [1000, 10000]。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: A7（#3）：用户拖动 popup 里的「自动字幕合并时长」slider
+      后，若当前正显示保守精炼结果（`currentUsesConservativeRefine === true` 且
+      `currentRawFragments.length > 0`），overlay 用 `currentRawFragments` + 新
+      `maxMergedDurationMs` 本地重算 `currentFragments` 并立即重渲染，不重新请求 timedtext。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A8
+    source: brief.md
+    text: A8（#3）：未处于保守精炼路径时，slider 变更不触发重算、不重载。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A9
+    source: brief.md
+    text: A9（#4）：YouTube watch 页 hover 右侧推荐卡片时，推荐预览的 `<video>` 不触发字幕 overlay 重新绑定；字幕
+      overlay 始终跟随 `#movie_player` 内的 `video.html5-main-video`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A10
+    source: brief.md
+    text: "A10（#5）：YouTube 播放器任意弹层（设置菜单 / 上下文菜单 / `ytd-menu-popup-renderer` /
+      `tp-yt-iron-dropdown` / `.ytp-panel` /
+      `.ytp-popup`）可见时，`setSubtitlesEnabled` 不点击 `.ytp-subtitles-button`，返回 `{
+      success: false, enabled: current }`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A11
+    source: brief.md
+    text: A11（#5）：无弹层时，`setSubtitlesEnabled` 行为不变（可正常切换）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A12
+    source: brief.md
+    text: A12（#6）：`alwaysEnableSubtitles === true`
+      时，`requestYouTubeSubtitlePlayerData` 返回 null 或
+      `readNativeSubtitleButtonState()` 返回
+      null，`scheduleNativeToggleRestoreRetry` 以 250ms 间隔重新 scheduleSync，最多 20
+      次后停止。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A13
+    source: brief.md
+    text: A13（#6）：`alwaysEnableSubtitles === false` 时，重试机制不启动（不改变上游现状）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A14
+    source: brief.md
+    text: A14（#7）：timedtext 加载失败时，前 2 次（`consecutiveLoadFailures < 3`）只
+      `scheduleSync(FETCH_RETRY_DELAY_MS)` 重试、不回退原生；第 3 次才
+      `fallbackToNative(true)`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A15
+    source: brief.md
+    text: A15（#7）：换视频或成功加载后 `consecutiveLoadFailures` 归零。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A16
+    source: brief.md
+    text: A16（#8）：某视频 `captionTracks.length === 0`
+      时，`markSubtitleUnavailable(videoId)` 记录该 id；后续该视频的 sync / pollTrackChange
+      命中缓存提前返回，不重新请求 playerData。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A17
+    source: brief.md
+    text: A17（#8）：切换到其他视频时，`subtitleUnavailableVideoId` 失效（不串视频）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A18
+    source: brief.md
+    text: A18（#9）：`alwaysEnableSubtitles` 默认 `false`；为 `false` 时上游
+      `rememberNativeToggle` / `rememberNativeToggleByChannel` 记忆行为完全不变。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A19
+    source: brief.md
+    text: A19（#9）：用户开启 `alwaysEnableSubtitles` 后，每个新视频强制开启 CC
+      字幕，忽略上次记忆的关闭状态；`restoreNativeToggleForCurrentPage` 在
+      `alwaysEnableSubtitles === true` 时 `targetEnabled` 直接为 `true`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A20
+    source: brief.md
+    text: A20（#10）：`eventHitsAnyVideoSurface(e)` 对落在任意可见、非零尺寸 `<video>` 渲染矩形内的
+      `MouseEvent` 返回 `true`；对 `display:none` / `visibility:hidden` / 零尺寸 video
+      返回 `false`；对非 `MouseEvent` 返回 `false`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A21
+    source: brief.md
+    text: A21（#10）：现有 `eventHitsVideoSurface(e, video)` 行为不变（不回归）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A22
+    source: brief.md
+    text: "A22：`npm run check`（svelte-check）通过；`npm test`（vitest）全部通过，含为 #1/#3/#7
+      新增或调整的测试。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A23
+    source: specs/subtitle-rendering/spec.md
+    text: 本规格描述归档后 YouTube 字幕覆盖层在「字幕后处理、翻译路径、推荐预览隔离、菜单防误触、native toggle
+      重试、加载失败阈值、无字幕缓存、新视频默认开启、视频命中判定」上的完整行为。仅列出本轮 change 改变的子能力，未列出的子能力保持上游现状不变。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A24
+    source: specs/subtitle-rendering/spec.md
+    text: "`splitFragmentBySentencePunctuation(fragment, language)` 在按内部强标点切分一个含多句的
+      cue 后，按各部分文本长度按比例分配时长："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A25
+    source: specs/subtitle-rendering/spec.md
+    text: "`language` 为空或非 CJK 时：按词数（`wordCount`）加权，行为与改造前一致。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A26
+    source: specs/subtitle-rendering/spec.md
+    text: "`language` 为 CJK（`isCJKLanguage(language)` 为 true）时：按
+      `getTextLength(part, true)`（字符数）加权，避免「每句时长相同」的中文翻译错位。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A27
+    source: specs/subtitle-rendering/spec.md
+    text: 不变量：
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A28
+    source: specs/subtitle-rendering/spec.md
+    text: 切分后所有片段的 `[start, end)` 区间首尾相接，总时长等于 `fragment.end - fragment.start`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A29
+    source: specs/subtitle-rendering/spec.md
+    text: 末条片段的 `end` 严格等于原 `fragment.end`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A30
+    source: specs/subtitle-rendering/spec.md
+    text: 相邻片段无重叠（由 `splitBySentencePunctuation` 末尾的 overlap fix 保证）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A31
+    source: specs/subtitle-rendering/spec.md
+    text: 每个非末条片段 `end - start >= 1ms`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A32
+    source: specs/subtitle-rendering/spec.md
+    text: "`splitBySentencePunctuation(fragments, language)` 将 `language` 透传给每个
+      `splitFragmentBySentencePunctuation` 调用。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A33
+    source: specs/subtitle-rendering/spec.md
+    text: "新增 `shouldUseConservativeSubtitleRefine(option: SubtitleOption):
+      boolean`："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A34
+    source: specs/subtitle-rendering/spec.md
+    text: "`option.kind === 'translated'`（用户在字幕选择器选了翻译语言）→ true"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A35
+    source: specs/subtitle-rendering/spec.md
+    text: "`option.sourceTrack.kind === 'asr'`（自动生成字幕）→ true"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A36
+    source: specs/subtitle-rendering/spec.md
+    text: 其余 → false
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A37
+    source: specs/subtitle-rendering/spec.md
+    text: "`fetchOptionFragments` 在拿到 `fragments` 后："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A38
+    source: specs/subtitle-rendering/spec.md
+    text: 若 `shouldUseConservativeSubtitleRefine(option)` 为 true → 调用
+      `refineAsrFragments(fragments, language, { maxMergedDurationMs })`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A39
+    source: specs/subtitle-rendering/spec.md
+    text: 否则 → 维持上游现状 `postProcessSubtitles(fragments, language)`（shape-gate）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A40
+    source: specs/subtitle-rendering/spec.md
+    text: "`language` 由 `getSubtitleOptionLanguage(option) || 'en'` 给出（已存在）。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A41
+    source: specs/subtitle-rendering/spec.md
+    text: "`buildSubtitleUrl(option, playerData, potToken)` 经现有
+      `applySubtitleOptionTarget(url, option)` 注入 `tlang`（translated kind 时
+      set，否则 delete）。不新增 URL 拼装逻辑。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A42
+    source: specs/subtitle-rendering/spec.md
+    text: "新增 `isTlangRemovedOnly(nextOptionKey, currentOptionKey): boolean`，判定「当前
+      option key 含翻译段、下一个 option key 不含翻译段、二者其余段相同」时返回 true。`pollTrackChange` /
+      `loadSubtitlesForCurrentPage` 在仅 tlang 变化时跳过完整重载（保留现有片段或按现有 nextOptionKey
+      判定逻辑，不因 tlang 被移除而误判为轨道变更触发重新加载）。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A43
+    source: specs/subtitle-rendering/spec.md
+    text: "`YTSubtitleConfig.asrMergeDurationMs: number`，默认 `7000`，存储时 clamp 到
+      `[1000, 10000]`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A44
+    source: specs/subtitle-rendering/spec.md
+    text: "`refineAsrFragments(fragments, language, options?)` 的
+      `options.maxMergedDurationMs` 透传给 `mergeAsrFragments` →
+      `canMergeByLimits(current, next, isCJK,
+      maxMergedDurationMs)`，作为合并后总时长的上限（替代原硬编码 `MAX_MERGED_DURATION_MS`）。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A45
+    source: specs/subtitle-rendering/spec.md
+    text: 热重算路径（`updateSettings` / `onSettingsChange`）：
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A46
+    source: specs/subtitle-rendering/spec.md
+    text: 记录变更前的 `previousMergeDurationMs`，应用新 config 后比较。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A47
+    source: specs/subtitle-rendering/spec.md
+    text: 若 `mergeDurationChanged && currentUsesConservativeRefine &&
+      currentRawFragments.length > 0`：用 `refineAsrFragments(currentRawFragments,
+      currentTrackLanguage, { maxMergedDurationMs })` 重算
+      `currentFragments`，`currentIndex = -1`，立即
+      `renderAtCurrentTime(true)`，不重新请求 timedtext。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A48
+    source: specs/subtitle-rendering/spec.md
+    text: 否则不重算；若 `enabled && !mergeDurationChanged`，维持现有 `scheduleSync(0)` 行为。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A49
+    source: specs/subtitle-rendering/spec.md
+    text: "新增内部状态：`currentRawFragments:
+      SubtitleFragment[]`（保守精炼前的原始片段）、`currentTrackLanguage:
+      string`、`currentUsesConservativeRefine: boolean`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A50
+    source: specs/subtitle-rendering/spec.md
+    text: 新增私有方法：
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A51
+    source: specs/subtitle-rendering/spec.md
+    text: 替换以下位置对 `this.videoCtrl.video` 的直接引用（字幕时钟绑定、OSD 定位锚点）：
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A52
+    source: specs/subtitle-rendering/spec.md
+    text: "`rebindVideo` 的订阅回调触发处"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A53
+    source: specs/subtitle-rendering/spec.md
+    text: 主加载入口的 `video` 取值
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A54
+    source: specs/subtitle-rendering/spec.md
+    text: OSD / fallback 提示的锚点
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A55
+    source: specs/subtitle-rendering/spec.md
+    text: 不变量：字幕 overlay 永远跟随 `#movie_player` 内的主视频，不绑定推荐卡片的预览 `<video>`。`videoCtrl`
+      订阅仍保留用于倍速等场景。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A56
+    source: specs/subtitle-rendering/spec.md
+    text: "`subtitleOverlay.page.ts` 新增 `isYoutubeMenuOpen():
+      boolean`，检测以下任一选择器命中的可见元素：
+      `.ytp-popup`、`.ytp-settings-menu`、`.ytp-contextmenu`、`ytd-menu-popup-rend\
+      erer`、`tp-yt-iron-dropdown`、`.ytp-panel`。「可见」= `offsetWidth>0 &&
+      offsetHeight>0 && display!=='none' && visibility!=='hidden'`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A57
+    source: specs/subtitle-rendering/spec.md
+    text: "`setSubtitlesEnabled(enabled)` 在「当前状态 ≠ 目标」、即将调用
+      `player.toggleSubtitles()` / `button.click()` 之前，若 `isYoutubeMenuOpen()` 为
+      true，直接返回 `{ success: false, enabled: current }`，不点击。无弹层时行为不变。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A58
+    source: specs/subtitle-rendering/spec.md
+    text: 常量：`NATIVE_TOGGLE_RESTORE_RETRY_DELAY_MS =
+      250`、`NATIVE_TOGGLE_RESTORE_MAX_RETRIES = 20`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A59
+    source: specs/subtitle-rendering/spec.md
+    text: "状态：`nativeToggleRestoreRetryKey: string`、`nativeToggleRestoreRetryCount:
+      number`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A60
+    source: specs/subtitle-rendering/spec.md
+    text: "`scheduleNativeToggleRestoreRetry(expectedVideoId)`："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A61
+    source: specs/subtitle-rendering/spec.md
+    text: 仅在 `alwaysEnableSubtitles === true` 且 `expectedVideoId ===
+      getCurrentUrlVideoId()` 时生效。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A62
+    source: specs/subtitle-rendering/spec.md
+    text: 按 `${videoId}|global` 维护 retryKey，key 变更时重置计数。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A63
+    source: specs/subtitle-rendering/spec.md
+    text: "`count >= MAX_RETRIES` 时停止；否则 `count += 1` 并 `scheduleSync(DELAY_MS)`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A64
+    source: specs/subtitle-rendering/spec.md
+    text: "`resetNativeToggleRestoreRetry(restoreKey)`：key 匹配时清零。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A65
+    source: specs/subtitle-rendering/spec.md
+    text: 调用点：`restoreNativeToggleForCurrentPage` 在 playerData 为空 / 按钮状态为 null / set
+      失败时调度重试；成功时 reset。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A66
+    source: specs/subtitle-rendering/spec.md
+    text: "`alwaysEnableSubtitles === false` 时不启动重试（不改变上游现状）。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A67
+    source: specs/subtitle-rendering/spec.md
+    text: "常量 `FALLBACK_NOTICE_FAILURE_THRESHOLD = 3`。状态 `consecutiveLoadFailures:
+      number`、`loadFailureVideoId: string`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A68
+    source: specs/subtitle-rendering/spec.md
+    text: "`handleSubtitleLoadFailure`："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A69
+    source: specs/subtitle-rendering/spec.md
+    text: 若当前视频已有可用 overlay（`currentVideoId === expectedVideoId &&
+      currentFragments.length > 0`）→ 直接返回（不计数、不回退）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A70
+    source: specs/subtitle-rendering/spec.md
+    text: 换视频时重置 `loadFailureVideoId` 与计数。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A71
+    source: specs/subtitle-rendering/spec.md
+    text: "`consecutiveLoadFailures += 1`；若 `< THRESHOLD` →
+      `scheduleSync(FETCH_RETRY_DELAY_MS)` 重试，不回退。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A72
+    source: specs/subtitle-rendering/spec.md
+    text: 若 `>= THRESHOLD` → `fallbackToNative(true)`。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A73
+    source: specs/subtitle-rendering/spec.md
+    text: 成功加载或换视频时计数归零。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A74
+    source: specs/subtitle-rendering/spec.md
+    text: "状态 `subtitleUnavailableVideoId: string`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A75
+    source: specs/subtitle-rendering/spec.md
+    text: "`markSubtitleUnavailable(videoId)`：记录 id，`stopRenderer` /
+      `clearSubtitleState` / `renderSubtitleText('')` / `showNativeSubtitles`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A76
+    source: specs/subtitle-rendering/spec.md
+    text: 在 `pollTrackChange`、`loadSubtitlesForCurrentPage` 入口及
+      `captionTracks.length === 0` 处：若 `subtitleUnavailableVideoId ===
+      getCurrentUrlVideoId()` → 提前返回，不请求 playerData。切换到其他视频时缓存自然失效（id 不匹配）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A77
+    source: specs/subtitle-rendering/spec.md
+    text: "`YTConfig.alwaysEnableSubtitles?: boolean`，默认 `false`，归入 `yt_config`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A78
+    source: specs/subtitle-rendering/spec.md
+    text: 行为：
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A79
+    source: specs/subtitle-rendering/spec.md
+    text: "`false`（默认）：上游 `rememberNativeToggle` / `rememberNativeToggleByChannel`
+      记忆机制完全不变。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A80
+    source: specs/subtitle-rendering/spec.md
+    text: "`true`：`restoreNativeToggleForCurrentPage` 的目标 `targetEnabled` 强制为
+      `true`，忽略记忆的关闭状态；`shouldRememberNativeToggle` 语义不变（仍由
+      `rememberNativeToggle` 控制），但恢复目标优先取 `alwaysEnableSubtitles`。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A81
+    source: specs/subtitle-rendering/spec.md
+    text: popup 新增 ToggleItem（i18n key `yt_subtitle_always_enable` /
+      `yt_subtitle_always_enable_desc`）。
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A82
+    source: specs/subtitle-rendering/spec.md
+    text: "`pointerTargets.ts` 新增："
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  - id: A83
+    source: specs/subtitle-rendering/spec.md
+    text: "`eventHitsVideoSurface(e, video)` 保持现状，不改。本轮不接入任何调用点，仅作为公共工具供后续使用。"
+    result: passed
+    reason:
+      text: 代码逻辑与 spec 一致；用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+builder_handoff:
+  candidate_id: b3252046-0fa3-41c9-b184-dda6ca00b42c
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:d6dcaaf4-253b-46a4-961f-f00d698440f2
+  iteration: 1
+  summary:
+    text: 回流入游下游10项字幕与健壮性改进：(#1) asr-merge.ts 的
+      splitFragmentBySentencePunctuation/splitBySentencePunctuation 增加 language
+      参数，CJK 翻译按 getTextLength 字符加权分配时长替代词数；(#2) YouTubeSubtitleOverlay 新增
+      shouldUseConservativeSubtitleRefine(翻译/asr 走 refineAsrFragments) +
+      isTlangRemovedOnly(仅 tlang 移除不重载)，fetchOptionFragments 返回
+      raw/language/usedConservativeRefine，buildSubtitleUrl 复用
+      applySubtitleOptionTarget 注入 tlang；(#3)
+      YTSubtitleConfig.asrMergeDurationMs(默认7000,clamp 1000-10000) +
+      canMergeByLimits/mergeAsrFragments/refineAsrFragments 接收
+      maxMergedDurationMs，updateSettings 在 currentRawFragments 上本地重算不重新
+      fetch，popup 新增 slider；(#4) youtubeMainVideo()+playerRoot() 替换 4 处
+      this.videoCtrl.video 的字幕绑定/OSD 锚点；(#5) subtitleOverlay.page.ts 新增
+      isYoutubeMenuOpen()，setSubtitlesEnabled 点击前 gate；(#6)
+      scheduleNativeToggleRestoreRetry/resetNativeToggleRestoreRetry + 250ms×20
+      重试，仅在 alwaysEnableSubtitles===true 时启用；(#7)
+      FALLBACK_NOTICE_FAILURE_THRESHOLD=3 + consecutiveLoadFailures，前2次重试第3次才
+      fallbackToNative；(#8) subtitleUnavailableVideoId +
+      markSubtitleUnavailable，pollTrackChange/loadSubtitlesForCurrentPage
+      入口前置检查；(#9) YTConfig.alwaysEnableSubtitles(默认false) + popup
+      ToggleItem，true 时 restoreAlwaysEnabledNativeToggle 强制开启忽略记忆；(#10)
+      pointerTargets.ts 新增 eventHitsAnyVideoSurface 工具函数(按 rect 命中任意可见
+      video)，未接入调用点。不做运行信息浮层。svelte-check 0
+      errors。新增/调整测试：asr-merge.test.ts(+CJK 字符加权用例+maxMergedDurationMs
+      用例)、pointerTargets.test.ts(新建,eventHitsAnyVideoSurface 6 用例)
+      全部通过。未跑的检查：vitest 全量套件中 9 个测试文件失败，但 git stash 验证为上游 baseline 既有的 jsdom
+      环境配置问题(baseline 44 failed vs 本分支 39 failed，本分支反而更少)，与本次改动无关。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+    - A8
+    - A9
+    - A10
+    - A11
+    - A12
+    - A13
+    - A14
+    - A15
+    - A16
+    - A17
+    - A18
+    - A19
+    - A20
+    - A21
+    - A22
+    - A23
+    - A24
+    - A25
+    - A26
+    - A27
+    - A28
+    - A29
+    - A30
+    - A31
+    - A32
+    - A33
+    - A34
+    - A35
+    - A36
+    - A37
+    - A38
+    - A39
+    - A40
+    - A41
+    - A42
+    - A43
+    - A44
+    - A45
+    - A46
+    - A47
+    - A48
+    - A49
+    - A50
+    - A51
+    - A52
+    - A53
+    - A54
+    - A55
+    - A56
+    - A57
+    - A58
+    - A59
+    - A60
+    - A61
+    - A62
+    - A63
+    - A64
+    - A65
+    - A66
+    - A67
+    - A68
+    - A69
+    - A70
+    - A71
+    - A72
+    - A73
+    - A74
+    - A75
+    - A76
+    - A77
+    - A78
+    - A79
+    - A80
+    - A81
+    - A82
+    - A83
+  checks:
+    - name:
+        text: svelte-check (npm run check)
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors, 0 warnings
+        truncated: false
+    - name:
+        text: asr-merge.test.ts
+        truncated: false
+      result: passed
+      note:
+        text: 25 tests, 含 CJK 字符加权 + maxMergedDurationMs 新用例
+        truncated: false
+    - name:
+        text: pointerTargets.test.ts
+        truncated: false
+      result: passed
+      note:
+        text: 6 tests, eventHitsAnyVideoSurface 新建
+        truncated: false
+    - name:
+        text: vitest full suite
+        truncated: false
+      result: not-run
+      note:
+        text: 9 文件失败，stash 验证为上游 baseline 既有 jsdom 问题(baseline 44 failed vs 本分支 39
+          failed)，非本次回归
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: "#4/#5/#6/#8/#9 为运行时/DOM 行为，无浏览器环境实跑，由代码审查 + svelte-check + 单测验证"
+      truncated: false
+    - text: vitest 全量套件的 jsdom 环境失败为上游既有问题，本次未修复
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-18T11:22:24.081Z
+blockers: []
+verification:
+  candidate_id: b3252046-0fa3-41c9-b184-dda6ca00b42c
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:389c1800-2e90-4cac-b460-1755c77ab2c2
+  iteration: 1
+  attempt: 2
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 10 项下游改进全部落地，代码逻辑与 brief/spec 一致，无 failed 项。用户接受代位证据，83 项全部 passed。
+    truncated: false
+  risks:
+    - text: A9/A10/A11/A12/A19 为运行时/DOM 行为、A22 的 vitest
+        全量套件当前环境无法实跑，用户接受代码审查+单测作为代位证据，运行时证据可后续在真实浏览器补。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-08-18T12:11:39.687Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: blocked
+    unresolved_ids:
+      - A9
+      - A10
+      - A11
+      - A12
+      - A19
+      - A22
+    summary:
+      text: 10 项下游改进全部落地，代码逻辑与 brief/spec 一致，无 failed 项。78 passed / 5 blocked(A9 A10
+        A11 A12 A19 运行时 DOM 行为需浏览器实跑) + A22 部分通过(svelte-check 与本次相关单测通过，vitest
+        全量套件为上游既有 jsdom 环境问题)。无代码修改需求。
+      truncated: false
+    completed_at: 2026-08-18T11:57:13.949Z
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 2
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 10 项下游改进全部落地，代码逻辑与 brief/spec 一致，无 failed 项。用户接受代位证据，83 项全部 passed。
+      truncated: false
+    completed_at: 2026-08-18T12:11:39.687Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-18T09:04:32.578Z

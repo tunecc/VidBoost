@@ -9,7 +9,9 @@ releases/
 todo.md
 forum-post.md
 VidBoost.zip
-docs
+# docs 其余内容保持忽略；仅放行 Native 正式产物目录 docs/comet（便携式产物需随 Git 同步）
+docs/*
+!docs/comet
 outputs
 .serena
 assets/VidBoost_logo.pxd
