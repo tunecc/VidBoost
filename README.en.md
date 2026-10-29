@@ -172,6 +172,7 @@ Currently supported:
 - Combines multiple outline / shadow / embossed effects
 - Imports custom subtitle fonts
 - Keeps subtitle timing as synchronized as possible at high playback speeds
+- Translate-plugin compatibility: for non-Chinese subtitles, yields to an external translator — Read Frog first (its subtitle translation is turned on automatically), then Cometix Translate (it must already have YouTube subtitle translation enabled; VidBoost falls back to its own rendering if Cometix does not take over), otherwise Immersive Translate
 
 <p align="center">
     <img src="./assets/yt_subtitle_overlay.png" width="50%" alt="YouTube self-rendered subtitles" />

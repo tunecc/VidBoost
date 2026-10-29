@@ -2,8 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROBE="$ROOT/outputs/runtime/vibe-sessions/20260324-firefox-phase3-runtime-validation/firefox_youtube_cdn_probe.py"
-DEFAULT_VENV_PYTHON="$ROOT/outputs/runtime/vibe-sessions/20260324-firefox-phase3-runtime-validation/selenium-venv/bin/python"
+# 会话产物默认放在仓库外：outputs/runtime 会被 Comet 的检查输入快照当成生成输入枚举，
+# 数千个被忽略文件会让快照无法完成。可用 VIDBOOST_RUNTIME_DIR 覆盖。
+RUNTIME_DIR="${VIDBOOST_RUNTIME_DIR:-"$HOME/.vidboost/runtime"}"
+PROBE="$RUNTIME_DIR/vibe-sessions/20260324-firefox-phase3-runtime-validation/firefox_youtube_cdn_probe.py"
+DEFAULT_VENV_PYTHON="$RUNTIME_DIR/vibe-sessions/20260324-firefox-phase3-runtime-validation/selenium-venv/bin/python"
 PYTHON_BIN="${VIDBOOST_FIREFOX_PROBE_PYTHON:-}"
 PROBE_PID=""
 RUN_BUILD="1"

@@ -40,8 +40,10 @@ import {
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
     type YouTubeTimedText,
+    createCometixTranslateYieldController,
     createReadFrogActivationController,
     findReadFrogTranslateButtonContainer,
+    isCometixTranslatePresent,
     resolvePluginTranslateYield
 } from './youtube/subtitleOverlay.shared';
 import { parseYouTubeSubtitleEvents } from './youtube/subtitle/parsers';
@@ -438,6 +440,12 @@ export class YouTubeSubtitleOverlay implements Feature {
     private catalogVideoId = '';
     private catalogRequestInFlight = false;
     private readonly readFrogActivation = createReadFrogActivationController();
+    private readonly cometixYield = createCometixTranslateYieldController({
+        ensureNativeCaptions: () => requestYouTubeSubtitleEnsureEnabled().then(() => {}),
+        onFallback: (key) => this.fallbackFromCometixYield(key)
+    });
+    /** 已让位给 Cometix 但未确认接管的 key，不再重试，避免让位/回退循环。 */
+    private readonly cometixYieldFailedKeys = new Set<string>();
     private manualNativeToggleOnVideoId = '';
 
     private boundVideo: HTMLVideoElement | null = null;
@@ -471,6 +479,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.activeOption = null;
         this.catalogVideoId = '';
         this.manualNativeToggleOnVideoId = '';
+        // 失败集合随导航失效：离开页面后同一视频同一字幕轨应能重新尝试让位（决策 D8）。
+        this.cometixYield.reset();
+        this.cometixYieldFailedKeys.clear();
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.setNativeSubtitlesHidden(false);
@@ -624,6 +635,8 @@ export class YouTubeSubtitleOverlay implements Feature {
     unmount() {
         this.enabled = false;
         this.readFrogActivation.reset();
+        this.cometixYield.reset();
+        this.cometixYieldFailedKeys.clear();
 
         if (this.syncTimer != null) {
             window.clearTimeout(this.syncTimer);
@@ -993,7 +1006,8 @@ export class YouTubeSubtitleOverlay implements Feature {
                 return;
             }
 
-            // 兼容插件翻译：Read Frog 在场优先让位并自动开启其翻译，缺席回落 IT 无条件让位
+            // 兼容插件翻译：Read Frog 在场优先让位并自动开启其翻译；
+            // 否则 Cometix Translate 在场则让位并验证接管；两者皆缺席回落 IT 无条件让位
             if (this.yieldToPluginTranslateIfApplicable(option, playerData.videoId)) {
                 return;
             }
@@ -1157,7 +1171,8 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!response?.success || !response.data) return;
 
         const option = this.resolvePlayerSubtitleState(response.data);
-        // 兼容插件翻译：Read Frog 在场优先让位并自动开启其翻译，缺席回落 IT 无条件让位
+        // 兼容插件翻译：Read Frog 在场优先让位并自动开启其翻译；
+        // 否则 Cometix Translate 在场则让位并验证接管；两者皆缺席回落 IT 无条件让位
         if (option && this.yieldToPluginTranslateIfApplicable(option, response.data.videoId)) {
             return;
         }
@@ -1671,16 +1686,21 @@ export class YouTubeSubtitleOverlay implements Feature {
     /**
      * 「插件翻译兼容」单一开关的统一让位决策：
      * 开关开启 + 非中文时，Read Frog 在场 → 让位 Read Frog 并自动开启其翻译；
-     * 不在场 → 回落 IT 无条件让位。让位返回 true（调用方中止后续加载）。
+     * 否则 Cometix Translate 在场 → 让位 Cometix 并验证其接管（未接管则回退自渲染）；
+     * 两者皆不在场 → 回落 IT 无条件让位。让位返回 true（调用方中止后续加载）。
      */
     private yieldToPluginTranslateIfApplicable(option: SubtitleOption, videoId: string): boolean {
         const decision = resolvePluginTranslateYield(getSubtitleOptionLanguage(option), {
             enabled: this.config.compatibleWithPluginTranslate === true,
-            readFrogPresent: findReadFrogTranslateButtonContainer() !== null
+            readFrogPresent: findReadFrogTranslateButtonContainer() !== null,
+            cometixPresent: isCometixTranslatePresent()
         });
         if (decision === 'read-frog') {
             this.yieldToReadFrog(buildSubtitleOptionKey(videoId, option));
             return true;
+        }
+        if (decision === 'cometix-translate') {
+            return this.yieldToCometixTranslate(buildSubtitleOptionKey(videoId, option));
         }
         if (decision === 'immersive-translate') {
             this.showNativeSubtitlesForImmersiveTranslate();
@@ -1715,6 +1735,26 @@ export class YouTubeSubtitleOverlay implements Feature {
     private yieldToReadFrog(optionKey: string) {
         this.stopRenderingAndRestoreNativeSubtitles();
         this.readFrogActivation.activate(optionKey);
+    }
+
+    /**
+     * 停止 VidBoost 字幕渲染并恢复原生字幕显示，让 Cometix Translate 渲染翻译结果。
+     * 返回 false 表示该 key 上次让位未确认接管，本次不再让位（调用方继续自渲染）。
+     */
+    private yieldToCometixTranslate(optionKey: string): boolean {
+        if (this.cometixYieldFailedKeys.has(optionKey)) return false;
+        this.stopRenderingAndRestoreNativeSubtitles();
+        this.cometixYield.activate(optionKey);
+        return true;
+    }
+
+    /**
+     * Cometix 让位后在等待上限内未接管：记入失败集合并重新加载，恢复 VidBoost 自渲染。
+     * 同一 key 不再尝试让位，避免让位/回退循环。
+     */
+    private fallbackFromCometixYield(optionKey: string) {
+        this.cometixYieldFailedKeys.add(optionKey);
+        this.scheduleSync(0);
     }
 
     private shouldRememberNativeToggle() {

@@ -180,6 +180,7 @@ YouTube 原生的 `0-9` 数字键会跳进度，正好和上面的快捷倍速�
 - 组合多种描边 / 投影 / 浮雕效果
 - 导入自定义字幕字体
 - 在高倍速场景下尽量保持字幕时间同步
+- 插件翻译兼容：非中文字幕时让位外部翻译插件——优先 Read Frog（自动开启其字幕翻译），其次 Cometix Translate（需已开启其 YouTube 字幕翻译，未接管则回退自渲染），否则交给沉浸式翻译
 
 <p align="center">
     <img src="./assets/yt_subtitle_overlay.png" width="50%" alt="YouTube 自渲染字幕" />
