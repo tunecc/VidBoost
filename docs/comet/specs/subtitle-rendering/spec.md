@@ -149,43 +149,106 @@ eventHitsAnyVideoSurface(e: Event): boolean
 
 `eventHitsVideoSurface(e, video)` 保持现状，不改。本轮不接入任何调用点，仅作为公共工具供后续使用。
 
-## 8. 插件翻译兼容（沉浸式翻译 / Read Frog）（本轮新增）
 
-### 8.1 沉浸式翻译兼容（既有行为，保持不变）
+## 8. 插件翻译兼容（沉浸式翻译 / Read Frog / Cometix Translate）
 
-- 设置 `yt_subtitle.compatibleWithImmersiveTranslate`（默认 `false`），popup 开关行 + i18n key `yt_subtitle_compatible_it` / `yt_subtitle_compatible_it_desc`。
-- `shouldYieldToImmersiveTranslate(trackLanguageCode)`：开关开启且 `isChineseLanguageCode(trackLanguageCode)` 为 false → 让位（无条件，不检测 IT 是否在场）。
-- 让位动作：中止加载、停渲染、清字幕状态、清空渲染文本、销毁 overlay、`setNativeSubtitlesHidden(false)`（移除 VidBoost 隐藏原生字幕的样式，由 IT 渲染翻译）。
-- 触发点：`loadSubtitleAndRender` option 解析后、`pollTrackChange` option 解析后。
+「插件翻译兼容」是单一开关：`yt_subtitle.compatibleWithPluginTranslate: boolean`（默认 `false`）。开关关闭时三路均不让位，VidBoost 正常自渲染。
 
-### 8.2 Read Frog 兼容（本轮变更）
+判定收敛在 `subtitleOverlay.shared.ts` 的纯函数 `resolvePluginTranslateYield(trackLanguageCode, options)`，`options = { enabled, readFrogPresent, cometixPresent }`。返回 `'read-frog' | 'cometix-translate' | 'immersive-translate' | null`。
 
-设置 `yt_subtitle.compatibleWithReadFrog: boolean`（默认 `false`），`cloneYTSubtitleConfig` 对旧存储缺字段回退默认值。
+### 8.1 判定顺序与公共前置
 
-判定 `shouldYieldToReadFrog(trackLanguageCode)`，评估顺序在 `shouldYieldToImmersiveTranslate` 之后（IT 让位成立时不再评估）：
+`resolvePluginTranslateYield` 按以下顺序求值：
 
-- 开关开启；
-- `isChineseLanguageCode(trackLanguageCode)` 为 false（与 IT 共用同一中文判定）；
-- Read Frog 在场：`document.getElementById('read-frog-subtitles-translate-button-container')` 命中（Read Frog 启用视频字幕后挂载于播放器控件栏，open shadow root）。
+1. `options.enabled !== true` → `null`。
+2. `isChineseLanguageCode(trackLanguageCode)` 为 true（`zh*` 前缀）→ `null`（中文不让位，VidBoost 自渲染强化）。
+3. `options.readFrogPresent === true` → `'read-frog'`。
+4. `options.cometixPresent === true` → `'cometix-translate'`。
+5. 其余 → `'immersive-translate'`（无条件回落，不检测 IT 是否在场）。
 
-在场与状态读取（`subtitleOverlay.shared.ts`）：
+不变量：
 
-- 容器：`#read-frog-subtitles-translate-button-container`；
-- 徽标状态：容器 `shadowRoot` 内 `.read-frog-subtitles-translate-button` 的徽标子元素文本，`"ON"` / `"OFF"`（Read Frog 硬编码非 i18n 文本）；容器或徽标不可读时状态未知。
+- `cometixPresent` 为可选参数，缺省按 `false`；只传 `{ enabled, readFrogPresent }` 时行为与引入 Cometix 之前逐项一致。
+- 三路互斥，只有第一个命中的分支生效。
+- 纯函数：不读 DOM、不读写设置、无副作用。
 
-让位动作：复用 IT 让位语义（停渲染、清状态、销毁 overlay、`setNativeSubtitlesHidden(false)`），Read Frog 翻译接管后由其自行隐藏原生字幕，用户关闭 Read Frog 时由其自行恢复原生显示。
+### 8.2 沉浸式翻译兼容（既有行为，保持不变）
 
-自动开启（受控触发流程）：
+- 判定：到达第 5 步即让位（无条件，不检测 IT 在场）。
+- 让位动作：中止加载、停渲染、清字幕状态、清空渲染文本、销毁 overlay、移除 VidBoost 隐藏原生字幕的样式（`#vb-yt-subtitle-native-hide`），由 IT 渲染译文。
+- 不让位：VidBoost 自渲染，并保留自身隐藏原生字幕的样式。
 
-- 触发前提：徽标可读且为 OFF。已 ON 时不派发（不得把已开启的翻译切回 OFF）。
-- 派发动作：向 `document` 派发合成 `KeyboardEvent`：`keydown` + `keyup` 成对，`altKey: true`、`code: 'KeyC'`、`key: 'c'`，对应 Read Frog 默认字幕切换快捷键 Alt+C（其热键库监听 `document` 且不校验 `isTrusted`）。
-- 竞态处理：让位决策时容器尚未挂载 → 以有界间隔轮询等待容器出现（上限时长有界），超时安全放弃（不抛错、清理定时器，原生字幕保持可见）。
-- 结果验证：派发后有界轮询徽标翻 ON；未翻则有限次重试派发后放弃。
-- 去重与防打架：按 `videoId + optionKey` 去重，1.2s 轮询不重复派发；用户经 Read Frog 自身 UI 手动关闭后，同一视频内不自动重开，切换视频或字幕轨（键变化）后恢复触发。
+### 8.3 在场检测
 
-约束：不读写 Read Frog 扩展存储、不注入其隔离世界；仅依赖其页面 DOM 标识（容器 id、按钮类名、徽标文本）。用户重映射其切换快捷键后，自动开启静默失效（让位行为仍生效）。
+Read Frog（`subtitleOverlay.shared.ts`）：
 
-### 8.3 popup 与 i18n（本轮变更）
+- `READ_FROG_TRANSLATE_BUTTON_CONTAINER_ID = 'read-frog-subtitles-translate-button-container'`；
+- `findReadFrogTranslateButtonContainer()`：`typeof document === 'undefined'` 时返回 `null`，否则 `document.getElementById(...)`；
+- 容器存在即视为在场。
 
-- 新增 i18n key `yt_subtitle_compatible_read_frog` / `yt_subtitle_compatible_read_frog_desc`（zh / en）。
-- 「兼容 Read Frog」开关行位于「兼容沉浸式翻译」行下方，行布局、tooltip 交互与禁用态规则（跟随 `ytSubtitleStyleDisabled`）一致。
+Cometix Translate：
+
+- `COMETIX_TRANSLATE_ROOT_ID = 'cometix-imt-root'`；
+- `findCometixTranslateRoot()`：`typeof document === 'undefined'` 时返回 `null`，否则 `document.getElementById(COMETIX_TRANSLATE_ROOT_ID)`；
+- `isCometixTranslatePresent()`：`findCometixTranslateRoot() !== null`；
+- 该元素由 Cometix 顶层 frame 的 content script 创建并 `MutationObserver` 维持挂载，是其字幕模块就绪的稳定隔离世界信号。
+
+两路检测都不得抛错：`document` 不可用、元素缺失一律降级为「不在场」。
+
+### 8.4 接管检测（Cometix 专属）
+
+- `COMETIX_TRANSLATE_CAPTION_WINDOW_ID = 'immersive-translate-caption-window'`；
+- `hasCometixTranslateTakenOver()`：`typeof document === 'undefined'` 时返回 `false`，否则判断 `document.getElementById(COMETIX_TRANSLATE_CAPTION_WINDOW_ID) !== null`。
+
+该元素仅由 Cometix 在真正 attach 字幕时创建（其内部为 `closed` shadow root，外部只能读宿主元素本身），因此「元素出现」等价于「已接管渲染」。仅 `#cometix-imt-root` 存在不构成接管。
+
+### 8.5 让位动作与自动开启
+
+Read Frog 让位（既有，保持不变）：
+
+- 复用 IT 让位语义（停渲染、清状态、销毁 overlay、移除隐藏原生字幕样式）；
+- 自动开启：向 `document` 派发成对合成 `KeyboardEvent`（`keydown` + `keyup`，`altKey: true`、`code: 'KeyC'`、`key: 'c'`），对应其默认切换快捷键 Alt+C；
+- 前置校验徽标为 OFF（容器 `shadowRoot` 内 `.read-frog-subtitles-translate-button` 的 `"ON"` / `"OFF"` 文本），派发后验证翻 ON；徽标已 ON 不派发；容器 / 徽标不可读时状态未知；
+- 按 `videoId + optionKey` 去重，用户手动关闭后同一 key 不重开，key 变化后恢复。
+
+Cometix Translate 让位（本轮新增）：
+
+- 复用同一让位语义（停渲染、清状态、销毁 overlay、移除隐藏原生字幕样式）；
+- 随后调用既有桥接 `requestYouTubeSubtitleEnsureEnabled()` 确保 YouTube 原生 CC 开启——Cometix 的字幕源是原生 CC / `api/timedtext`，CC 关闭时其会停止并移除自己的字幕窗口；
+- 不做自动开启：Cometix 无默认字幕快捷键、播放器快捷按钮位于 `closed` shadow root、配置在其扩展私有存储且无对外 API，因此不存在可用的程序化开启路径。
+
+### 8.6 Cometix 接管等待与回退
+
+新增 `createCometixTranslateYieldController(deps?)`，职责为「确认接管，否则回退」：
+
+- 依赖可注入：`now`、`sleep`、`present`、`hasTakenOver`、`ensureNativeCaptions`、`onFallback`，以及等待间隔 / 总时长常量。
+- `activate(key)`：按 key 去重（同一 key 只处理一次）；已有在途流程时以世代号取代旧流程。
+- 流程：调用 `ensureNativeCaptions()` → 以固定间隔轮询 `hasTakenOver()` 直到成功或到达等待上限 → 成功则结束（不再回退）；超时则调用 `onFallback(key)`。
+- `reset()`：递增世代号取消在途流程并清空去重记录（导航 / 卸载时调用）。
+- 所有等待有界、不抛错；结束后不残留计时器或 observer。
+
+默认常量：等待间隔 `500ms`，等待上限 `6000ms`。选择依据：Cometix 默认在原生 CC 开启后延迟约 `1000ms` 再检查 / 点击 CC 并开始拉取 timedtext，6 秒覆盖该延迟与其后首次渲染。
+
+回退契约（由调用方 `YouTubeSubtitleOverlay` 实现）：
+
+- `onFallback(key)` 把该 key 记入失败集合，并 `scheduleSync(0)` 触发现有重载路径，使 VidBoost 重新自渲染该字幕轨；
+- 失败集合中的 key 不再尝试 Cometix 让位，key 变化（换视频 / 换字幕轨）后自然失效；
+- 保证同一 key 至多让位一次、至多回退一次，1.2s 的 `pollTrackChange` 轮询不产生抖动或循环。
+
+### 8.7 popup 与 i18n
+
+- 单一开关行沿用 `yt_subtitle_compatible_plugin_translate` / `yt_subtitle_compatible_plugin_translate_desc`（zh / en 两套字典均存在）。
+- 说明文案必须覆盖两点：三路优先级「Read Frog 在场优先、其次 Cometix Translate、否则沉浸式翻译」；Cometix Translate 需用户自行开启其 YouTube 字幕翻译（VidBoost 只让位，不代其开启）。
+- 不新增设置字段、不新增开关行。
+
+### 8.8 触发点与回归边界
+
+让位判定接入两个既有触发点，不新增加载入口：
+
+- `loadSubtitlesForCurrentPage`：解析出 `option` 之后；
+- `pollTrackChange`：解析出 `option` 之后。
+
+约束：
+
+- 「开关关闭」「中文字幕」「Read Frog 与 Cometix 皆不在场」三条路径的分支结果与引入 Cometix 之前一致。
+- Cometix 的等待 / 回退只在其分支被选中时启动，其他分支不产生任何 Cometix 相关计时器。
