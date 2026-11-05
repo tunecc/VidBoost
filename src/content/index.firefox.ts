@@ -1,5 +1,5 @@
 import type { Feature } from '../features/Feature';
-import type { BilibiliUploaderProfile } from '../features/bilibili/uploaderProfile';
+import type { BilibiliCurrentUploaderResult } from '../features/BilibiliAutoSubtitle';
 import type { BilibiliCdnSpeedTestOptions, SpeedTestResult } from '../features/bilibili/bilibiliCdn.shared';
 import type { CdnNode } from '../lib/bilibiliCdnData';
 import {
@@ -13,6 +13,7 @@ import {
 import {
     addRuntimeMessageListener,
     getRuntimeUrl,
+    isTopFrameContext,
     storageLocalSet
 } from '../lib/webext';
 
@@ -200,15 +201,15 @@ const bilibiliAutoSubtitleController = createDeferredFeatureController(
     async () => new (
         await loadFirefoxFeatureModule('firefox-feature-bilibili-auto-subtitle')
     ).BilibiliAutoSubtitle() as Feature & {
-        getCurrentUploaderProfile: () => BilibiliUploaderProfile | null;
+        resolveCurrentUploader: () => Promise<BilibiliCurrentUploaderResult>;
     }
 );
 const bilibiliAutoSubtitle = {
     ...bilibiliAutoSubtitleController.feature,
-    async getCurrentUploaderProfile() {
+    async resolveCurrentUploader(): Promise<BilibiliCurrentUploaderResult> {
         const instance = bilibiliAutoSubtitleController.getCurrentInstance()
             ?? await bilibiliAutoSubtitleController.ensureInstance();
-        return instance.getCurrentUploaderProfile();
+        return instance.resolveCurrentUploader();
     }
 };
 const bilibiliAutoQuality = createDeferredFeature(
@@ -508,10 +509,13 @@ addRuntimeMessageListener((message, _sender, sendResponse) => {
         bilibiliCdn.abortSpeedTest();
         sendResponse({ aborted: true });
     } else if (message.type === 'VB_BB_SUBTITLE_CURRENT_UPLOADER') {
-        void bilibiliAutoSubtitle.getCurrentUploaderProfile().then((uploader) => {
-            sendResponse({ uploader });
+        // Only the top frame knows the video detail DOM. Sub frames answering
+        // would win the tabs.sendMessage race with an empty result.
+        if (!isTopFrameContext()) return;
+        void bilibiliAutoSubtitle.resolveCurrentUploader().then((result) => {
+            sendResponse(result);
         }).catch(() => {
-            sendResponse({ uploader: null });
+            sendResponse({ uploader: null, reason: 'not-ready' });
         });
         return true;
     }

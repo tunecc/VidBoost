@@ -200,6 +200,20 @@ export function isFirefoxExtensionRuntime() {
     return typeof runtimeUrl === 'string' && runtimeUrl.startsWith('moz-extension://');
 }
 
+/**
+ * Content scripts run in every frame (`all_frames: true`). Sub frames must not
+ * answer tab-wide messages: Chrome uses the first response, so an ad/stat
+ * iframe replying with empty data would beat the top frame's real answer.
+ */
+export function isTopFrameContext(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        return window.top === window;
+    } catch {
+        return false;
+    }
+}
+
 export function addRuntimeMessageListener(listener: RuntimeMessageListener) {
     const onMessage = browserApi()?.runtime?.onMessage ?? chromeApi()?.runtime?.onMessage;
     if (!onMessage) return;

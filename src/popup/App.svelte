@@ -31,6 +31,12 @@
   import AccordionItem from "../components/AccordionItem.svelte";
   import { CDN_NODES, type CdnNode } from "../lib/bilibiliCdnData";
   import {
+    hasBilibiliUploaderInfo,
+    lookupBilibiliUploader,
+    type BilibiliUploaderInfo,
+    type BilibiliUploaderLookupResponse,
+  } from "../lib/bilibiliUploaderLookup";
+  import {
     sanitizeBilibiliCdnSpeedTestOptions,
     type BilibiliCdnSpeedTestOptions,
   } from "../features/bilibili/bilibiliCdn.shared";
@@ -233,24 +239,22 @@
       .toLowerCase();
   }
 
-  async function requestCurrentBilibiliUploader() {
+  async function requestCurrentBilibiliUploader(): Promise<{
+    uploader: BilibiliUploaderInfo | null;
+    reason?: "unsupported-page" | "not-ready";
+  }> {
     const tabs = await tabsQuery({
       active: true,
       currentWindow: true,
     });
     const tabId = tabs[0]?.id;
-    if (!tabId) return null;
+    if (!tabId) return { uploader: null, reason: "unsupported-page" };
 
-    const response = await tabsSendMessage<{
-      uploader?: { uid?: string | null; name?: string | null; profileUrl?: string | null } | null;
-    }>(tabId, {
-      type: "VB_BB_SUBTITLE_CURRENT_UPLOADER",
-    }).catch(() => null);
-
-    return response?.uploader as
-      | { uid?: string | null; name?: string | null; profileUrl?: string | null }
-      | null
-      | undefined;
+    // The content script may still be waiting for the uploader DOM (or for the
+    // view API fallback). Retry a few times so a single click always works.
+    return lookupBilibiliUploader((message) =>
+      tabsSendMessage<BilibiliUploaderLookupResponse>(tabId, message),
+    );
   }
 
   function buildBilibiliTargetValueFromUploader(
@@ -282,10 +286,15 @@
     showBilibiliSubtitleStatus("", "neutral", 0);
 
     try {
-      const uploader = await requestCurrentBilibiliUploader();
+      const { uploader, reason } = await requestCurrentBilibiliUploader();
 
-      if (!uploader?.uid && !uploader?.name && !uploader?.profileUrl) {
-        showBilibiliSubtitleStatus(t("bb_subtitle_add_current_failed"), "error");
+      if (!hasBilibiliUploaderInfo(uploader)) {
+        showBilibiliSubtitleStatus(
+          reason === "unsupported-page"
+            ? t("bb_subtitle_add_current_not_video")
+            : t("bb_subtitle_add_current_not_ready"),
+          "error",
+        );
         return;
       }
 
@@ -437,8 +446,8 @@
     showBilibiliQualityStatus("", "neutral", 0);
 
     try {
-      const uploader = await requestCurrentBilibiliUploader();
-      if (!uploader?.uid && !uploader?.name && !uploader?.profileUrl) {
+      const { uploader } = await requestCurrentBilibiliUploader();
+      if (!hasBilibiliUploaderInfo(uploader)) {
         showBilibiliQualityStatus(t("bb_quality_add_current_failed"), "error");
         return;
       }

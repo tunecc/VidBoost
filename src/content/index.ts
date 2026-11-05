@@ -25,6 +25,7 @@ import {
 } from '../lib/settings';
 import {
     addRuntimeMessageListener,
+    isTopFrameContext,
     runtimeSendMessage,
     storageLocalGet,
     storageLocalSet
@@ -521,8 +522,16 @@ addRuntimeMessageListener((message, _sender, sendResponse) => {
         bilibiliCdn.abortSpeedTest();
         sendResponse({ aborted: true });
     } else if (message.type === 'VB_BB_SUBTITLE_CURRENT_UPLOADER') {
-        sendResponse({
-            uploader: bilibiliAutoSubtitle.getCurrentUploaderProfile()
-        });
+        // Only the top frame knows the video detail DOM. Sub frames answering
+        // would win the tabs.sendMessage race with an empty result.
+        if (!isTopFrameContext()) return;
+        void bilibiliAutoSubtitle.resolveCurrentUploader()
+            .then((result) => {
+                sendResponse(result);
+            })
+            .catch(() => {
+                sendResponse({ uploader: null, reason: 'not-ready' });
+            });
+        return true;
     }
 });

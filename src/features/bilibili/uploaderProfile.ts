@@ -7,6 +7,12 @@ export const BILIBILI_SUPPORTED_VIDEO_PATH_PREFIXES = [
     '/list/watchlater'
 ];
 
+export const BILIBILI_UPLOADER_DOM_WAIT_INTERVAL_MS = 150;
+export const BILIBILI_UPLOADER_DOM_WAIT_TIMEOUT_MS = 1000;
+export const BILIBILI_UPLOADER_DOM_WAIT_TIMEOUT_NO_BVID_MS = 400;
+export const BILIBILI_UPLOADER_LOOKUP_BUDGET_MS = 2000;
+export const BILIBILI_UPLOADER_API_TIMEOUT_MS = 1200;
+
 const UP_LINK_SELECTORS = [
     '#v_upinfo a[href*="space.bilibili.com/"]',
     '.up-info-container a[href*="space.bilibili.com/"]',
@@ -30,6 +36,29 @@ export type BilibiliUploaderProfile = {
     uid: string | null;
     name: string | null;
     profileUrl: string | null;
+};
+
+export type BilibiliUploaderLookupReason = 'unsupported-page' | 'not-ready';
+
+export type BilibiliUploaderSnapshot = {
+    profile: BilibiliUploaderProfile | null;
+    targets: string[];
+};
+
+export type BilibiliUploaderLookupResult = BilibiliUploaderSnapshot & {
+    reason?: BilibiliUploaderLookupReason;
+};
+
+export type BilibiliUploaderResolveOptions = {
+    doc?: Document;
+    href?: string;
+    waitTimeoutMs?: number;
+    waitIntervalMs?: number;
+    allowApiFallback?: boolean;
+    fetchImpl?: typeof fetch;
+    apiTimeoutMs?: number;
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
 };
 
 export function stripBilibiliTargetNote(value: string): string {
@@ -85,12 +114,26 @@ export function isSupportedBilibiliVideoPage(): boolean {
     return BILIBILI_SUPPORTED_VIDEO_PATH_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
 }
 
-function decodeJsonString(value: string): string {
+/** Pure URL check so callers (and tests) do not depend on the live `location`. */
+export function isSupportedBilibiliVideoUrl(input: string): boolean {
+    if (!input) return false;
+
+    let parsed: URL;
     try {
-        return JSON.parse(`"${value}"`) as string;
+        parsed = new URL(input, 'https://www.bilibili.com');
     } catch {
-        return value;
+        return false;
     }
+
+    if (!isSiteHost('bilibili', parsed.hostname)) return false;
+    return BILIBILI_SUPPORTED_VIDEO_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix));
+}
+
+/** Extracts the BV id from a video URL, e.g. `https://www.bilibili.com/video/BV1d2pF6nESA/?spm=...`. */
+export function extractBilibiliBvid(input: string): string | null {
+    if (!input) return null;
+    const match = input.match(/\/video\/(BV[0-9A-Za-z]{10})(?:[/?#]|$)/);
+    return match?.[1] ?? null;
 }
 
 function readUploaderNameFromElement(element: Element | null): string | null {
@@ -121,17 +164,19 @@ function readUploaderNameFromElement(element: Element | null): string | null {
     return null;
 }
 
-function collectUploaderDataFromDom(): {
-    profile: BilibiliUploaderProfile | null;
-    targets: string[];
-} {
+/**
+ * Reads the current video's uploader from the DOM only.
+ * All selectors are scoped to the video detail area, so recommendation cards
+ * and comment authors never leak into the result.
+ */
+export function collectBilibiliUploaderSnapshotFromDocument(doc: Document = document): BilibiliUploaderSnapshot {
     const seen = new Set<string>();
     let uid: string | null = null;
     let name: string | null = null;
     let profileUrl: string | null = null;
 
     for (const selector of UP_LINK_SELECTORS) {
-        const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(selector));
+        const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>(selector));
         for (const link of links) {
             addNormalizedBilibiliTarget(seen, link.href);
             const candidateName = readUploaderNameFromElement(link);
@@ -145,7 +190,7 @@ function collectUploaderDataFromDom(): {
 
     if (!name) {
         for (const selector of UP_NAME_SELECTORS) {
-            const element = document.querySelector(selector);
+            const element = doc.querySelector(selector);
             const candidateName = readUploaderNameFromElement(element);
             if (!candidateName) continue;
             name = candidateName;
@@ -162,93 +207,161 @@ function collectUploaderDataFromDom(): {
         }
         : null;
 
+    addNormalizedBilibiliTarget(seen, uid);
+    addNormalizedBilibiliTarget(seen, name);
+
     return {
         profile,
         targets: [...seen]
     };
 }
 
-function extractUploaderDataFromStateText(source: string): {
-    profile: BilibiliUploaderProfile | null;
-    targets: string[];
-} {
-    const targets = new Set<string>();
-
-    const upDataMatch = source.match(
-        /"upData"\s*:\s*\{[\s\S]*?"mid"\s*:\s*"?(?<mid>\d+)"?[\s\S]*?"name"\s*:\s*"(?<name>(?:\\.|[^"\\])*)"/
-    );
-    const ownerMatch = source.match(
-        /"owner"\s*:\s*\{[\s\S]*?"mid"\s*:\s*"?(?<mid>\d+)"?[\s\S]*?"name"\s*:\s*"(?<name>(?:\\.|[^"\\])*)"/
-    );
-
-    addNormalizedBilibiliTarget(targets, upDataMatch?.groups?.mid ?? null);
-    addNormalizedBilibiliTarget(targets, decodeJsonString(upDataMatch?.groups?.name ?? ''));
-    addNormalizedBilibiliTarget(targets, ownerMatch?.groups?.mid ?? null);
-    addNormalizedBilibiliTarget(targets, decodeJsonString(ownerMatch?.groups?.name ?? ''));
-
-    const uid = upDataMatch?.groups?.mid ?? ownerMatch?.groups?.mid ?? null;
-    const nameRaw = upDataMatch?.groups?.name ?? ownerMatch?.groups?.name ?? '';
-    const name = nameRaw ? decodeJsonString(nameRaw) : null;
-
-    return {
-        profile: uid || name
-            ? {
-                uid,
-                name,
-                profileUrl: uid ? `https://space.bilibili.com/${uid}` : null
-            }
-            : null,
-        targets: [...targets]
-    };
+/**
+ * DOM-only snapshot used by the quality feature. Kept synchronous and free of
+ * network access so existing callers behave exactly as before.
+ */
+export function collectCurrentBilibiliUploaderSnapshot(): BilibiliUploaderSnapshot {
+    return collectBilibiliUploaderSnapshotFromDocument(document);
 }
 
-function collectUploaderDataFromInitialState(): {
-    profile: BilibiliUploaderProfile | null;
-    targets: string[];
-} | null {
-    const scripts = Array.from(document.scripts);
-    for (const script of scripts) {
-        const source = script.textContent ?? '';
-        if (!source.includes('__INITIAL_STATE__')) continue;
+function defaultSleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
 
-        const data = extractUploaderDataFromStateText(source);
-        if (data.targets.length > 0 || data.profile) return data;
+export async function waitForBilibiliUploaderSnapshot(
+    options: BilibiliUploaderResolveOptions = {}
+): Promise<BilibiliUploaderSnapshot> {
+    const doc = options.doc ?? document;
+    const now = options.now ?? (() => Date.now());
+    const sleep = options.sleep ?? defaultSleep;
+    const timeoutMs = options.waitTimeoutMs ?? BILIBILI_UPLOADER_DOM_WAIT_TIMEOUT_MS;
+    const intervalMs = options.waitIntervalMs ?? BILIBILI_UPLOADER_DOM_WAIT_INTERVAL_MS;
+    const deadline = now() + timeoutMs;
+
+    let latest = collectBilibiliUploaderSnapshotFromDocument(doc);
+    while (now() < deadline) {
+        if (latest.profile?.uid && latest.profile?.name) return latest;
+        await sleep(intervalMs);
+        const next = collectBilibiliUploaderSnapshotFromDocument(doc);
+        if (next.profile || next.targets.length > 0) latest = next;
+        if (latest.profile?.uid && latest.profile?.name) return latest;
     }
 
-    return null;
+    return latest;
 }
 
-export function collectCurrentBilibiliUploaderSnapshot(): {
-    profile: BilibiliUploaderProfile | null;
-    targets: string[];
-} {
-    const fromDom = collectUploaderDataFromDom();
-    const needsStateFallback = !fromDom.profile?.uid || !fromDom.profile?.name;
-    const fromState = needsStateFallback ? collectUploaderDataFromInitialState() : null;
+export async function fetchBilibiliUploaderByBvid(
+    bvid: string,
+    options: BilibiliUploaderResolveOptions = {}
+): Promise<BilibiliUploaderProfile | null> {
+    if (!bvid) return null;
 
-    const mergedTargets = new Set<string>([
-        ...fromDom.targets,
-        ...(fromState?.targets ?? [])
-    ]);
+    const fetchImpl = options.fetchImpl ?? (typeof fetch === 'function' ? fetch : null);
+    if (!fetchImpl) return null;
 
-    const resolvedUid = fromDom.profile?.uid ?? fromState?.profile?.uid ?? null;
-    const resolvedName = fromDom.profile?.name ?? fromState?.profile?.name ?? null;
-    const resolvedProfileUrl = fromDom.profile?.profileUrl
-        ?? fromState?.profile?.profileUrl
-        ?? (resolvedUid ? `https://space.bilibili.com/${resolvedUid}` : null);
-    const resolvedProfile = resolvedUid || resolvedName || resolvedProfileUrl
-        ? {
-            uid: resolvedUid,
-            name: resolvedName,
-            profileUrl: resolvedProfileUrl
-        }
-        : null;
+    const timeoutMs = options.apiTimeoutMs ?? BILIBILI_UPLOADER_API_TIMEOUT_MS;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    addNormalizedBilibiliTarget(mergedTargets, resolvedUid);
-    addNormalizedBilibiliTarget(mergedTargets, resolvedName);
+    if (controller) {
+        timer = setTimeout(() => {
+            try {
+                controller.abort();
+            } catch {
+                // ignore
+            }
+        }, timeoutMs);
+    }
+
+    try {
+        const response = await fetchImpl(
+            `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
+            {
+                credentials: 'include',
+                ...(controller ? { signal: controller.signal } : {})
+            }
+        );
+        if (!response?.ok) return null;
+
+        const payload = await response.json() as {
+            code?: number;
+            data?: { owner?: { mid?: number | string | null; name?: string | null } | null } | null;
+        };
+        if (payload?.code !== 0) return null;
+
+        const owner = payload.data?.owner ?? null;
+        const uid = owner?.mid != null ? String(owner.mid) : null;
+        const name = sanitizeBilibiliUploaderName(owner?.name ?? null);
+        if (!uid && !name) return null;
+
+        return {
+            uid,
+            name,
+            profileUrl: uid ? `https://space.bilibili.com/${uid}` : null
+        };
+    } catch {
+        return null;
+    } finally {
+        if (timer != null) clearTimeout(timer);
+    }
+}
+
+/**
+ * Resolves the current video uploader: DOM (with a bounded wait) first,
+ * then the public view API as a fallback for `/video/BV...` pages.
+ */
+export async function resolveBilibiliUploaderSnapshot(
+    options: BilibiliUploaderResolveOptions = {}
+): Promise<BilibiliUploaderLookupResult> {
+    const doc = options.doc ?? document;
+    const href = options.href ?? (typeof location !== 'undefined' ? location.href : '');
+    const now = options.now ?? (() => Date.now());
+    const startedAt = now();
+
+    if (!isSupportedBilibiliVideoUrl(href)) {
+        return { profile: null, targets: [], reason: 'unsupported-page' };
+    }
+
+    const bvid = extractBilibiliBvid(href);
+    const waitTimeoutMs = options.waitTimeoutMs
+        ?? (bvid
+            ? BILIBILI_UPLOADER_DOM_WAIT_TIMEOUT_MS
+            : BILIBILI_UPLOADER_DOM_WAIT_TIMEOUT_NO_BVID_MS);
+
+    const fromDom = await waitForBilibiliUploaderSnapshot({ ...options, doc, waitTimeoutMs });
+    if (fromDom.profile?.uid) return fromDom;
+
+    if (options.allowApiFallback === false || !bvid) {
+        return fromDom.profile ? fromDom : { ...fromDom, reason: 'not-ready' };
+    }
+
+    // Keep the whole lookup within a single response budget so the popup
+    // message channel never stays open longer than expected.
+    const remainingMs = Math.max(
+        250,
+        BILIBILI_UPLOADER_LOOKUP_BUDGET_MS - (now() - startedAt)
+    );
+    const apiTimeoutMs = Math.min(
+        options.apiTimeoutMs ?? BILIBILI_UPLOADER_API_TIMEOUT_MS,
+        remainingMs
+    );
+    const fromApi = await fetchBilibiliUploaderByBvid(bvid, { ...options, apiTimeoutMs });
+    if (!fromApi) {
+        return fromDom.profile ? fromDom : { ...fromDom, reason: 'not-ready' };
+    }
+
+    const mergedTargets = new Set<string>(fromDom.targets);
+    addNormalizedBilibiliTarget(mergedTargets, fromApi.uid);
+    addNormalizedBilibiliTarget(mergedTargets, fromApi.name);
 
     return {
-        profile: resolvedProfile,
+        profile: {
+            uid: fromDom.profile?.uid ?? fromApi.uid,
+            name: fromDom.profile?.name ?? fromApi.name,
+            profileUrl: fromDom.profile?.profileUrl ?? fromApi.profileUrl
+        },
         targets: [...mergedTargets]
     };
 }
