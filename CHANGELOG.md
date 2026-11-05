@@ -8,15 +8,35 @@
 - 各版本 tag 区间内的真实 commits
 - 仓库内历史 release 公告草稿与发布说明文档
 
-## [Unreleased]
+## [1.9.5] - 2026-11-05
+
+1.9.5 给 B 站带来两件大事：新增「线程撕裂者」——把视频分片并发拉到多个 CDN，并配套屏蔽 P2P 与加速地区偏好；同时修好了自动打开中文字幕在「加入当前视频UP」时经常识别不到 UP 主、需要连点的问题。YouTube 字幕的插件翻译兼容也补上了 Cometix Translate 这一路让位。
 
 ### Added
+- **B 站线程撕裂者（多 CDN 并发分片）**（`BilibiliThreadRipper` / `bb_thread_ripper`）  
+  页面脚本拦截播放器媒体请求，把视频拆成多个分片从多个 CDN 同时拉取，配合竞速调度、主机测速模型、init/sidx 预热、字节校验熔断与三级回退；失败时自动回退原生加载。相对上游移植修正了换签 key 的 `/v1/resource` 前缀与 P2P 域名名单。80 项单元测试；HAR 实测 0 P2P 流量、14 个官方镜像并发分片。
+- **屏蔽 P2P**（`bb_no_p2p`）  
+  拦截 P2P / PCDN 节点并把地址改写回官方 CDN，同时禁用 PCDN SDK；可单独开启，也可与线程撕裂者一起使用。
+- **线程撕裂者加速地区偏好**（`auto` / 大陆 / 海外）  
+  新增主机地区分类器（香港归海外），按偏好过滤换签目标，没有首选地址时降级到整池回退；默认「跟随竞速」与旧行为完全一致，设置热切换。
 - **Cometix Translate 字幕让位**（`YouTubeSubtitleOverlay` / `subtitleOverlay.shared`）  
-  「插件翻译兼容」新增第三路目标：非中文字幕且页面存在 Cometix Translate（`#cometix-imt-root`）时，VidBoost 停止自渲染、恢复原生字幕显示，并确保 YouTube 原生 CC 开启（Cometix 的字幕源）。随后在有界时长内等待其字幕窗口（`#immersive-translate-caption-window`）出现以确认接管；超时未接管则回退 VidBoost 自渲染，同一视频同一字幕轨不再重试。Cometix 无可用的程序化开启路径（无默认字幕快捷键、播放器按钮在 closed shadow root、配置在其扩展私有存储），因此只做让位与接管验证，需用户自行开启其 YouTube 字幕翻译。
+  「插件翻译兼容」新增第三路目标：非中文字幕且页面存在 Cometix Translate（`#cometix-imt-root`）时，VidBoost 停止自渲染、恢复并确保 YouTube 原生 CC 开启，在有界时长内等待其字幕窗口接管；超时未接管则回退自渲染，同一视频同一字幕轨不再重试。
 - **三路让位优先级**  
-  单一开关的判定顺序更新为：非中文 + Read Frog 在场 → 让位 Read Frog 并自动开启其翻译；否则 Cometix Translate 在场 → 让位 Cometix 并验证接管；两者皆不在场 → 回落沉浸式翻译无条件让位；中文字幕或开关关闭 → VidBoost 正常自渲染。
-- **Cometix 兼容单元测试**（`cometixCompat.test`）  
-  jsdom 用例覆盖在场 / 接管检测、三路优先级、接管成功、超时回退、等待期状态变化与 reset 取消；既有 `readFrogCompat.test` 全量回归通过。
+  非中文 + Read Frog 在场 → 让位 Read Frog 并自动开启其翻译；否则 Cometix Translate 在场 → 让位 Cometix 并验证接管；两者皆不在场 → 回落沉浸式翻译；中文字幕或开关关闭 → 正常自渲染。
+- **测试**  
+  Cometix 兼容用例（`cometixCompat.test`）；线程撕裂者的地区分类、候选、主机模型与无 P2P 策略等 80 项；B 站字幕与 UP 主识别 37 项。
+
+### Changed
+- **popup：线程撕裂者选项并入统一手风琴 UI**  
+  「B 站线程撕裂者」条目内收纳线程撕裂者、屏蔽 P2P 与加速地区，点击右侧倒三角展开；线程撕裂者与 CDN 切换继续保持双向互斥，开启一方会自动关闭另一方。
+- **线程撕裂者与 CDN 切换互斥联动**  
+  popup 联动 + content 侧设置归一，避免两种加速方式同时接管媒体请求。
+
+### Fixed
+- **B 站「加入当前视频UP」识别失效**（`uploaderProfile` / `BilibiliAutoSubtitle` / popup）  
+  B 站视频页里的子 frame 会用空结果抢在顶层 frame 之前应答插件消息，导致 popup 经常提示「未识别到 UP 主」、需要连点。现在识别消息只由顶层 frame 响应；识别链路改为 DOM → 有界等待（视频页 1s、其它页 0.4s）→ 公开 view 接口回退，空结果不再缓存；popup 一次点击内自动重试，最坏约 3s 出结果。
+- **白名单视频不自动开字幕**  
+  UP 主尚未渲染时不再直接放弃，而是继续退避重试；站内「接下来播放」SPA 切换改为 URL 轮询 + 标题观察；点击字幕后校验激活态，未生效会重试。
 
 ## [1.9.4] - 2026-10-02
 
