@@ -306,7 +306,6 @@ Both options live inside the "Bilibili Thread Ripper" entry; click the chevron t
 Main permissions and purposes:
 
 - `storage`: saves feature toggles and custom settings
-- `activeTab`: interacts with the current tab, such as reading page information or triggering current-page features
 - Limited network host permissions: used for the YouTube CDN country display feature. VidBoost accesses DoH / GeoIP APIs and resolves the actual `googlevideo` host into country information
 
 The extension also injects content scripts into pages; without that, it cannot interact with players or implement site-level adaptations.

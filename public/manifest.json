@@ -4,8 +4,7 @@
     "version": "1.9.5",
     "description": "Unlock the full potential of web videos with VidBoost.",
     "permissions": [
-        "storage",
-        "activeTab"
+        "storage"
     ],
     "host_permissions": [
         "https://dns.google/*",

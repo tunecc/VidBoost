@@ -33,7 +33,6 @@ VidBoost 仅在您的浏览器本地存储以下设置数据：
 ### 权限说明
 
 VidBoost 请求的浏览器权限及其用途：
-- **activeTab**: 用于检测当前标签页中的视频元素
 - **storage**: 用于保存您的设置偏好
 
 ### 联系我们
@@ -72,7 +71,6 @@ This data is stored entirely on your device and is never uploaded to any server.
 ### Permissions Explanation
 
 Browser permissions requested by VidBoost and their purposes:
-- **activeTab**: Used to detect video elements in the current tab
 - **storage**: Used to save your preference settings
 
 ### Contact Us
