@@ -1,6 +1,8 @@
 import { isPageBridgeMessageEvent } from './bridge';
 import {
     YT_SUBTITLE_OVERLAY_BRIDGE_CHANNEL,
+    YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_REQUEST,
+    YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE,
     YT_SUBTITLE_OVERLAY_CONTENT_SOURCE,
     YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_REQUEST,
     YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_RESPONSE,
@@ -12,7 +14,8 @@ import {
     type YouTubeSubtitleAudioCaptionTrack,
     type YouTubeSubtitleCaptionTrack,
     type YouTubeSubtitlePlayerData,
-    type YouTubeSubtitleSelectedTrack
+    type YouTubeSubtitleSelectedTrack,
+    type YouTubeTimedText
 } from './subtitleOverlay.shared';
 import { normalizeYouTubeSubtitleTracklistRenderer } from './subtitle/selector/playerData';
 
@@ -23,6 +26,9 @@ type BridgeRequest = {
     requestId: string;
     expectedVideoId?: string | null;
     enabled?: boolean;
+    languageCode?: string;
+    kind?: string;
+    translationLanguageCode?: string;
 };
 
 type YouTubePlayerElement = HTMLElement & {
@@ -45,9 +51,70 @@ declare global {
 
 const TIMEDTEXT_API_RE = /api\/timedtext/;
 const timedtextUrlCache = new Map<string, string>();
+// 按视频缓存的 timedtext 响应体：videoId -> (lang|kind|tlang -> json3 events)。
+// 原生字幕显示时播放器已自行请求过 timedtext，捕获响应体后接管渲染无需再发网络请求。
+const capturedTimedtextCache = new Map<string, Map<string, YouTubeTimedText[]>>();
+const CAPTURED_VIDEO_CACHE_LIMIT = 2;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
+}
+
+function buildTimedtextTrackKey(
+    parsedUrl: URLSearchParams
+): string | null {
+    const lang = parsedUrl.get('lang');
+    if (!lang) return null;
+    return [lang, parsedUrl.get('kind') ?? '', parsedUrl.get('tlang') ?? ''].join('|');
+}
+
+function rememberCapturedVideo(videoId: string) {
+    if (capturedTimedtextCache.has(videoId)) {
+        // LRU：命中后挪到末尾，超限时淘汰最早的旧视频。
+        const existing = capturedTimedtextCache.get(videoId)!;
+        capturedTimedtextCache.delete(videoId);
+        capturedTimedtextCache.set(videoId, existing);
+        return existing;
+    }
+
+    const tracks = new Map<string, YouTubeTimedText[]>();
+    capturedTimedtextCache.set(videoId, tracks);
+    if (capturedTimedtextCache.size > CAPTURED_VIDEO_CACHE_LIMIT) {
+        const oldest = capturedTimedtextCache.keys().next();
+        if (!oldest.done && oldest.value !== videoId) {
+            capturedTimedtextCache.delete(oldest.value);
+        }
+    }
+    return tracks;
+}
+
+/**
+ * 捕获一条 timedtext 响应：仅在 json3 格式且能解析出 events 时缓存正文。
+ * 解析失败、非 timedtext、非 json3 一律静默忽略，绝不影响播放器自身请求。
+ */
+function cacheTimedtextBody(url: string, text: string) {
+    if (!TIMEDTEXT_API_RE.test(url)) return;
+
+    try {
+        const parsedUrl = new URL(url);
+        const videoId = parsedUrl.searchParams.get('v');
+        if (!videoId) return;
+        const pot = parsedUrl.searchParams.get('pot');
+        if (pot) {
+            timedtextUrlCache.set(videoId, url);
+        }
+        if (parsedUrl.searchParams.get('fmt') !== 'json3') return;
+        const trackKey = buildTimedtextTrackKey(parsedUrl.searchParams);
+        if (!trackKey) return;
+
+        const payload = JSON.parse(text) as unknown;
+        if (!isRecord(payload) || !Array.isArray(payload.events)) return;
+        if (payload.events.length === 0) return;
+
+        rememberCapturedVideo(videoId).set(trackKey, payload.events as YouTubeTimedText[]);
+    } catch {
+        // ignore malformed urls or bodies
+    }
 }
 
 function cacheTimedtextUrl(url: string) {
@@ -62,6 +129,17 @@ function cacheTimedtextUrl(url: string) {
     } catch {
         // ignore malformed urls
     }
+}
+
+function findCapturedTimedText(
+    videoId: string,
+    languageCode: string,
+    kind?: string,
+    translationLanguageCode?: string
+): YouTubeTimedText[] | null {
+    const trackKey = [languageCode, kind ?? '', translationLanguageCode ?? ''].join('|');
+    const events = capturedTimedtextCache.get(videoId)?.get(trackKey);
+    return events && events.length > 0 ? events : null;
 }
 
 function setupTimedtextObserver() {
@@ -85,8 +163,39 @@ function setupTimedtextObserver() {
             if (responseUrl) {
                 cacheTimedtextUrl(responseUrl);
             }
+            const responseType = (this as XMLHttpRequest).responseType;
+            if ((responseType === '' || responseType === 'text') && responseUrl) {
+                const text = (this as XMLHttpRequest).responseText;
+                if (typeof text === 'string') {
+                    cacheTimedtextBody(responseUrl, text);
+                }
+            }
         });
         return originalXhrSend.apply(this, args as Parameters<XMLHttpRequest['send']>);
+    };
+
+    // 部分播放器路径用 fetch 请求 timedtext：同样只读、只缓存，不改请求与响应。
+    const originalFetch = window.fetch?.bind(window);
+    if (typeof originalFetch !== 'function') return;
+
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+        const response = await originalFetch(...args);
+        try {
+            const requestUrl = typeof args[0] === 'string' || args[0] instanceof URL
+                ? args[0].toString()
+                : (args[0] as Request | undefined)?.url ?? '';
+            if (TIMEDTEXT_API_RE.test(requestUrl)) {
+                cacheTimedtextUrl(response.url || requestUrl);
+                void response
+                    .clone()
+                    .text()
+                    .then((text) => cacheTimedtextBody(response.url || requestUrl, text))
+                    .catch(() => {});
+            }
+        } catch {
+            // 缓存失败不影响播放器请求。
+        }
+        return response;
     };
 }
 
@@ -313,6 +422,35 @@ function handleMessage(event: MessageEvent<unknown>) {
         } catch (error) {
             postResponse({
                 type: YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE,
+                requestId: request.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+        return;
+    }
+
+    if (request.type === YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_REQUEST) {
+        try {
+            const videoId = request.expectedVideoId ?? '';
+            const languageCode = request.languageCode ?? '';
+            const events = videoId && languageCode
+                ? findCapturedTimedText(
+                    videoId,
+                    languageCode,
+                    request.kind,
+                    request.translationLanguageCode
+                )
+                : null;
+            postResponse({
+                type: YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE,
+                requestId: request.requestId,
+                success: events !== null,
+                ...(events ? { events } : {})
+            });
+        } catch (error) {
+            postResponse({
+                type: YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE,
                 requestId: request.requestId,
                 success: false,
                 error: error instanceof Error ? error.message : String(error)

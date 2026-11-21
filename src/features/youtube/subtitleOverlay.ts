@@ -1,5 +1,7 @@
 import {
     YT_SUBTITLE_OVERLAY_BRIDGE_CHANNEL,
+    YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_REQUEST,
+    YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE,
     YT_SUBTITLE_OVERLAY_CONTENT_SOURCE,
     YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_REQUEST,
     YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_RESPONSE,
@@ -10,6 +12,8 @@ import {
     YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE,
     YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST,
     YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
+    type YouTubeSubtitleCapturedTimedTextQuery,
+    type YouTubeSubtitleCapturedTimedTextResponse,
     type YouTubeSubtitleEnsureEnabledResponse,
     type YouTubeSubtitlePlayerDataResponse,
     type YouTubeSubtitleSetEnabledResponse
@@ -20,7 +24,8 @@ import { getRuntimeUrl, isFirefoxExtensionRuntime } from '../../lib/webext';
 type BridgeResponse =
     | YouTubeSubtitlePlayerDataResponse
     | YouTubeSubtitleEnsureEnabledResponse
-    | YouTubeSubtitleSetEnabledResponse;
+    | YouTubeSubtitleSetEnabledResponse
+    | YouTubeSubtitleCapturedTimedTextResponse;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
@@ -39,7 +44,8 @@ function resolvePageScriptUrl(): string | null {
 async function postBridgeRequest<T extends BridgeResponse>(
     requestType: string,
     responseType: string,
-    payload: Record<string, unknown> = {}
+    payload: Record<string, unknown> = {},
+    timeoutMs = 6000
 ): Promise<T | null> {
     if (typeof window === 'undefined') return null;
 
@@ -72,7 +78,7 @@ async function postBridgeRequest<T extends BridgeResponse>(
         timeoutId = window.setTimeout(() => {
             cleanup();
             resolve(null);
-        }, 6000);
+        }, Math.max(0, timeoutMs));
 
         window.postMessage({
             source: YT_SUBTITLE_OVERLAY_CONTENT_SOURCE,
@@ -122,11 +128,12 @@ export function ensureYouTubeSubtitleOverlayScriptInjected() {
     scriptInjected = true;
 }
 
-export async function requestYouTubeSubtitlePlayerData(expectedVideoId: string | null) {
+export async function requestYouTubeSubtitlePlayerData(expectedVideoId: string | null, timeoutMs = 6000) {
     return await postBridgeRequest<YouTubeSubtitlePlayerDataResponse>(
         YT_SUBTITLE_OVERLAY_PLAYER_DATA_REQUEST,
         YT_SUBTITLE_OVERLAY_PLAYER_DATA_RESPONSE,
-        { expectedVideoId }
+        { expectedVideoId },
+        timeoutMs
     );
 }
 
@@ -142,5 +149,21 @@ export async function requestYouTubeSubtitleSetEnabled(enabled: boolean) {
         YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST,
         YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE,
         { enabled }
+    );
+}
+
+export async function requestYouTubeSubtitleCapturedTimedText(
+    expectedVideoId: string,
+    query: YouTubeSubtitleCapturedTimedTextQuery
+) {
+    return await postBridgeRequest<YouTubeSubtitleCapturedTimedTextResponse>(
+        YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_REQUEST,
+        YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE,
+        {
+            expectedVideoId,
+            languageCode: query.languageCode,
+            kind: query.kind,
+            translationLanguageCode: query.translationLanguageCode
+        }
     );
 }

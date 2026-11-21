@@ -38,7 +38,7 @@ export class OSD {
         return OSD.instance;
     }
 
-    public show(text: string, referenceVideo?: HTMLVideoElement) {
+    public show(text: string, referenceVideo?: HTMLVideoElement, durationMs = 800) {
         // 1. Determine container (Fullscreen element OR Video's parent)
         // Original logic: tipsDiv.style.top = rect.top;
         // BUT if we append to body, we need absolute page coords.
@@ -121,6 +121,6 @@ export class OSD {
             this.timer = window.setTimeout(() => {
                 this.element.style.display = 'none';
             }, 300);
-        }, 800);
+        }, Math.max(0, durationMs));
     }
 }

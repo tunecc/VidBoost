@@ -31,6 +31,7 @@ import {
 } from '../lib/subtitleFontAssets';
 import {
     ensureYouTubeSubtitleOverlayScriptInjected,
+    requestYouTubeSubtitleCapturedTimedText,
     requestYouTubeSubtitleEnsureEnabled,
     requestYouTubeSubtitlePlayerData,
     requestYouTubeSubtitleSetEnabled
@@ -99,6 +100,19 @@ const TRACK_POLL_MS = 1200;
 const FETCH_RETRY_DELAY_MS = 250;
 const FETCH_RETRY_ATTEMPTS = 6;
 const FALLBACK_NOTICE_FAILURE_THRESHOLD = 3;
+// 原生字幕窗口出现实际文本 → 即时接管：防抖聚合 ASR 逐词更新，冷却避免让位/失败循环。
+const CAPTION_WINDOW_DEBOUNCE_MS = 120;
+const CAPTION_WINDOW_TRIGGER_COOLDOWN_MS = 2000;
+// 片段缓存：切换回已渲染语言时零网络立即渲染；换视频/TTL 过期失效。
+const FRAGMENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const FRAGMENT_CACHE_MAX_ENTRIES = 16;
+// 同视频内复用最近一次 playerData，面板切换语言不再重复走 bridge 请求。
+const PLAYER_DATA_REUSE_TTL_MS = 30 * 1000;
+// playerData 重试与 timedtext 请求的上限：挂起不再冻结轮询与观察器。
+const PLAYER_DATA_REQUEST_DEADLINE_MS = 10_000;
+const TIMEDTEXT_FETCH_TIMEOUT_MS = 10_000;
+// 字幕失败 OSD（保留当前字幕提示 / 回退原生提示）的停留时长（A14）。
+const SUBTITLE_FAILURE_OSD_DURATION_MS = 2000;
 const DRAG_HANDLE_HIDE_DELAY_MS = 300;
 const MIN_POSITION_PERCENT = 4;
 const MAX_POSITION_PERCENT = 72;
@@ -391,21 +405,43 @@ function buildSubtitleUrl(
 }
 
 async function fetchTimedTextEvents(url: string, signal: AbortSignal) {
-    const response = await fetch(url, {
-        signal,
-        credentials: 'same-origin'
-    });
-
-    if (!response.ok) {
-        throw new Error(`http:${response.status}`);
+    const controller = new AbortController();
+    let timedOut = false;
+    const onOuterAbort = () => controller.abort();
+    if (signal.aborted) {
+        controller.abort();
+    } else {
+        signal.addEventListener('abort', onOuterAbort, { once: true });
     }
+    const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, TIMEDTEXT_FETCH_TIMEOUT_MS);
 
-    const payload = await response.json() as { events?: unknown };
-    if (!isRecord(payload) || !Array.isArray(payload.events)) {
-        return [];
+    try {
+        const response = await fetch(url, {
+            signal: controller.signal,
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+            throw new Error(`http:${response.status}`);
+        }
+
+        const payload = await response.json() as { events?: unknown };
+        if (!isRecord(payload) || !Array.isArray(payload.events)) {
+            return [];
+        }
+
+        return payload.events as YouTubeTimedText[];
+    } catch (error) {
+        // 超时不是调用方的主动中止：转成可计数的失败，走既有失败阈值/回退路径。
+        if (timedOut) throw new Error('timedtext-timeout');
+        throw error;
+    } finally {
+        window.clearTimeout(timer);
+        signal.removeEventListener('abort', onOuterAbort);
     }
-
-    return payload.events as YouTubeTimedText[];
 }
 
 export class YouTubeSubtitleOverlay implements Feature {
@@ -447,6 +483,16 @@ export class YouTubeSubtitleOverlay implements Feature {
     /** 已让位给 Cometix 但未确认接管的 key，不再重试，避免让位/回退循环。 */
     private readonly cometixYieldFailedKeys = new Set<string>();
     private manualNativeToggleOnVideoId = '';
+
+    private captionWindowObserver: MutationObserver | null = null;
+    private captionWindowObserved: HTMLElement | null = null;
+    private captionWindowDebounceTimer: number | null = null;
+    private lastCaptionWindowTriggerAt = 0;
+    private fragmentCache = new Map<string, { fragments: SubtitleFragment[]; at: number }>();
+    private lastPlayerData: YouTubeSubtitlePlayerData | null = null;
+    private lastPlayerDataAt = 0;
+    private cacheVideoId = '';
+    private prefetchAbortController: AbortController | null = null;
 
     private boundVideo: HTMLVideoElement | null = null;
     private unsubscribeVideo: (() => void) | null = null;
@@ -656,7 +702,14 @@ export class YouTubeSubtitleOverlay implements Feature {
         document.removeEventListener('yt-navigate-finish', this.handleNavigationFinish, true);
 
         this.unbindNativeSubtitleButtonObserver();
+        this.unbindCaptionWindowObserver();
         this.unbindPlayerResizeObserver();
+        this.prefetchAbortController?.abort();
+        this.prefetchAbortController = null;
+        this.fragmentCache.clear();
+        this.lastPlayerData = null;
+        this.lastPlayerDataAt = 0;
+        this.cacheVideoId = '';
         this.abortPendingLoad();
         this.stopRenderer();
         this.rebindVideo(null);
@@ -720,6 +773,8 @@ export class YouTubeSubtitleOverlay implements Feature {
     private syncCurrentPage() {
         if (!this.enabled || !isSiteHost('youtube')) return;
 
+        this.resetCachesForVideo(this.getCurrentUrlVideoId());
+
         if (!this.isSupportedPage()) {
             this.handleNavigationStart();
             return;
@@ -728,6 +783,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         ensureYouTubeSubtitleOverlayScriptInjected();
         this.rebindVideo(this.youtubeMainVideo());
         this.bindNativeSubtitleButtonObserver();
+        this.ensureCaptionWindowObserver();
 
         void this.restoreNativeToggleForCurrentPage();
 
@@ -838,8 +894,11 @@ export class YouTubeSubtitleOverlay implements Feature {
             if (this.getCurrentUrlVideoId() !== expectedVideoId) return;
 
             this.catalogVideoId = expectedVideoId;
+            this.rememberPlayerData(response.data);
             this.subtitleCatalog = buildSubtitleCatalog(response.data);
             this.syncSubtitleSelectorView();
+            // 置灰待机状态下也预取 preferred 轨道：用户从面板选择时命中缓存即时渲染。
+            this.maybePrefetchPreferred(response.data, '');
         } finally {
             this.catalogRequestInFlight = false;
         }
@@ -853,6 +912,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             playerData.selectedTrack
         );
         this.subtitleCatalog = catalog;
+        this.rememberPlayerData(playerData);
         this.syncSubtitleSelectorView();
         return option;
     }
@@ -892,19 +952,22 @@ export class YouTubeSubtitleOverlay implements Feature {
     private handleSubtitleLoadFailure(
         expectedVideoId: string,
         trigger: SubtitleLoadTrigger,
-        failedOption: SubtitleOption | null
+        failedOption: SubtitleOption | null,
+        failureDetail?: unknown
     ) {
+        const reasonText = this.subtitleFailureReasonText(failureDetail);
         if (shouldKeepCurrentSubtitleOnFailure(
             trigger,
             this.currentVideoId,
             expectedVideoId,
             this.currentFragments.length > 0
         )) {
-            const template = i18n('yt_subtitle_language_load_failed', this.language);
+            const template = i18n('yt_subtitle_language_load_failed_reason', this.language);
             const language = failedOption?.label || failedOption?.targetLanguageCode || '';
             this.osd.show(
-                template.replace('{language}', language),
-                this.youtubeMainVideo() || undefined
+                template.replace('{language}', language).replace('{reason}', reasonText),
+                this.youtubeMainVideo() || undefined,
+                SUBTITLE_FAILURE_OSD_DURATION_MS
             );
             this.setNativeSubtitlesHidden(true);
             this.syncSubtitleSelectorView();
@@ -927,12 +990,44 @@ export class YouTubeSubtitleOverlay implements Feature {
             return;
         }
 
-        this.fallbackToNative(true);
+        this.fallbackToNative(true, reasonText);
+    }
+
+    /**
+     * 把加载失败的具体 error 映射为本地化原因文案（A13）：
+     * 网络类错误来自 fetchTimedTextEvents（http:403 / timedtext-timeout / http:<status>），
+     * 流程类失败由调用方传入哨兵标记（player-data-unavailable / no-subtitle-track / empty-subtitle-data）。
+     */
+    private subtitleFailureReasonText(failureDetail: unknown): string {
+        if (failureDetail instanceof Error) {
+            const message = failureDetail.message;
+            if (message === 'http:403') {
+                return i18n('yt_subtitle_fail_reason_http_403', this.language);
+            }
+            if (message === 'timedtext-timeout') {
+                return i18n('yt_subtitle_fail_reason_timeout', this.language);
+            }
+            if (message === 'player-data-unavailable') {
+                return i18n('yt_subtitle_fail_reason_player_data', this.language);
+            }
+            if (message === 'no-subtitle-track') {
+                return i18n('yt_subtitle_fail_reason_no_track', this.language);
+            }
+            if (message === 'empty-subtitle-data') {
+                return i18n('yt_subtitle_fail_reason_empty', this.language);
+            }
+            if (message.startsWith('http:')) {
+                return i18n('yt_subtitle_fail_reason_http', this.language)
+                    .replace('{status}', message.slice('http:'.length));
+            }
+        }
+        return i18n('yt_subtitle_fail_reason_unknown', this.language);
     }
 
     private async loadSubtitlesForCurrentPage(
         preloadedData?: YouTubeSubtitlePlayerData,
-        trigger: SubtitleLoadTrigger = 'sync'
+        trigger: SubtitleLoadTrigger = 'sync',
+        bypassNativeTogglePause = false
     ) {
         const expectedVideoId = this.getCurrentUrlVideoId();
         if (!expectedVideoId || !this.enabled || !this.isSupportedPage()) return;
@@ -941,12 +1036,13 @@ export class YouTubeSubtitleOverlay implements Feature {
             return;
         }
 
-        if (this.shouldPauseForNativeToggleOff()) {
+        if (this.shouldPauseForNativeToggleOff() && !bypassNativeTogglePause) {
             this.enterIdleSelectorState();
             return;
         }
 
         // 无字幕视频缓存：已标记为无字幕的视频，sync 提前返回，不重复请求。
+        // 原生字幕窗口实际渲染时由观察器先失效缓存再触发接管（见 handleCaptionWindowActivity）。
         if (this.subtitleUnavailableVideoId === expectedVideoId) {
             this.syncSubtitleSelectorView();
             return;
@@ -967,6 +1063,14 @@ export class YouTubeSubtitleOverlay implements Feature {
 
         try {
             let playerData: YouTubeSubtitlePlayerData | null = preloadedData ?? null;
+            if ((!playerData || playerData.videoId !== expectedVideoId)
+                && this.lastPlayerData
+                && this.lastPlayerData.videoId === expectedVideoId
+                && Date.now() - this.lastPlayerDataAt <= PLAYER_DATA_REUSE_TTL_MS
+            ) {
+                // 面板切换语言等重复加载：同视频内复用最近一次 playerData，不再走 bridge。
+                playerData = this.lastPlayerData;
+            }
             if (!playerData || playerData.videoId !== expectedVideoId) {
                 playerData = await this.requestPlayerDataWithRetries(expectedVideoId, abortController.signal);
             }
@@ -975,7 +1079,7 @@ export class YouTubeSubtitleOverlay implements Feature {
                 return;
             }
             if (!playerData) {
-                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null);
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null, new Error('player-data-unavailable'));
                 return;
             }
 
@@ -1002,7 +1106,7 @@ export class YouTubeSubtitleOverlay implements Feature {
                 ) {
                     this.markSubtitleUnavailable(expectedVideoId);
                 }
-                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null);
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, null, new Error('no-subtitle-track'));
                 return;
             }
 
@@ -1022,7 +1126,7 @@ export class YouTubeSubtitleOverlay implements Feature {
             playerData = loaded.playerData;
 
             if (loaded.fragments.length === 0) {
-                this.handleSubtitleLoadFailure(expectedVideoId, trigger, option);
+                this.handleSubtitleLoadFailure(expectedVideoId, trigger, option, new Error('empty-subtitle-data'));
                 return;
             }
 
@@ -1043,9 +1147,11 @@ export class YouTubeSubtitleOverlay implements Feature {
             this.syncSubtitleSelectorView();
             this.renderAtCurrentTime(true);
             this.startRenderer();
+            this.ensureCaptionWindowObserver();
+            this.maybePrefetchPreferred(playerData, this.currentOptionKey);
         } catch (error) {
             if (isAbortError(error)) return;
-            this.handleSubtitleLoadFailure(expectedVideoId, trigger, failedOption);
+            this.handleSubtitleLoadFailure(expectedVideoId, trigger, failedOption, error);
         } finally {
             if (this.loadAbortController === abortController) {
                 this.loadAbortController = null;
@@ -1104,26 +1210,96 @@ export class YouTubeSubtitleOverlay implements Feature {
         playerData: YouTubeSubtitlePlayerData,
         signal: AbortSignal
     ) {
-        const url = buildSubtitleUrl(
-            option,
-            playerData,
-            extractPotToken(option.sourceTrack, playerData)
-        );
-        const events = await fetchTimedTextEvents(url, signal);
+        const optionKey = buildSubtitleOptionKey(playerData.videoId, option);
+        const cached = this.fragmentCache.get(optionKey);
+        if (cached) {
+            if (Date.now() - cached.at <= FRAGMENT_CACHE_TTL_MS) {
+                return cached.fragments;
+            }
+            this.fragmentCache.delete(optionKey);
+        }
+
+        const events = await this.loadTimedTextEvents(option, playerData, signal);
         const language = getSubtitleOptionLanguage(option) || 'en';
         const fragments = parseYouTubeSubtitleEvents(events, language);
 
         // Shape-based post-process (author + ASR share the same gate):
         // polished phrase tracks pass through; only fragmented cues refine.
-        return postProcessSubtitles(fragments, language);
+        const processed = postProcessSubtitles(fragments, language);
+        this.fragmentCache.set(optionKey, { fragments: processed, at: Date.now() });
+        this.pruneFragmentCache(playerData.videoId);
+        return processed;
+    }
+
+    private async loadTimedTextEvents(
+        option: SubtitleOption,
+        playerData: YouTubeSubtitlePlayerData,
+        signal: AbortSignal
+    ) {
+        // 原生字幕渲染时播放器已请求过 timedtext：优先复用页面脚本捕获的响应体，零网络。
+        const captured = await this.requestCapturedEvents(option, playerData, signal);
+        if (captured) return captured;
+
+        const url = buildSubtitleUrl(
+            option,
+            playerData,
+            extractPotToken(option.sourceTrack, playerData)
+        );
+        return await fetchTimedTextEvents(url, signal);
+    }
+
+    private async requestCapturedEvents(
+        option: SubtitleOption,
+        playerData: YouTubeSubtitlePlayerData,
+        signal: AbortSignal
+    ) {
+        if (signal.aborted) return null;
+
+        try {
+            const response = await requestYouTubeSubtitleCapturedTimedText(playerData.videoId, {
+                languageCode: option.sourceTrack.languageCode,
+                kind: option.sourceTrack.kind,
+                translationLanguageCode: option.kind === 'translated'
+                    ? option.translationLanguageCode
+                    : undefined
+            });
+            if (response?.success && Array.isArray(response.events) && response.events.length > 0) {
+                return response.events;
+            }
+        } catch {
+            // 捕获查询失败不影响既有网络路径。
+        }
+        return null;
+    }
+
+    private pruneFragmentCache(videoId: string) {
+        for (const key of this.fragmentCache.keys()) {
+            if (!key.startsWith(`${videoId}:`)) {
+                this.fragmentCache.delete(key);
+            }
+        }
+        while (this.fragmentCache.size > FRAGMENT_CACHE_MAX_ENTRIES) {
+            const oldest = this.fragmentCache.keys().next();
+            if (oldest.done) return;
+            this.fragmentCache.delete(oldest.value);
+        }
     }
 
     private async requestPlayerDataWithRetries(expectedVideoId: string, signal: AbortSignal) {
+        // 总期限兜底：bridge 单次挂起不再累积成数十秒的检测冻结。
+        const deadline = Date.now() + PLAYER_DATA_REQUEST_DEADLINE_MS;
         for (let attempt = 0; attempt < FETCH_RETRY_ATTEMPTS; attempt += 1) {
             if (signal.aborted) return null;
 
-            const response = await requestYouTubeSubtitlePlayerData(expectedVideoId);
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) return null;
+
+            const response = await requestYouTubeSubtitlePlayerData(
+                expectedVideoId,
+                Math.min(6000, remaining)
+            );
             if (response?.success && response.data?.videoId === expectedVideoId) {
+                this.rememberPlayerData(response.data);
                 return response.data;
             }
 
@@ -1145,7 +1321,9 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (!this.enabled || !this.isSupportedPage()) return;
         if (this.loadAbortController) return;
 
+        this.resetCachesForVideo(this.getCurrentUrlVideoId());
         this.bindNativeSubtitleButtonObserver();
+        this.ensureCaptionWindowObserver();
         void this.restoreNativeToggleForCurrentPage();
 
         if (!this.shouldRenderOverlay()) {
@@ -2035,7 +2213,7 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.loadAbortController = null;
     }
 
-    private fallbackToNative(showNotice: boolean) {
+    private fallbackToNative(showNotice: boolean, reasonText?: string) {
         this.stopRenderer();
         this.clearSubtitleState();
         this.renderSubtitleText('');
@@ -2047,7 +2225,12 @@ export class YouTubeSubtitleOverlay implements Feature {
         if (noticeKey === this.lastFallbackNoticeKey) return;
 
         this.lastFallbackNoticeKey = noticeKey;
-        this.osd.show(i18n('yt_subtitle_native_fallback', this.language), this.youtubeMainVideo() || undefined);
+        const reason = reasonText || i18n('yt_subtitle_fail_reason_unknown', this.language);
+        this.osd.show(
+            i18n('yt_subtitle_native_fallback_reason', this.language).replace('{reason}', reason),
+            this.youtubeMainVideo() || undefined,
+            SUBTITLE_FAILURE_OSD_DURATION_MS
+        );
     }
 
     private markSubtitleUnavailable(videoId: string) {
@@ -2056,6 +2239,131 @@ export class YouTubeSubtitleOverlay implements Feature {
         this.clearSubtitleState();
         this.renderSubtitleText('');
         this.setNativeSubtitlesHidden(false);
+    }
+
+    /** 换视频（或离开观看页）时丢弃按视频缓存的片段与 playerData，并取消在途预取。 */
+    private resetCachesForVideo(videoId: string) {
+        if (this.cacheVideoId === videoId) return;
+
+        this.cacheVideoId = videoId;
+        this.fragmentCache.clear();
+        this.lastPlayerData = null;
+        this.lastPlayerDataAt = 0;
+        this.prefetchAbortController?.abort();
+        this.prefetchAbortController = null;
+    }
+
+    private rememberPlayerData(playerData: YouTubeSubtitlePlayerData) {
+        this.lastPlayerData = playerData;
+        this.lastPlayerDataAt = Date.now();
+    }
+
+    /**
+     * 监听主播放器的原生字幕窗口：窗口实际渲染文本即「原生字幕已出现」的 ground truth，
+     * 不再只依赖 CC 按钮 aria-pressed 与 1.2s 轮询。
+     */
+    private ensureCaptionWindowObserver() {
+        const container = this.playerRoot()?.querySelector<HTMLElement>('.ytp-caption-window-container')
+            ?? null;
+        if (!container) {
+            if (this.captionWindowObserved && !this.captionWindowObserved.isConnected) {
+                this.unbindCaptionWindowObserver();
+            }
+            return;
+        }
+        if (this.captionWindowObserved === container) return;
+
+        this.unbindCaptionWindowObserver();
+        this.captionWindowObserved = container;
+        this.captionWindowObserver = new MutationObserver(() => {
+            this.scheduleCaptionWindowCheck();
+        });
+        this.captionWindowObserver.observe(container, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+    }
+
+    private unbindCaptionWindowObserver() {
+        this.captionWindowObserver?.disconnect();
+        this.captionWindowObserver = null;
+        this.captionWindowObserved = null;
+        if (this.captionWindowDebounceTimer != null) {
+            window.clearTimeout(this.captionWindowDebounceTimer);
+            this.captionWindowDebounceTimer = null;
+        }
+    }
+
+    private scheduleCaptionWindowCheck() {
+        if (!this.enabled || !this.isSupportedPage() || !this.shouldRenderOverlay()) return;
+        if (this.captionWindowDebounceTimer != null) return;
+
+        // ASR 滚动字幕逐词更新，防抖聚合后再判断一次窗口文本。
+        this.captionWindowDebounceTimer = window.setTimeout(() => {
+            this.captionWindowDebounceTimer = null;
+            this.handleCaptionWindowActivity();
+        }, CAPTION_WINDOW_DEBOUNCE_MS);
+    }
+
+    private handleCaptionWindowActivity() {
+        if (!this.enabled || !this.isSupportedPage() || !this.shouldRenderOverlay()) return;
+        // 「插件翻译兼容」开启时让位优先：交给既有加载链路做让位判定，不即时抢渲染。
+        if (this.config.compatibleWithPluginTranslate === true) return;
+        if (this.loadAbortController) return;
+        // 已在渲染当前视频（或切换加载在途）时不重复触发，防止隐藏的原生窗口更新引发循环。
+        if (this.currentVideoId === this.getCurrentUrlVideoId() && this.currentFragments.length > 0) return;
+        if (Date.now() - this.lastCaptionWindowTriggerAt < CAPTION_WINDOW_TRIGGER_COOLDOWN_MS) return;
+
+        const container = this.captionWindowObserved
+            ?? this.playerRoot()?.querySelector<HTMLElement>('.ytp-caption-window-container')
+            ?? null;
+        if (!container?.textContent?.trim()) return;
+
+        const expectedVideoId = this.getCurrentUrlVideoId();
+        if (!expectedVideoId) return;
+
+        this.lastCaptionWindowTriggerAt = Date.now();
+
+        // 无字幕缓存命中的视频上观察到原生字幕实际渲染 → 缓存失效并重新接管（A3）。
+        if (this.subtitleUnavailableVideoId === expectedVideoId) {
+            this.subtitleUnavailableVideoId = '';
+        }
+
+        // 原生字幕实际在渲染：以窗口内容为准，绕过可能滞后的 CC 按钮状态暂停门。
+        void this.loadSubtitlesForCurrentPage(undefined, 'sync', true);
+    }
+
+    /** 目录就绪后预取 preferred 轨道片段（与当前渲染轨道不同且未缓存时，至多一次在途预取）。 */
+    private maybePrefetchPreferred(playerData: YouTubeSubtitlePlayerData, loadedOptionKey: string) {
+        const preferred = canonicalizeLanguageCode(this.config.preferredLanguageCode);
+        if (!preferred || !this.subtitleCatalog) return;
+
+        const option = resolveSubtitleOption(
+            this.subtitleCatalog,
+            preferred,
+            playerData.selectedTrack
+        );
+        if (!option) return;
+
+        const optionKey = buildSubtitleOptionKey(playerData.videoId, option);
+        if (optionKey === loadedOptionKey) return;
+        const cachedEntry = this.fragmentCache.get(optionKey);
+        if (cachedEntry && Date.now() - cachedEntry.at <= FRAGMENT_CACHE_TTL_MS) return;
+        if (cachedEntry) this.fragmentCache.delete(optionKey);
+
+        this.prefetchAbortController?.abort();
+        const controller = new AbortController();
+        this.prefetchAbortController = controller;
+        void this.fetchOptionFragments(option, playerData, controller.signal)
+            .catch(() => {
+                // 预取失败静默：正式加载路径仍会按需请求。
+            })
+            .finally(() => {
+                if (this.prefetchAbortController === controller) {
+                    this.prefetchAbortController = null;
+                }
+            });
     }
 
     private clearSubtitleState() {

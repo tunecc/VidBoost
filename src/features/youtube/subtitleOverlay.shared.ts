@@ -102,6 +102,25 @@ export const YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_REQUEST = 'ensure-subtitles-re
 export const YT_SUBTITLE_OVERLAY_ENSURE_SUBTITLES_RESPONSE = 'ensure-subtitles-response';
 export const YT_SUBTITLE_OVERLAY_SET_SUBTITLES_REQUEST = 'set-subtitles-request';
 export const YT_SUBTITLE_OVERLAY_SET_SUBTITLES_RESPONSE = 'set-subtitles-response';
+export const YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_REQUEST = 'captured-timedtext-request';
+export const YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE = 'captured-timedtext-response';
+
+/** 页面脚本按「语言 + kind + tlang」缓存的 timedtext 响应查询键（与捕获时的 URL 参数一一对应）。 */
+export type YouTubeSubtitleCapturedTimedTextQuery = {
+    languageCode: string;
+    kind?: string;
+    translationLanguageCode?: string;
+};
+
+export type YouTubeSubtitleCapturedTimedTextResponse = {
+    source: typeof YT_SUBTITLE_OVERLAY_PAGE_SOURCE;
+    channel: typeof YT_SUBTITLE_OVERLAY_BRIDGE_CHANNEL;
+    type: typeof YT_SUBTITLE_OVERLAY_CAPTURED_TIMEDTEXT_RESPONSE;
+    requestId: string;
+    success: boolean;
+    error?: string;
+    events?: YouTubeTimedText[];
+};
 
 export const DEFAULT_YT_SUBTITLE_OVERLAY_PAGE_CONFIG: YouTubeSubtitleOverlayPageConfig = {
     enabled: false
